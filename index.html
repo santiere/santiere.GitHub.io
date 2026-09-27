@@ -306,7 +306,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
       <select id="loc" aria-label="Zonă"><option value="">Toate zonele</option></select>
     </div>
     <div class="chips" id="chips" role="group" aria-label="Filtru stare"></div>
-    <button class="obbtn" id="obBtn" type="button" hidden>📤 De trimis în Santiere: <b>0</b></button>
+    <button class="obbtn" id="obBtn" type="button" hidden><span>⏳ Se urcă în cloud: </span><b>0</b></button>
   </div>
   <div class="fab-col">
     <button class="fab" id="btnSel" aria-pressed="false" title="Alege șantiere pentru traseu" aria-label="Alege șantiere pentru traseu">
@@ -1003,6 +1003,7 @@ async function patchSite(id, patch) {
   const s = S.sites.get(id); if (!s) return;
   try { await db.doc('sites/' + s._sh).update({ s: { [id]: patch } }); }
   catch (e) { toast('Nu am putut salva: ' + (e.code || e.message)); throw e; }
+  if ('ultima' in patch || 'inactiv' in patch) { const x = {}; if ('ultima' in patch) x.ultima = patch.ultima || ''; if ('inactiv' in patch) x.inactiv = !!patch.inactiv; CLOUD.push(id, x); }
 }
 function pickShard() {
   const counts = Object.entries(S.shards).map(([k, d]) => [k, Object.keys((d && d.s) || {}).length]).sort((a, b) => a[1] - b[1]);
@@ -1563,6 +1564,7 @@ async function createSite(o, prog) {
   const ref = db.doc('sites/' + sh); const snap = await ref.get();
   if (snap.exists) await ref.update({ s: { [id]: site } }); else await ref.set({ s: { [id]: site } });
   await db.doc('vizite/' + id).set({ v: { [uid('v')]: { d, poze: [pid, sid], t: Date.now() } } });
+  CLOUD.push(id, { ultima: d, inactiv: false, site: { name: site.name, lat: site.lat, lng: site.lng, loc: site.loc, strada: site.strada, creat: site.creat, panouT: site.panouT || '' } });
   return { id, base: shotBase(), week: weekLabel(d), panou: o.panou, santier: o.santier, assets: { p: pid, s: sid } };
 }
 async function sharePair(a) {
@@ -1629,8 +1631,7 @@ function qcRender() {
   if (f.done) {
     const sent = f.done.sent;
     box.innerHTML = `<div class="qc-ok">✓ ${f.done.nou ? 'Șantier nou salvat' : 'Stadiu salvat · ' + esc(f.done.name || '')}</div>
-      <div class="qc-status ${sent === true ? 'ok' : sent === false ? 'wait' : ''}">${sent === true ? '✓ Trimis în folderul Santiere' : sent === false ? '● Netrimis în folder · a intrat la „De trimis”' : '… Alege „Santier” din meniul de partajare'}</div>
-      ${sent === false ? '<button class="btn amber qc-big" id="qcResend">Trimite acum în Santiere</button>' : ''}
+      <div class="qc-status ${sent === true ? 'ok' : sent === false ? 'wait' : ''}">${sent === true ? '✓ Urcat în cloud · ajunge seara în folderul Santiere' : sent === false ? '● Fără semnal acum · se urcă singur când revine internetul' : '⏳ Se urcă pozele la calitate originală…'}</div>
       <button class="btn primary qc-big" id="qcBack">${S.navOn ? 'Înapoi la navigare' : 'Gata'}</button>`;
     return;
   }
@@ -1646,7 +1647,7 @@ function qcRender() {
     <div class="qc-tiles">${panelTile}${tile('santier', 'Na', 'Stadiu șantier')}</div>
     <div class="qc-gps ${g ? 'ok' : 'wait'}">${g ? `● GPS activ (±${Math.round(g.acc || 0)} m) · locația se scrie în fiecare poză` : '● Aștept semnalul GPS… Pozele se salvează doar cu locație.'}</div>
     <div class="sub" id="qcProg" style="margin-top:4px;color:var(--ink)"></div>
-    <div class="btns" style="margin-top:10px"><button class="btn primary qc-big" id="qcSave" ${ready ? '' : 'disabled'}>Salvează și trimite în Santiere</button><button class="btn ghost" id="qcCancel">Renunță</button></div>`;
+    <div class="btns" style="margin-top:10px"><button class="btn primary qc-big" id="qcSave" ${ready ? '' : 'disabled'}>Salvează</button><button class="btn ghost" id="qcCancel">Renunță</button></div>`;
 }
 async function qcLoadPanel(f) {
   const s = S.sites.get(f.siteId); if (!s) return;
@@ -1701,7 +1702,6 @@ $('#qc').addEventListener('change', async e => {
 $('#qc').addEventListener('click', async e => {
   const id = e.target.id; const f = QC.f; if (!f) return;
   if (id === 'qcCancel' || id === 'qcBack') { qcClose(); return; }
-  if (id === 'qcResend') { const k = f.done.k; OB.send([k]).then(ok => { if (ok) { f.done.sent = true; qcRender(); } }); return; }
   if (id === 'qcSave') {
     const site = f.siteId ? S.sites.get(f.siteId) : null;
     if (!f.panouR || !f.santierR) return;
@@ -1709,8 +1709,6 @@ $('#qc').addEventListener('click', async e => {
     const sid = site ? site.id : f.id;
     const pName = site ? 'P_' + (panelStamp(site) || 'X') + '.jpg' : 'PN_' + sid + '.jpg';
     const files = [new File([f.panouR.blob], pName, { type: 'image/jpeg' }), new File([f.santierR.blob], 'S_' + sid + '.jpg', { type: 'image/jpeg' })];
-    // open the share sheet right away, inside this tap (iPhone allows it only here)
-    const shareP = OB.share(files);
     const k = uid('o');
     f.done = { k, nou: !site, name: site ? site.name : '', sent: null };
     qcRender();
@@ -1724,61 +1722,121 @@ $('#qc').addEventListener('click', async e => {
         if (snap.exists) await ref.update({ v: { [vid]: visit } }); else await ref.set({ v: { [vid]: visit } });
         await patchSite(site.id, { ultima: d, ultimaApp: d, inactiv: false });
         const [pa] = site.panouA ? [site.panouA] : await uploadFiles([f.panouR.blob], null, true);
-        await OB.add(k, { siteId: site.id, t: Date.now(), p: pa, s: aid, pn: pName, sn: 'S_' + sid + '.jpg' }, files);
+        await OB.add(k, { siteId: site.id, siteName: site.name, nou: 0, stamp: panelStamp(site) || 'X', t: Date.now(), p: pa, s: aid, lat: g && g.lat, lng: g && g.lng }, files);
       } else {
         const gp = f.panouR.gps || g;
         const r = await createSite({ id: sid, panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt }, null);
         const s2 = r.assets || {};
-        await OB.add(k, { siteId: sid, t: Date.now(), p: s2.p, s: s2.s, pn: pName, sn: 'S_' + sid + '.jpg' }, files);
+        await OB.add(k, { siteId: sid, siteName: 'Șantier nou', nou: 1, stamp: sid, t: Date.now(), p: s2.p, s: s2.s, lat: gp.lat, lng: gp.lng }, files);
       }
     } catch (err) { toast('Nu s-a salvat în aplicație: ' + (err.code || err.message)); }
-    const ok = await shareP;
+    const ok = await OB.pump([k]);
     if (QC.f === f) { f.done.sent = ok; qcRender(); }
-    if (ok) OB.mark([k]);
   }
 });
+/* ---------- Cloud: photos go up automatically, site states are shared in real time ---------- */
+const CLOUD = {
+  url: 'https://santiere-api.i-spridon.workers.dev', key: null, stateU: {}, busy: false,
+  async k() {
+    if (CLOUD.key) return CLOUD.key;
+    let p = ''; try { p = localStorage.getItem('harta_pass') || ''; } catch (e) {}
+    if (!p) return null;
+    const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('santiere|' + p));
+    return (CLOUD.key = [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''));
+  },
+  async req(path, opt) {
+    const key = await CLOUD.k(); if (!key) throw new Error('fără cheie');
+    const r = await fetch(CLOUD.url + path, Object.assign({}, opt, { headers: Object.assign({ 'x-key': key }, (opt && opt.headers) || {}) }));
+    if (!r.ok) throw new Error('server ' + r.status);
+    return r.json();
+  },
+  // push one change of a site's state (updated / finished / new site) to everybody
+  async push(sid, extra) {
+    const s = S.sites.get(sid) || {}; if (!S.sites.get(sid) && !(extra && extra.site)) return;
+    const u = Date.now(); CLOUD.stateU[sid] = u;
+    const v = { ultima: s.ultima || '', inactiv: !!s.inactiv, u };
+    if (s.manual) v.site = { name: s.name, lat: s.lat, lng: s.lng, loc: s.loc || '', strada: s.strada || '', creat: s.creat || u, panouT: s.panouT || '' };
+    Object.assign(v, extra || {});
+    try { await CLOUD.req('/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [sid]: v }) }); }
+    catch (e) { CLOUD.pendingState = Object.assign(CLOUD.pendingState || {}, { [sid]: v }); }
+  },
+  async pull() {
+    if (!db || !S.loaded) return;
+    try {
+      if (CLOUD.pendingState) { const ps = CLOUD.pendingState; CLOUD.pendingState = null; await CLOUD.req('/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ps) }).catch(() => { CLOUD.pendingState = Object.assign(ps, CLOUD.pendingState || {}); }); }
+      const st = await CLOUD.req('/state');
+      let changed = 0;
+      for (const [sid, v] of Object.entries(st)) {
+        if ((CLOUD.stateU[sid] || 0) >= v.u) continue;
+        CLOUD.stateU[sid] = v.u;
+        const s = S.sites.get(sid);
+        if (!s && v.site) {   // a new site added by another operator
+          const sh = pickShard(); const ref = db.doc('sites/' + sh); const snap = await ref.get();
+          const site = Object.assign({ poze: [], manual: true, deScanat: true }, v.site, { ultima: v.ultima, ultimaApp: v.ultima, inactiv: !!v.inactiv });
+          if (snap.exists) await ref.update({ s: { [sid]: site } }); else await ref.set({ s: { [sid]: site } });
+          changed++; continue;
+        }
+        if (!s) continue;
+        if ((s.ultima || '') !== (v.ultima || '') || !!s.inactiv !== !!v.inactiv) {
+          await db.doc('sites/' + s._sh).update({ s: { [sid]: { ultima: v.ultima || '', ultimaApp: v.ultima || '', inactiv: !!v.inactiv } } });
+          changed++;
+        }
+      }
+      try { localStorage.setItem('harta_stateU', JSON.stringify(CLOUD.stateU)); } catch (e) {}
+      if (changed) refresh();
+    } catch (e) {}
+  },
+  start() {
+    try { CLOUD.stateU = JSON.parse(localStorage.getItem('harta_stateU') || '{}'); } catch (e) {}
+    CLOUD.pull(); OB.pump();
+    setInterval(() => { if (document.visibilityState === 'visible') { CLOUD.pull(); OB.pump(); } }, 30000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { CLOUD.pull(); OB.pump(); } });
+    window.addEventListener('online', () => { CLOUD.pull(); OB.pump(); });
+  },
+};
 /* ---------- „De trimis”: pairs not yet in the Santiere folder ---------- */
 const OB = {
-  items: {}, files: {}, loaded: false,
+  items: {}, files: {}, loaded: false, busy: null,
   async load() {
     if (!db) return;
     try { const sn = await db.doc('outbox/q').get(); OB.items = (sn.exists && sn.data().items) || {}; } catch (e) { OB.items = {}; }
     const old = Date.now() - 14 * 864e5;
     for (const [k, v] of Object.entries(OB.items)) if (v.sent && v.t < old) delete OB.items[k];
-    OB.loaded = true; await OB.cache(); OB.ui();
+    OB.loaded = true; OB.ui(); CLOUD.start();
   },
   async save() { if (db) await db.doc('outbox/q').set({ items: OB.items }); },
   pending() { return Object.entries(OB.items).filter(([, v]) => !v.sent).sort((a, b) => a[1].t - b[1].t); },
-  async cache() {
-    for (const [k, v] of OB.pending()) {
-      if (OB.files[k]) continue;
-      try {
-        const get = async (a, n) => new File([await (await fetch('_blob/' + a)).blob()], n, { type: 'image/jpeg' });
-        OB.files[k] = [await get(v.p, v.pn), await get(v.s, v.sn)];
-      } catch (e) {}
-    }
-  },
   async add(k, v, files) { OB.items[k] = v; OB.files[k] = files; await OB.save(); OB.ui(); },
-  async mark(keys) { for (const k of keys) if (OB.items[k]) OB.items[k].sent = true; await OB.save(); OB.ui(); },
-  share(files) {
-    try {
-      if (!(navigator.canShare && navigator.canShare({ files }))) return Promise.resolve(false);
-      return navigator.share({ files }).then(() => true, () => false);
-    } catch (e) { return Promise.resolve(false); }
+  async blobOf(k, which) {
+    const f = OB.files[k]; if (f) return f[which === 'p' ? 0 : 1];
+    return await (await fetch('_blob/' + OB.items[k][which])).blob();
   },
-  // must be called straight from a tap
-  send(keys) {
-    const ks = keys || OB.pending().map(([k]) => k).filter(k => OB.files[k]);
-    const files = ks.flatMap(k => OB.files[k] || []);
-    if (!files.length) { toast('Nimic de trimis'); return Promise.resolve(false); }
-    return OB.share(files).then(async ok => { if (ok) { await OB.mark(ks); toast(ks.length === 1 ? 'Trimis în Santiere' : ks.length + ' șantiere trimise în Santiere'); } return ok; });
+  // upload waiting pairs to the cloud, oldest first; resolves true when `only` all went up
+  pump(only) {
+    if (OB.busy) return OB.busy.then(() => OB.pump(only));
+    OB.busy = (async () => {
+      let allOk = true;
+      for (const [k, v] of OB.pending()) {
+        if (only && !only.includes(k)) continue;
+        try {
+          for (const w of ['p', 's']) await CLOUD.req('/f/' + k + '/' + w + '.jpg', { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: await OB.blobOf(k, w) });
+          await CLOUD.req('/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k, nou: v.nou, stamp: v.stamp, siteId: v.siteId, siteName: v.siteName, t: v.t, lat: v.lat, lng: v.lng }) });
+          v.sent = true; delete OB.files[k]; await OB.save();
+        } catch (e) { allOk = false; if (!navigator.onLine) break; }
+        OB.ui();
+      }
+      return allOk;
+    })().finally(() => { OB.busy = null; OB.ui(); });
+    return OB.busy;
   },
   ui() {
     const n = OB.pending().length; const b = $('#obBtn'); if (!b) return;
     b.hidden = !n; b.querySelector('b').textContent = n;
+    b.querySelector('span').textContent = OB.busy ? '⏳ Se urcă în cloud: ' : '📤 Neurcate (apasă pentru reîncercare): ';
   },
 };
-$('#obBtn').addEventListener('click', () => OB.send());
+$('#obBtn').addEventListener('click', () => OB.pump());
+
 /* ---------- route from the area visible on screen ---------- */
 function areaSites() {
   if (!map) return [];
