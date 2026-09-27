@@ -465,19 +465,22 @@ const Router = (() => {
   const ARC_T = a => G.time[a] / 10;
 
   // one source -> many targets; returns [{cost(s), arcs:[...], srcT, dstT}] (null when unreachable)
-  function search(src, targets) {
+  function search(src, targets, opts) {
+    const K = opts && opts.k;  // sparse mode: only the K nearest targets are needed
     const { dist, prev, touched } = G;
     for (const a of touched) { dist[a] = Infinity; prev[a] = -1; }
     touched.length = 0;
     const heap = new Heap();
     const res = targets.map(() => ({ cost: Infinity, last: -1, pre: -1 }));
+    let found = 0;
+    const hit = (i, v) => { if (res[i].cost === Infinity) found++; res[i] = v; };
     const tmap = new Map();
     targets.forEach((T, i) => { if (T) for (const x of T.arcs) { const l = tmap.get(x.arc); if (l) l.push([i, x.t]); else tmap.set(x.arc, [[i, x.t]]); } });
     for (const s of src.arcs) {
       const c = (1 - s.t) * ARC_T(s.arc);
       if (c < dist[s.arc]) { if (dist[s.arc] === Infinity) touched.push(s.arc); dist[s.arc] = c; prev[s.arc] = -1; heap.push(c, s.arc); }
       const hits = tmap.get(s.arc);
-      if (hits) for (const [i, tt] of hits) if (tt >= s.t) { const cc = (tt - s.t) * ARC_T(s.arc); if (cc < res[i].cost) res[i] = { cost: cc, last: s.arc, pre: -2, srcT: s.t }; }
+      if (hits) for (const [i, tt] of hits) if (tt >= s.t) { const cc = (tt - s.t) * ARC_T(s.arc); if (cc < res[i].cost) hit(i, { cost: cc, last: s.arc, pre: -2, srcT: s.t }); }
     }
     let open = targets.filter(Boolean).length;
     let worst = Infinity;
@@ -497,9 +500,12 @@ const Router = (() => {
         const nd = base + ARC_T(b);
         if (nd < dist[b]) { if (dist[b] === Infinity) touched.push(b); dist[b] = nd; prev[b] = a; heap.push(nd, b); }
         const hits = tmap.get(b);
-        if (hits) for (const [i, tt] of hits) { const cc = base + tt * ARC_T(b); if (cc < res[i].cost) res[i] = { cost: cc, last: b, pre: a }; }
+        if (hits) for (const [i, tt] of hits) { const cc = base + tt * ARC_T(b); if (cc < res[i].cost) hit(i, { cost: cc, last: b, pre: a }); }
       }
-      if (open) { let w = 0, all = true; for (let i = 0; i < res.length; i++) { if (!targets[i]) continue; if (res[i].cost === Infinity) { all = false; break; } w = Math.max(w, res[i].cost); } if (all) worst = w; }
+      if (worst === Infinity && open) {
+        if (found >= open) { let w = 0; for (let i = 0; i < res.length; i++) if (targets[i]) w = Math.max(w, res[i].cost); worst = w; }
+        else if (K && found >= K) { let c = 0; for (let i = 0; i < res.length; i++) if (res[i].cost <= d) c++; if (c >= K) break; }
+      }
     }
     return res.map((r, i) => {
       if (!targets[i] || r.cost === Infinity) return null;
@@ -1783,8 +1789,8 @@ function areaUpdate() {
   if (!S.areaOn) return;
   const n = areaSites().length;
   $('#areaTxt').textContent = n + ' șantiere de actualizat pe ecran';
-  const b = $('#areaGo'); b.disabled = n < 2 || n > 80;
-  b.textContent = n > 80 ? 'Prea multe · mărește harta' : n < 2 ? 'Minim 2 · micșorează harta' : 'Fă traseul (' + n + ')';
+  const b = $('#areaGo'); b.disabled = n < 2 || n > 500;
+  b.textContent = n > 500 ? 'Peste 500 · mărește harta' : n < 2 ? 'Minim 2 · micșorează harta' : 'Fă traseul (' + n + ')';
 }
 function areaMode(on) {
   S.areaOn = on; $('#areaBar').hidden = !on;
@@ -1959,11 +1965,15 @@ async function computeRoute(optimize) {
     let order = okIdx;
     if (optimize && okIdx.length >= 2) {
       const C = [];
+      const big = okIdx.length > 60;   // many stops: real street times to the 30 nearest, calibrated estimate for the rest
+      const tg = okIdx.map(i => snaps[i]); const rows = [];
       for (let k = 0; k < okIdx.length; k++) {
-        routeMsg(`Calculez timpii pe străzi: ${k + 1} din ${okIdx.length}…`); await tick();
-        const row = Router.search(snaps[okIdx[k]], okIdx.map(i => snaps[i]));
-        C.push(row.map(r => r ? r.cost : 1e9));
+        if (k % 10 === 0) { routeMsg(`Calculez timpii pe străzi: ${k + 1} din ${okIdx.length}…`); await tick(); }
+        rows.push(Router.search(snaps[okIdx[k]], tg, big ? { k: 30 } : undefined));
       }
+      let f = 0.3;
+      if (big) { const rs = []; rows.forEach((row, i) => row.forEach((r, j) => { if (r && r.cost < Infinity && i !== j) { const h = hav(pts[okIdx[i]], pts[okIdx[j]]) * 1000; if (h > 300) rs.push(r.cost / h); } })); rs.sort((x, y) => x - y); if (rs.length) f = rs[rs.length >> 1]; }
+      rows.forEach((row, i) => C.push(row.map((r, j) => r && r.cost < Infinity ? r.cost : big ? hav(pts[okIdx[i]], pts[okIdx[j]]) * 1000 * f * 1.1 + 30 : 1e9)));
       routeMsg('Aleg ordinea cea mai rapidă…'); await tick();
       order = solveOrder(C, !!start).map(k => okIdx[k]);
       const newPending = order.filter(i => !start || i > 0).map(i => pts[i].id);
@@ -1973,7 +1983,7 @@ async function computeRoute(optimize) {
     }
     const legs = [];
     for (let k = 1; k < order.length; k++) {
-      routeMsg(`Calculez etapa ${k} din ${order.length - 1}…`); await tick();
+      if (k % 10 === 1 || order.length < 40) { routeMsg(`Calculez etapa ${k} din ${order.length - 1}…`); await tick(); }
       const a = order[k - 1], b = order[k];
       const [r] = Router.search(snaps[a], [snaps[b]]);
       if (!r) continue;
