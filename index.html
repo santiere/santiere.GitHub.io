@@ -1306,7 +1306,7 @@ function gLegs(stops, start) {
 function viewRoute() {
   const stops = S.route.stops.map(id => S.sites.get(id)).filter(Boolean);
   const pending = stops.filter(s => !S.route.done.includes(s.id));
-  return `<div class="row sp"><h2>${S.route.name ? esc(S.route.name) : 'Traseul curent'}</h2>${stops.length ? '<button class="btn sm ghost danger" data-act="clearRoute">Golește</button>' : ''}</div>
+  return `<div class="row sp"><h2>${S.route.name ? esc(S.route.name) : 'Traseul curent'}</h2>${stops.length ? '<button class="btn sm ghost danger" data-act="clearRoute">Șterge traseul</button>' : ''}</div>
   <div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · ia toate șantierele de actualizat din zona de pe ecran sau din zona pe care o desenezi cu degetul, în ordinea cea mai rapidă
     <div class="btns" style="margin-top:8px"><button class="btn amber" data-act="areaMode">Zona de pe ecran</button><button class="btn amber" data-act="areaDraw">✏️ Desenează zona</button></div></div>
   ${!stops.length ? `<div class="note" style="margin-top:10px">Sau alege tu oricâte șantiere (minim 2), în orice ordine: butonul de traseu de pe hartă, „+ Active din zonă”, sau bifează-le din Listă. Ordinea o stabilesc eu.</div>
@@ -1575,7 +1575,7 @@ document.addEventListener('click', async (e) => {
       const s = S.sites.get(id); const vis = Object.assign({}, S.visits); delete vis[vid];
       { const u = recomputeUltima(s, vis); await patchSite(id, { ultima: u, ultimaApp: u }); } toast('Vizita a fost ștearsă'); break;
     }
-    case 'clearRoute': if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă golirea'; break; } S.route = { stops: [], done: [], start: S.route.start, name: '' }; saveRouteSoon(); refresh(); break;
+    case 'clearRoute': if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă ștergerea'; break; } S.route = { stops: [], done: [], start: S.route.start, name: '' }; saveRouteSoon(); refresh(); break;
     case 'optimize': optimizeRoute(); break;
     case 'roadOpt': computeRoute(true); break;
     case 'setMode': setMode(t.dataset.v); break;
