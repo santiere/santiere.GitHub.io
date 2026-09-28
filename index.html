@@ -1276,7 +1276,7 @@ function viewList() {
 }
 
 function routeStats(stops) {
-  let km = 0; let prev = S.route.start || null;
+  let km = 0; let prev = S.me || null;
   for (const s of stops) { if (prev) km += hav(prev, s); prev = s; }
   const road = km * 1.35; const min = road / 24 * 60 + stops.length * 7;
   return { road, min };
@@ -1295,19 +1295,14 @@ function gLegs(stops, start) {
 function viewRoute() {
   const stops = S.route.stops.map(id => S.sites.get(id)).filter(Boolean);
   const pending = stops.filter(s => !S.route.done.includes(s.id));
-  const legs = gLegs(pending, S.me || S.route.start);
   return `<div class="row sp"><h2>${S.route.name ? esc(S.route.name) : 'Traseul curent'}</h2>${stops.length ? '<button class="btn sm ghost danger" data-act="clearRoute">Golește</button>' : ''}</div>
   <div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · ia toate șantierele de actualizat din zona de pe ecran sau din zona pe care o desenezi cu degetul, în ordinea cea mai rapidă
     <div class="btns" style="margin-top:8px"><button class="btn amber" data-act="areaMode">Zona de pe ecran</button><button class="btn amber" data-act="areaDraw">✏️ Desenează zona</button></div></div>
   ${!stops.length ? `<div class="note" style="margin-top:10px">Sau alege tu oricâte șantiere (minim 2), în orice ordine: butonul de traseu de pe hartă, „+ Active din zonă”, sau bifează-le din Listă. Ordinea o stabilesc eu.</div>
     <div class="btns" style="margin-top:10px"><button class="btn" data-act="selMode">Alege pe hartă</button><button class="btn" data-act="tab" data-v="list">Din listă</button></div>` : `
   <div class="sub" style="margin:4px 0 10px">${stops.length} opriri${S.route.done.length ? ' · ' + S.route.done.length + ' vizitate' : ''}</div>
-  <div class="note">Plecare: <b style="color:var(--ink)">${S.me ? 'locația ta (GPS)' : S.route.start ? esc(S.route.start.label || 'punct ales') : 'prima oprire din traseu'}</b>
-    ${S.me ? '' : `<div class="btns" style="margin-top:8px"><button class="btn sm" data-act="startHere">Plecare = centrul hărții</button>${S.route.start ? '<button class="btn sm ghost" data-act="startClear">Fără punct de plecare</button>' : ''}</div>`}</div>
+  <div class="note">Plecare: <b style="color:var(--ink)">locația ta (GPS)</b>${S.me ? '' : ' · <span class="sub">aștept semnalul GPS…</span>'}</div>
   ${routeSection()}
-  <h3>Navigare externă (Google Maps)</h3>
-  ${legs.length ? legs.map((l, i) => `<div class="leg"><span>Etapa ${i + 1}: opririle ${l.a}–${l.b}${i === 0 && !S.route.start ? ' <span class="sub">(din locația ta)</span>' : ''}</span><a class="btn sm primary" href="${l.u}" target="_blank" rel="noopener">Deschide</a></div>`).join('') : '<div class="sub">Toate opririle sunt bifate.</div>'}
-  <div class="sub">Pentru ghidaj live din mers. Google Maps acceptă maximum 10 opriri pe un link, așa că traseele lungi sunt împărțite în etape.</div>
   <h3>Opriri</h3>
   ${stops.map((s, i) => { const done = S.route.done.includes(s.id); return `<div class="stop ${done ? 'done' : ''}"><span class="n num">${i + 1}</span><button class="main" style="border:0;background:none;text-align:left;padding:0;min-width:0" data-act="open" data-id="${s.id}"><div class="t">${esc(s.name)}</div><div class="m">${esc(subtitle(s))} · ${pillHTML(s)}</div></button>
     <span class="mini"><button data-act="up" data-i="${i}" aria-label="Mută în sus">↑</button><button data-act="down" data-i="${i}" aria-label="Mută în jos">↓</button><button data-act="done" data-id="${s.id}" aria-label="Vizitat" style="${done ? 'background:var(--ok);color:#fff;border-color:var(--ok)' : ''}">✓</button><button data-act="toggleStop" data-id="${s.id}" aria-label="Scoate">✕</button></span></div>`; }).join('')}
@@ -1468,7 +1463,7 @@ function toggleStop(id) {
 function optimizeRoute() {
   const pts = S.route.stops.map(id => S.sites.get(id)).filter(Boolean);
   if (pts.length < 2) return;
-  const start = S.route.start;
+  const start = S.me || null;
   const rest = pts.slice(); const out = [];
   let cur = start || rest.shift(); if (!start) out.push(cur);
   while (rest.length) { let bi = 0, bd = Infinity; rest.forEach((p, i) => { const d = hav(cur, p); if (d < bd) { bd = d; bi = i; } }); cur = rest.splice(bi, 1)[0]; out.push(cur); }
@@ -1686,6 +1681,13 @@ const QC = { f: null, timer: null };
 const gpsFresh = () => S.me && Date.now() - (S.me.t || 0) < 90000 ? S.me : null;
 const gpsNow = () => { const g = gpsFresh(); return g ? { lat: g.lat, lng: g.lng, acc: g.acc, heading: g.heading, t: Date.now() } : null; };
 // timestamp of the site's original panel photo (as in Photos), used by the Șantier shortcut to find the original
+// week folder in iCloud, e.g. "2026-10 Săptămâna 1": weeks run Monday–Sunday and take the month of their Sunday;
+// photos taken on Saturday or Sunday go into the following week
+function saptName(dt) {
+  const m = /^(\d{4}):(\d\d):(\d\d)/.exec(dt || ''); const x = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date();
+  const wd = (x.getDay() + 6) % 7; const sun = new Date(x.getFullYear(), x.getMonth(), x.getDate() + (6 - wd) + (wd >= 5 ? 7 : 0));
+  return sun.getFullYear() + '-' + pad(sun.getMonth() + 1) + ' Săptămâna ' + Math.ceil(sun.getDate() / 7);
+}
 function panelStamp(s) {
   const p = (s.poze || [])[0]; const t = s.panouT || (p && p.t) || '';
   return /^\d{4}:\d\d:\d\d \d\d:\d\d:\d\d$/.test(t) ? t.replace(/:/g, '').replace(' ', '-') : '';
@@ -1787,12 +1789,12 @@ $('#qc').addEventListener('click', async e => {
         if (snap.exists) await ref.update({ v: { [vid]: visit } }); else await ref.set({ v: { [vid]: visit } });
         await patchSite(site.id, { ultima: d, ultimaApp: d, inactiv: false });
         const [pa] = site.panouA ? [site.panouA] : await uploadFiles([f.panouR.blob], null, true);
-        await OB.add(k, { siteId: site.id, siteName: site.name, nou: 0, stamp: site.id, t: Date.now(), p: pa, s: aid, lat: g && g.lat, lng: g && g.lng }, files);
+        await OB.add(k, { siteId: site.id, siteName: saptName(f.santierR.dt), name: site.name, nou: 0, stamp: site.id, t: Date.now(), p: pa, s: aid, lat: g && g.lat, lng: g && g.lng }, files);
       } else {
         const gp = f.panouR.gps || g;
         const r = await createSite({ id: sid, panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt }, null);
         const s2 = r.assets || {};
-        await OB.add(k, { siteId: sid, siteName: 'Șantier nou', nou: 1, stamp: sid, t: Date.now(), p: s2.p, s: s2.s, lat: gp.lat, lng: gp.lng }, files);
+        await OB.add(k, { siteId: sid, siteName: saptName(f.santierR.dt), name: 'Șantier nou', nou: 1, stamp: sid, t: Date.now(), p: s2.p, s: s2.s, lat: gp.lat, lng: gp.lng }, files);
       }
       saved = true; ACT.site(sid, !site);
     } catch (err) { toast('Nu s-a salvat în aplicație: ' + (err.code || err.message)); f.saving = false; e.target.disabled = false; e.target.textContent = 'Salvează'; }
@@ -2006,7 +2008,7 @@ function onGeoPos(p) {
   if (S.follow) map.easeTo({ center: [c.longitude, c.latitude], duration: 600 });
   if (!prev) {
     // first fix: route start becomes "my location"
-    if (S.nav && !navValid() && S.route.stops.length) computeRoute(!!S.lastOpt); else refresh();
+    if (S.route.stops.length && !navValid()) { S.autoSig = null; refresh(); } else refresh();
   }
 }
 function onGeoErr(e, loud) {
@@ -2073,7 +2075,7 @@ function setMode(m) {
   S.autoSig = null; refresh();
 }
 const tick = () => new Promise(r => setTimeout(r, 0));
-const routeSig = () => S.mode + '|' + (S.me ? 'me' : S.route.start ? S.route.start.lat + ',' + S.route.start.lng : '-') + '|' + S.route.stops.filter(id => !S.route.done.includes(id)).join(',');
+const routeSig = () => S.mode + '|' + (S.me ? 'me' : '-') + '|' + S.route.stops.filter(id => !S.route.done.includes(id)).join(',');
 function fmtDist(m) { return m < 950 ? Math.max(10, Math.round(m / 10) * 10) + ' m' : (m / 1000).toFixed(m < 9500 ? 1 : 0).replace('.', ',') + ' km'; }
 function fmtTime(s) { const m = Math.round(s / 60); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min'; }
 function routeMsg(t) { S.routeMsg = t; const el = $('#routeMsg'); if (el) el.textContent = t || ''; }
@@ -2126,7 +2128,9 @@ async function computeRoute(optimize) {
     routeMsg('Se încarcă harta rutieră (prima dată durează câteva secunde)…'); render();
     await loadGraph();
     routeMsg('Caut străzile…'); await tick();
-    const start = S.me ? { lat: S.me.lat, lng: S.me.lng, label: 'Locația mea' } : S.route.start;
+    // the route always starts from where you are
+    if (!S.me) { routeMsg('Aștept locația ta (GPS) ca punct de plecare…'); if (typeof locateNow === 'function') locateNow(); render(); return; }
+    const start = { lat: S.me.lat, lng: S.me.lng, label: 'Locația mea' };
     const pts = (start ? [start] : []).concat(pending);
     const snaps = pts.map(p => Router.snap(p.lat, p.lng));
     const bad = pending.filter((s, i) => !snaps[i + (start ? 1 : 0)]);
@@ -2178,10 +2182,10 @@ function routeFeatures() {
     S.nav.legs.forEach((l, k) => rf.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: l.coords }, properties: { leg: k, dim: S.navOn && k !== navItem().leg ? 1 : 0 } }));
   } else {
     const pts = S.route.stops.map(id => S.sites.get(id)).filter(Boolean);
-    const coords = (S.route.start ? [S.route.start] : []).concat(pts).map(p => [p.lng, p.lat]);
+    const coords = (S.me ? [S.me] : []).concat(pts).map(p => [p.lng, p.lat]);
     if (coords.length > 1) rf.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { straight: 1 } });
   }
-  const st = S.me || S.route.start;
+  const st = S.me;
   if (st) rf.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [st.lng, st.lat] }, properties: {} });
   return rf;
 }
