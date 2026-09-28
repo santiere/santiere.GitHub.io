@@ -3,7 +3,8 @@
 (() => {
   'use strict';
   window.PWA = true;
-  document.documentElement.setAttribute('data-theme', 'light');
+  let th = 'light'; try { if (localStorage.getItem('harta_theme') === 'dark') th = 'dark'; } catch (e) {}
+  document.documentElement.setAttribute('data-theme', th);
 
   /* ---------- IndexedDB ---------- */
   let idbP;
