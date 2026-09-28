@@ -1537,7 +1537,7 @@ document.addEventListener('click', async (e) => {
         const w = await window.PWA_makeSlot(pass);
         await CLOUD.req('/users', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, h, slotId: w.slotId, slot: w.slot }) });
         toast('„' + name + '” poate intra cu parola aleasă'); ACT.remote = null; ACT.fetch();
-      } catch (err) { toast('Nu s-a putut adăuga: ' + (err.message || err)); t.disabled = false; t.textContent = 'Adaugă'; }
+      } catch (err) { const m = String(err.message || err); toast(/409/.test(m) ? 'Parola e deja folosită de alt operator. Alege alta.' : 'Nu s-a putut adăuga: ' + m, 4000); t.disabled = false; t.textContent = 'Adaugă'; }
       break;
     }
     case 'opDel': {
