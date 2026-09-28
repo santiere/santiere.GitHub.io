@@ -362,9 +362,6 @@ ol.steps .mi{flex:none;color:var(--ink)}
     <button class="obbtn" id="obBtn" type="button" hidden><span>⏳ Se urcă în cloud: </span><b>0</b></button>
   </div>
   <div class="fab-col">
-    <button class="fab" id="btnSel" aria-pressed="false" title="Alege șantiere pentru traseu" aria-label="Alege șantiere pentru traseu">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.5"/></svg>
-    </button>
     <button class="fab" id="btnHome" title="Toată harta" aria-label="Arată toate șantierele">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
     </button>
@@ -1528,7 +1525,7 @@ function addVisibleDue() {
   S.route.stops.push(...add.map(s => s.id)); optimizeRoute(); toast('Am adăugat ' + add.length + ' șantiere și am optimizat ordinea');
 }
 function setSelectMode(on) {
-  S.selectMode = on; $('#btnSel').setAttribute('aria-pressed', on); $('#selbar').hidden = !on;
+  S.selectMode = on; $('#selbar').hidden = !on;
   const f = $('#selFab'); f.setAttribute('aria-pressed', on); f.textContent = on ? '✓ Gata · ' + S.route.stops.length + ' în traseu' : '＋ Alege pentru traseu';
   if (on) { closeSheet(); } refresh();
 }
@@ -1762,7 +1759,6 @@ $('#grab').addEventListener('click', () => { if (S.view === 'visit' || S.view ==
   };
   sh.addEventListener('touchend', end); sh.addEventListener('touchcancel', end);
 })();
-$('#btnSel').addEventListener('click', () => setSelectMode(!S.selectMode));
 $('#selFab').addEventListener('click', () => { if (S.selectMode) { setSelectMode(false); go('route'); } else setSelectMode(true); });
 $('#selDone').addEventListener('click', () => { setSelectMode(false); go('route'); });
 $('#selArea').addEventListener('click', addVisibleDue);
