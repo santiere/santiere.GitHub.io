@@ -713,7 +713,9 @@ function geotagJpeg(buf, g) {
     const utcDate = now.getUTCFullYear() + ':' + pad2(now.getUTCMonth() + 1) + ':' + pad2(now.getUTCDate());
     const A = s => ({ ty: 2, v: s }); const S16 = n => ({ ty: 3, v: [n] }); const R = arr => ({ ty: 5, v: arr }); const B = arr => ({ ty: 1, v: arr }); const U32 = n => ({ ty: 4, v: [n] });
     const ifd0 = []; if (k.make) ifd0.push([0x010F, A(k.make)]); if (k.model) ifd0.push([0x0110, A(k.model)]);
-    ifd0.push([0x0112, S16(k.orient || 1)], [0x0131, A('Harta Santierelor')], [0x0132, A(local)], [0x8769, U32(0)], [0x8825, U32(0)]);
+    ifd0.push([0x0112, S16(k.orient || 1)], [0x0131, A('Harta Santierelor')], [0x0132, A(local)]);
+    if (g.artist) ifd0.push([0x013B, A(String(g.artist).normalize('NFD').replace(/[^\x20-\x7e]/g, ''))]);
+    ifd0.push([0x8769, U32(0)], [0x8825, U32(0)]);
     const exi = [[0x9003, A(dt)], [0x9004, A(dt)], [0x9011, A(offs)]];
     const gps = [[0x0000, B([2, 3, 0, 0])], [0x0001, A(g.lat >= 0 ? 'N' : 'S')], [0x0002, R(dms(g.lat))], [0x0003, A(g.lng >= 0 ? 'E' : 'W')], [0x0004, R(dms(g.lng))],
       [0x0007, R([[now.getUTCHours(), 1], [now.getUTCMinutes(), 1], [now.getUTCSeconds(), 1]])]];
@@ -1781,8 +1783,9 @@ async function toJpeg(file) {
 async function withGps(blob, g) {
   const buf = await blob.arrayBuffer();
   const ex = readExif(buf.slice(0, 256 * 1024));
-  if (ex && ex.lat) return { blob: new Blob([buf], { type: 'image/jpeg' }), dt: ex.dt, gps: { lat: ex.lat, lng: ex.lng } };
-  const out = geotagJpeg(buf, { lat: g.lat, lng: g.lng, acc: g.acc, heading: g.heading, t: g.t });
+  const artist = (window.PWA_me && window.PWA_me.name) || '';   // who took the photo, written into the photo itself
+  if (ex && ex.lat && !artist) return { blob: new Blob([buf], { type: 'image/jpeg' }), dt: ex.dt, gps: { lat: ex.lat, lng: ex.lng } };
+  const out = ex && ex.lat ? geotagJpeg(buf, { lat: ex.lat, lng: ex.lng, t: g.t, artist }) : geotagJpeg(buf, { lat: g.lat, lng: g.lng, acc: g.acc, heading: g.heading, t: g.t, artist });
   const ex2 = readExif(out.buffer.slice(out.byteOffset, out.byteOffset + Math.min(out.length, 256 * 1024)));
   return { blob: new Blob([out], { type: 'image/jpeg' }), dt: ex2 && ex2.dt, gps: g };
 }
@@ -1892,6 +1895,8 @@ const CLOUD = {
     } catch (e) {}
   },
   start() {
+    try { window.PWA_me = JSON.parse(localStorage.getItem('harta_me') || 'null'); } catch (e) {}
+    CLOUD.req('/me').then(me => { window.PWA_me = me; try { localStorage.setItem('harta_me', JSON.stringify(me)); } catch (e) {} }).catch(() => {});
     try { CLOUD.stateU = JSON.parse(localStorage.getItem('harta_stateU') || '{}'); } catch (e) {}
     CLOUD.pull(); OB.pump();
     setInterval(() => { if (document.visibilityState === 'visible') { CLOUD.pull(); OB.pump(); } }, 30000);
