@@ -39,6 +39,8 @@
   --ground:#0F1417; --surface:#182025; --surface-2:#1E272D; --ink:#E6ECEE; --muted:#9AA8AF; --line:#2B353B;
   --amber:#F5B82E; --amber-ink:#2A1E00; --due:#FF5A4E; --wait:#4C94F2; --accent:#4C94F2; --ch-u:#4C94F2; --ch-n:#BF8414; --off:#7C878D; --ok:#4DB27C; --danger:#FF6B61; --shadow:0 8px 30px rgba(0,0,0,.5);}
 [hidden]{display:none!important}
+.rz-note{margin-top:5px;font-size:13px;font-weight:600;color:#8E44DD}.rz-t{color:#8E44DD;font-weight:600}
+:root[data-theme="dark"] .rz-note,:root[data-theme="dark"] .rz-t{color:#C49BFF}
 :root[data-theme="dark"] .qc-tile{background:var(--surface-2);border-color:#56626B}
 :root[data-theme="dark"] .qc-s{color:var(--muted)}
 :root[data-theme="dark"] .qc-n{background:#E6ECEE;color:#0F1417}
@@ -1034,6 +1036,9 @@ function addSiteLayers() {
     'circle-color': ['case', ['==', ['get', 'sel'], 1], C.amber, ['match', ['get', 'st'], 'due', C.due, 'wait', C.wait, C.off]],
     'circle-stroke-color': ['case', ['==', ['get', 'sel'], 1], '#1B1300', C.surface],
     'circle-stroke-width': ['case', ['==', ['get', 'sel'], 1], 2.5, 1.6] } });
+  // purple ring: in a colleague's route today
+  add({ id: 'sites-rz', type: 'circle', source: 'sites', filter: ['==', ['get', 'rz'], 1], paint: {
+    'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 6, 12, 10, 16, 14], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#8E44DD', 'circle-stroke-width': 2.5 } });
   add({ id: 'sites-num', type: 'symbol', source: 'sites', filter: ['==', ['get', 'sel'], 1], layout: { 'text-field': ['to-string', ['get', 'ord']], 'text-font': ['Noto Sans Medium'], 'text-size': 12, 'text-allow-overlap': true, 'text-ignore-placement': true }, paint: { 'text-color': '#1B1300' } });
   add({ id: 'focus', type: 'circle', source: 'focus', paint: { 'circle-radius': 16, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': C.ink, 'circle-stroke-width': 3 } });
   updateMap();
@@ -1085,7 +1090,7 @@ function siteFeatures() {
   for (const s of S.sites.values()) {
     const sel = ord.has(s.id);
     if (!vis.has(s.id) && !sel) continue;
-    feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [s.lng, s.lat] }, properties: { id: s.id, st: status(s), sel: sel ? 1 : 0, ord: ord.get(s.id) || 0 } });
+    feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [s.lng, s.lat] }, properties: { id: s.id, st: status(s), sel: sel ? 1 : 0, ord: ord.get(s.id) || 0, rz: RZ.other(s.id) ? 1 : 0 } });
   }
   // selected on top
   feats.sort((a, b) => a.properties.sel - b.properties.sel);
@@ -1150,6 +1155,7 @@ function pickShard() {
 }
 let routeTimer = null, routeDirty = false;
 function saveRouteSoon() {
+  if (typeof RZ !== 'undefined') RZ.sendSoon();
   routeDirty = true; S.routeUpd = Date.now(); clearTimeout(routeTimer);
   routeTimer = setTimeout(async () => {
     try { await db.doc('trasee/curent').set({ stops: S.route.stops, done: S.route.done, start: S.route.start || null, name: S.route.name || '', upd: S.routeUpd }); }
@@ -1280,6 +1286,7 @@ function viewCard() {
     ${ph ? `<button class="thumb" style="padding:0;overflow:hidden" data-act="photo" data-kind="${ph.kind}" data-id="${esc(ph.id)}" data-d="${ph.d}" aria-label="Vezi poza">${photoEl(ph, 'fill')}</button>` : '<span class="thumb"></span>'}
     <div class="grow">
       <div class="row sp wrap">${pillHTML(s)}</div>
+      ${RZ.other(s.id) && !inRoute ? `<div class="rz-note">În traseul lui ${esc(RZ.other(s.id).n || 'alt coleg')} azi</div>` : ''}
       <h2 style="margin-top:6px">${esc(s.name)}</h2>
       ${who(s) ? `<div class="sub" style="margin-top:2px">${esc(who(s))}</div>` : ''}
       <div class="meta"><span>${esc(subtitle(s))}</span><span class="num">${s.ultima ? 'Actualizat: ' + roDate(s.ultima) : 'Neactualizat încă'}</span>${(s.viz || []).length ? `<span class="num">${s.viz.length} vizite</span>` : ''}</div>
@@ -1388,7 +1395,7 @@ function viewRoute() {
   <div class="note">Plecare: <b style="color:var(--ink)">locația ta (GPS)</b>${S.me ? '' : ' · <span class="sub">aștept semnalul GPS…</span>'}</div>
   ${routeSection()}
   <h3>Opriri</h3>
-  ${stops.map((s, i) => { const done = S.route.done.includes(s.id); return `<div class="stop ${done ? 'done' : ''}"><span class="n num">${i + 1}</span><button class="main" style="border:0;background:none;text-align:left;padding:0;min-width:0" data-act="open" data-id="${s.id}"><div class="t">${esc(s.name)}</div><div class="m">${esc(subtitle(s))} · ${pillHTML(s)}</div></button>
+  ${stops.map((s, i) => { const done = S.route.done.includes(s.id); return `<div class="stop ${done ? 'done' : ''}"><span class="n num">${i + 1}</span><button class="main" style="border:0;background:none;text-align:left;padding:0;min-width:0" data-act="open" data-id="${s.id}"><div class="t">${esc(s.name)}</div><div class="m">${esc(subtitle(s))} · ${pillHTML(s)}${RZ.other(s.id) && !done ? ` <span class="rz-t">· îl are și ${esc(RZ.other(s.id).n || 'un coleg')}</span>` : ''}</div></button>
     <span class="mini"><button data-act="up" data-i="${i}" aria-label="Mută în sus">↑</button><button data-act="down" data-i="${i}" aria-label="Mută în jos">↓</button><button data-act="done" data-id="${s.id}" aria-label="Vizitat" style="${done ? 'background:var(--ok);color:#fff;border-color:var(--ok)' : ''}">✓</button><button data-act="toggleStop" data-id="${s.id}" aria-label="Scoate">✕</button></span></div>`; }).join('')}
   <h3>Salvează</h3>
   <div class="row"><input class="in grow" id="routeName" placeholder="Nume traseu, ex. Sector 3 – marți" value="${esc(S.routeDraft != null ? S.routeDraft : (S.route.name || ''))}"><button class="btn" data-act="saveRoute">Salvează</button></div>
@@ -1537,8 +1544,23 @@ async function saveVisit() {
 }
 
 /* ============ route ops ============ */
+// stops already done by a colleague: ticked off, and the navigation goes straight to the next one
+function routeSkip(list) {
+  for (const [sid] of list) if (!S.route.done.includes(sid)) S.route.done.push(sid);
+  saveRouteSoon();
+  const [, name, by] = list[0];
+  toast((list.length > 1 ? list.length + ' șantiere din traseu au fost actualizate' : '„' + name + '” a fost actualizat') + ' de ' + (by || 'un coleg') + ' — trecem la următorul.', 5000);
+  if (S.navOn && S.nav) {
+    if (S.nav.legs.every(l => S.route.done.includes(l.to))) { toast('Traseul e gata — restul șantierelor au fost actualizate de colegi', 5000); navStop(); return; }
+    if (S.navTrack) S.navTrack.busy = false;
+    navReroute();
+  } else refresh();
+}
 function toggleStop(id) {
   const i = S.route.stops.indexOf(id);
+  const o = i < 0 && RZ.other(id);
+  if (o && RZ.pend !== id) { RZ.pend = id; setTimeout(() => { if (RZ.pend === id) RZ.pend = null; }, 6000); toast('E în traseul lui ' + (o.n || 'alt coleg') + ' azi. Apasă din nou ca să-l iei totuși.', 3500); return; }
+  if (o) { RZ.pend = null; RZ.force.add(id); }
   if (i >= 0) { S.route.stops.splice(i, 1); S.route.done = S.route.done.filter(x => x !== id); }
   else S.route.stops.push(id);
   saveRouteSoon(); refresh();
@@ -2009,7 +2031,7 @@ const CLOUD = {
     try {
       if (CLOUD.pendingState) { const ps = CLOUD.pendingState; CLOUD.pendingState = null; await CLOUD.req('/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ps) }).catch(() => { CLOUD.pendingState = Object.assign(ps, CLOUD.pendingState || {}); }); }
       const st = await CLOUD.req('/state');
-      let changed = 0;
+      let changed = 0; const skipped = [];
       for (const [sid, v] of Object.entries(st)) {
         if ((CLOUD.stateU[sid] || 0) >= v.u) continue;
         CLOUD.stateU[sid] = v.u;
@@ -2033,10 +2055,15 @@ const CLOUD = {
         const up = {};
         if ((s.ultima || '') !== (v.ultima || '') || !!s.inactiv !== !!v.inactiv) Object.assign(up, { ultima: v.ultima || '', ultimaApp: v.ultima || '', inactiv: !!v.inactiv });
         if (v.e) { for (const [k, x] of Object.entries(v.e)) if (SYNC_E.includes(k) && (own(s, k) && s[k] != null ? s[k] : '') !== x) up[k] = x; if (Object.keys(up).some(k => SYNC_E.includes(k))) up.edk = [...new Set([...(s.edk || []), ...Object.keys(v.e)])]; }
-        if (Object.keys(up).length) { await db.doc('sites/' + s._sh).update({ s: { [sid]: up } }); changed++; }
+        if (Object.keys(up).length) {
+          await db.doc('sites/' + s._sh).update({ s: { [sid]: up } }); changed++;
+          // a colleague updated (or finished) a site that is still ahead in my route
+          if (S.route.stops.includes(sid) && !S.route.done.includes(sid) && status(Object.assign({}, s, up)) !== 'due') skipped.push([sid, s.name, v.bn]);
+        }
       }
       try { localStorage.setItem('harta_stateU', JSON.stringify(CLOUD.stateU)); } catch (e) {}
       if (changed) refresh();
+      if (skipped.length) routeSkip(skipped);
     } catch (e) {}
   },
   start() {
@@ -2050,13 +2077,34 @@ const CLOUD = {
       for (const d of Object.values(S.shards)) for (const [id, x] of Object.entries((d && d.s) || {})) if (x && x.sters && !sent[id]) { await CLOUD.push(id, null, Object.assign({}, x, { id })); sent[id] = 1; }
       try { localStorage.setItem('harta_sters_sent', JSON.stringify(sent)); } catch (e) {}
     }, 6000);
-    setInterval(() => { if (document.visibilityState === 'visible') CLOUD.pull(); }, 15000);
+    RZ.pull(); setTimeout(RZ.send, 3000);
+    setInterval(() => { if (document.visibilityState === 'visible') { CLOUD.pull(); RZ.pull(); } }, 15000);
     setInterval(() => { if (document.visibilityState === 'visible') OB.pump(); }, 30000);
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { CLOUD.pull(); OB.pump(); } });
-    window.addEventListener('online', () => { CLOUD.pull(); OB.pump(); });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { CLOUD.pull(); RZ.pull(); OB.pump(); } });
+    window.addEventListener('online', () => { CLOUD.pull(); RZ.pull(); OB.pump(); });
   },
 };
 /* ---------- „De trimis”: pairs not yet in the Santiere folder ---------- */
+/* ---------- today's routes: a site in a colleague's route is reserved for them ---------- */
+const RZ = {
+  map: {}, force: new Set(), pend: null, timer: null,
+  me() { return (window.PWA_me && window.PWA_me.id) || (isOp() ? '' : 'admin'); },
+  // the colleague who has this site in today's route (not me), or null
+  other(id) { const r = RZ.map[id]; return r && r.d === today() && r.by !== RZ.me() ? r : null; },
+  set(m) {
+    const next = {}; for (const [k, v] of Object.entries(m || {})) if (v && v.d === today()) next[k] = v;
+    const ch = JSON.stringify(next) !== JSON.stringify(RZ.map); RZ.map = next; return ch;
+  },
+  async pull() { try { if (RZ.set(await CLOUD.req('/rez'))) refresh(); } catch (e) {} },
+  // my open stops = my reservations; sent a moment after the route changes
+  sendSoon() { clearTimeout(RZ.timer); RZ.timer = setTimeout(RZ.send, 1500); },
+  async send() {
+    const ids = S.route.stops.filter(id => !S.route.done.includes(id));
+    for (const f of [...RZ.force]) if (!ids.includes(f)) RZ.force.delete(f);
+    try { const r = await CLOUD.req('/rez', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids, force: [...RZ.force], day: today() }) }); if (RZ.set(r.rez)) refresh(); } catch (e) {}
+  },
+};
+
 const OB = {
   items: {}, files: {}, loaded: false, busy: null,
   async load() {
@@ -2122,12 +2170,14 @@ function setAreaPoly(P) { S.areaPoly = P; const src = map && map.getSource('area
 function areaSites() {
   if (!map) return [];
   const P = S.areaPoly; const b = map.getBounds();
-  return visibleSites().filter(s => status(s) === 'due' && (P ? inPoly(s.lng, s.lat, P) : b.contains([s.lng, s.lat])));
+  const all = visibleSites().filter(s => status(s) === 'due' && (P ? inPoly(s.lng, s.lat, P) : b.contains([s.lng, s.lat])));
+  const mine = all.filter(s => !RZ.other(s.id)); S.areaSkip = all.length - mine.length;
+  return mine;
 }
 function areaUpdate() {
   if (!S.areaOn) return;
   const n = areaSites().length; const drawn = !!S.areaPoly;
-  $('#areaTxt').textContent = n + ' șantiere de actualizat ' + (drawn ? 'în zona desenată' : 'pe ecran');
+  $('#areaTxt').textContent = n + ' șantiere de actualizat ' + (drawn ? 'în zona desenată' : 'pe ecran') + (S.areaSkip ? ' · ' + S.areaSkip + ' sărite (în traseul colegilor)' : '');
   $('#areaHint').textContent = drawn ? 'Poți muta harta; zona rămâne. Redesenează dacă vrei alt contur.' : 'Mărește/micșorează harta până vezi doar zona dorită, sau desenează zona';
   $('#areaDraw').textContent = drawn ? '✏️ Redesenează' : '✏️ Desenează zona';
   $('#areaClear').hidden = !drawn;
@@ -2556,7 +2606,7 @@ async function navReroute() {
   try {
     await loadGraph();
     const cur = navItem().leg;
-    const rest = S.nav.legs.slice(cur).map(l => S.sites.get(l.to)).filter(Boolean);
+    const rest = S.nav.legs.slice(cur).filter(l => !S.route.done.includes(l.to)).map(l => S.sites.get(l.to)).filter(Boolean);
     const pts = [{ lat: S.me.lat, lng: S.me.lng, label: 'Locația mea' }].concat(rest);
     const snaps = pts.map(p => Router.snap(p.lat, p.lng)); if (!snaps[0]) return;
     const legs = []; let prev = 0;
