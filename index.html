@@ -245,15 +245,18 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .stage-off{opacity:1;background:color-mix(in srgb,var(--wait) 12%,var(--surface));color:var(--wait);border:1px solid color-mix(in srgb,var(--wait) 35%,transparent)}
 @media (orientation: landscape) and (max-height: 600px) {
   .top{right:auto;width:min(540px,52vw);padding-left:calc(var(--sal) + 10px);padding-top:calc(var(--sat) + 6px);gap:6px}
-  .fab-col{top:calc(var(--sat) + 8px);right:calc(var(--sar) + 10px);display:grid;grid-template-columns:repeat(2,auto);gap:6px}
-  .fab-new{grid-column:span 2;width:auto;flex-direction:row;justify-content:center;gap:6px;padding:8px 10px;font-size:12px;margin-top:0}.fab-new br{display:none}
-  .tabs{left:calc(var(--sal));right:calc(var(--sar))}
-  .tabs button{height:46px;flex-direction:row;gap:6px;font-size:13px}
-  .sheet{left:calc(var(--sal));right:auto;top:calc(var(--sat) + 6px);bottom:calc(46px + var(--sab));width:min(430px,46vw);max-height:none;border-radius:0 18px 18px 0;box-shadow:6px 0 30px rgba(0,0,0,.18)}
+  .fab-col{top:calc(var(--sat) + 10px);right:calc(var(--sar) + 10px);display:flex;flex-direction:column;gap:6px}
+  .fab{width:40px;height:40px;border-radius:11px}
+  .fab-new{width:40px;padding:6px 0 5px;font-size:9px;margin-top:2px;border-radius:11px}.fab-new svg{width:17px;height:17px}
+  .tabs{left:calc(var(--sal));right:calc(var(--sar));padding-bottom:10px}
+  .maplibregl-ctrl-bottom-right,.maplibregl-ctrl-bottom-left{bottom:46px!important}
+  .tabs button{height:36px;flex-direction:row;gap:6px;font-size:12.5px}.tabs button svg{width:18px;height:18px}
+  .sheet{left:calc(var(--sal));right:auto;top:calc(var(--sat) + 16px);bottom:46px;width:min(430px,46vw);max-height:none;border-radius:0 18px 18px 0;box-shadow:6px 0 30px rgba(0,0,0,.18)}
   .sheet.peek,.sheet.full{max-height:none;height:auto}
-  #sheet:not([hidden]) ~ .top{display:none}
-  .selfab{bottom:calc(56px + var(--sab));right:calc(var(--sar) + 10px)}
-  .areabar{left:auto;right:calc(var(--sar) + 110px);width:340px;bottom:calc(var(--sab) + 56px)}
+  #sheet:not([hidden]) ~ .top,#app:has(#sheet:not([hidden])) .top{display:none}
+  .grab{height:34px}
+  .selfab{bottom:56px;right:calc(var(--sar) + 10px)}
+  .areabar{left:auto;right:calc(var(--sar) + 64px);width:340px;bottom:56px}
   .nav{flex-direction:column;align-items:flex-start;padding-left:var(--sal)}
   .nav-topbox{width:min(440px,44vw);border-radius:0 0 18px 0;padding-top:calc(var(--sat) + 8px)}
   .nav-bot{width:min(440px,44vw);border-radius:0 18px 0 0;padding-bottom:calc(var(--sab) + 8px)}
@@ -1762,21 +1765,26 @@ $('#grab').addEventListener('click', () => { if (S.view === 'visit' || S.view ==
     if (S.view === 'visit' || S.view === 'edit' || e.touches.length !== 1) return;
     const t = e.touches[0]; const onGrab = e.target.closest('#grab');
     if (!onGrab && (body.scrollTop > 0 || e.target.closest('input,textarea,select,.ch,.strip'))) return;
-    st = { x: t.clientX, y: t.clientY, d: 0, on: false, grab: !!onGrab };
+    st = { x: t.clientX, y: t.clientY, d: 0, on: false, grab: !!onGrab, side: false };
   }, { passive: true });
   sh.addEventListener('touchmove', e => {
     if (!st) return; const t = e.touches[0];
     const dx = t.clientX - st.x, dy = t.clientY - st.y;
-    const d = land() ? -dx : dy;
-    if (!st.on) { if (Math.abs(d) < 10) return; if (d < 0 || (!land() && Math.abs(dx) > Math.abs(dy)) || (land() && Math.abs(dy) > Math.abs(dx)) || (!st.grab && body.scrollTop > 0)) { st = null; return; } st.on = true; sh.style.transition = 'none'; }
-    st.d = Math.max(0, d); sh.style.transform = land() ? `translateX(${-st.d}px)` : `translateY(${st.d}px)`;
+    if (!st.on) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 10) return;
+      // down closes everywhere; in landscape a swipe to the left closes too
+      const side = land() && Math.abs(dx) > Math.abs(dy);
+      if ((side ? -dx : dy) < 0 || (!land() && Math.abs(dx) > Math.abs(dy)) || (!st.grab && body.scrollTop > 0)) { st = null; return; }
+      st.side = side; st.on = true; sh.style.transition = 'none';
+    }
+    st.d = Math.max(0, st.side ? -dx : dy); sh.style.transform = st.side ? `translateX(${-st.d}px)` : `translateY(${st.d}px)`;
     if (e.cancelable) e.preventDefault();
   }, { passive: false });
   const end = () => {
     if (!st) return; const s0 = st; st = null; if (!s0.on) return;
     sh.style.transition = 'transform .2s ease';
-    const close = s0.d > Math.min(120, (land() ? sh.offsetWidth : sh.offsetHeight) * 0.25);
-    sh.style.transform = close ? (land() ? 'translateX(-110%)' : 'translateY(110%)') : '';
+    const close = s0.d > Math.min(s0.side ? 120 : 90, (s0.side ? sh.offsetWidth : sh.offsetHeight) * 0.25);
+    sh.style.transform = close ? (s0.side ? 'translateX(-110%)' : 'translateY(110%)') : '';
     setTimeout(() => { sh.style.transition = ''; sh.style.transform = ''; if (close) { S.moveId = null; closeSheet(); } }, 200);
   };
   sh.addEventListener('touchend', end); sh.addEventListener('touchcancel', end);
