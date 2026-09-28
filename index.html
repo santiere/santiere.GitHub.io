@@ -306,6 +306,10 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .act-tab th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:6px 4px;border-bottom:1px solid var(--line)}
 .act-tab td{padding:8px 4px;border-bottom:1px solid var(--line)}
 .act-tab .num{text-align:right}
+.drawpad{position:absolute;inset:0;z-index:8;touch-action:none;background:rgba(19,32,42,.06);cursor:crosshair}
+.drawsvg{position:absolute;inset:0;width:100%;height:100%}
+#drawPath{fill:color-mix(in srgb,var(--amber) 18%,transparent);stroke:var(--amber);stroke-width:4;stroke-linejoin:round;stroke-linecap:round}
+.drawhint{position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--sat) + 12px);display:flex;align-items:center;gap:10px;background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 6px 6px 16px;box-shadow:var(--shadow);font-weight:600;font-size:14px;white-space:nowrap}
 .toast{display:flex;align-items:center;gap:12px;pointer-events:auto}
 .toast-undo{border:0;background:var(--amber);color:var(--amber-ink);font-weight:700;border-radius:8px;padding:6px 10px;font-size:14px}
 .state-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -364,9 +368,11 @@ ol.steps .mi{flex:none;color:var(--ink)}
     <button class="fab-new" id="btnNew" aria-label="Șantier nou"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Șantier <br>nou</span></button>
   </div>
   <div class="areabar" id="areaBar" hidden>
-    <div><b>Traseu pe zonă</b><span id="areaTxt"></span><small>Mărește/micșorează harta până vezi doar zona dorită</small></div>
+    <div><b>Traseu pe zonă</b><span id="areaTxt"></span><small id="areaHint"></small></div>
+    <div class="row" style="gap:8px"><button id="areaDraw" class="btn sm grow">✏️ Desenează zona</button><button id="areaClear" class="btn sm ghost" hidden>Fără desen</button></div>
     <div class="row" style="gap:8px"><button id="areaCancel" class="btn sm ghost">Renunță</button><button id="areaGo" class="btn amber grow">Fă traseul</button></div>
   </div>
+  <div class="drawpad" id="drawPad" hidden><svg class="drawsvg" aria-hidden="true"><path id="drawPath"/></svg><div class="drawhint"><span>Trasează cu degetul conturul zonei</span><button id="drawCancel" class="btn sm ghost">Renunță</button></div></div>
   <div class="selbar" id="selbar" hidden>
     <span id="selText">Atinge șantierele de pe hartă</span>
     <span class="row"><button id="selArea">+ Active din zonă</button><button id="selDone">Gata</button></span>
@@ -947,6 +953,9 @@ function addSiteLayers() {
   if (!map.getSource('focus')) map.addSource('focus', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   const C = siteColors();
   const add = l => { if (!map.getLayer(l.id)) map.addLayer(l); };
+  if (!map.getSource('area')) map.addSource('area', { type: 'geojson', data: areaGeo() });
+  add({ id: 'area-fill', type: 'fill', source: 'area', paint: { 'fill-color': C.amber, 'fill-opacity': 0.12 } });
+  add({ id: 'area-line', type: 'line', source: 'area', layout: { 'line-join': 'round' }, paint: { 'line-color': C.amber, 'line-width': 3, 'line-dasharray': [2, 1.2] } });
   add({ id: 'route-straight', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['has', 'straight']], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': C.ink, 'line-opacity': 0.6, 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.2, 15, 3], 'line-dasharray': [1.2, 1.4] } });
   add({ id: 'route-case', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#5A3B00', 'line-opacity': ['case', ['==', ['get', 'dim'], 1], 0.25, 0.9], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 9, 18, 18] } });
   add({ id: 'route-line', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': C.amber, 'line-opacity': ['case', ['==', ['get', 'dim'], 1], 0.35, 1], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 14, 6, 18, 13] } });
@@ -1288,8 +1297,8 @@ function viewRoute() {
   const pending = stops.filter(s => !S.route.done.includes(s.id));
   const legs = gLegs(pending, S.me || S.route.start);
   return `<div class="row sp"><h2>${S.route.name ? esc(S.route.name) : 'Traseul curent'}</h2>${stops.length ? '<button class="btn sm ghost danger" data-act="clearRoute">Golește</button>' : ''}</div>
-  <div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · mărești sau micșorezi harta până vezi doar zona dorită; traseul ia toate șantierele de actualizat de pe ecran, în ordinea cea mai rapidă
-    <button class="btn amber" style="width:100%;margin-top:8px" data-act="areaMode">Alege zona pe hartă</button></div>
+  <div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · ia toate șantierele de actualizat din zona de pe ecran sau din zona pe care o desenezi cu degetul, în ordinea cea mai rapidă
+    <div class="btns" style="margin-top:8px"><button class="btn amber" data-act="areaMode">Zona de pe ecran</button><button class="btn amber" data-act="areaDraw">✏️ Desenează zona</button></div></div>
   ${!stops.length ? `<div class="note" style="margin-top:10px">Sau alege tu oricâte șantiere (minim 2), în orice ordine: butonul de traseu de pe hartă, „+ Active din zonă”, sau bifează-le din Listă. Ordinea o stabilesc eu.</div>
     <div class="btns" style="margin-top:10px"><button class="btn" data-act="selMode">Alege pe hartă</button><button class="btn" data-act="tab" data-v="list">Din listă</button></div>` : `
   <div class="sub" style="margin:4px 0 10px">${stops.length} opriri${S.route.done.length ? ' · ' + S.route.done.length + ' vizitate' : ''}</div>
@@ -1542,6 +1551,7 @@ document.addEventListener('click', async (e) => {
     case 'roadOpt': computeRoute(true); break;
     case 'setMode': setMode(t.dataset.v); break;
     case 'areaMode': areaMode(true); break;
+    case 'areaDraw': areaMode(true); drawStart(); break;
     case 'navTo': navTo(t.dataset.id); break;
     case 'roadKeep': computeRoute(false); break;
     case 'navStart': navStart(); break;
@@ -1895,23 +1905,58 @@ const OB = {
 };
 $('#obBtn').addEventListener('click', () => OB.pump());
 
-/* ---------- route from the area visible on screen ---------- */
+/* ---------- route from an area: the part of the map on screen, or a zone drawn with the finger ---------- */
+function inPoly(x, y, P) { let ins = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) ins = !ins; } return ins; }
+function areaGeo() { const P = S.areaPoly; return { type: 'FeatureCollection', features: P ? [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [P.concat([P[0]])] } }] : [] }; }
+function setAreaPoly(P) { S.areaPoly = P; const src = map && map.getSource('area'); if (src) src.setData(areaGeo()); }
 function areaSites() {
   if (!map) return [];
-  const b = map.getBounds();
-  return visibleSites().filter(s => status(s) === 'due' && b.contains([s.lng, s.lat]));
+  const P = S.areaPoly; const b = map.getBounds();
+  return visibleSites().filter(s => status(s) === 'due' && (P ? inPoly(s.lng, s.lat, P) : b.contains([s.lng, s.lat])));
 }
 function areaUpdate() {
   if (!S.areaOn) return;
-  const n = areaSites().length;
-  $('#areaTxt').textContent = n + ' șantiere de actualizat pe ecran';
+  const n = areaSites().length; const drawn = !!S.areaPoly;
+  $('#areaTxt').textContent = n + ' șantiere de actualizat ' + (drawn ? 'în zona desenată' : 'pe ecran');
+  $('#areaHint').textContent = drawn ? 'Poți muta harta; zona rămâne. Redesenează dacă vrei alt contur.' : 'Mărește/micșorează harta până vezi doar zona dorită, sau desenează zona';
+  $('#areaDraw').textContent = drawn ? '✏️ Redesenează' : '✏️ Desenează zona';
+  $('#areaClear').hidden = !drawn;
   const b = $('#areaGo'); b.disabled = n < 2 || n > 500;
-  b.textContent = n > 500 ? 'Peste 500 · mărește harta' : n < 2 ? 'Minim 2 · micșorează harta' : 'Fă traseul (' + n + ')';
+  b.textContent = n > 500 ? (drawn ? 'Peste 500 · desenează mai mic' : 'Peste 500 · mărește harta') : n < 2 ? (drawn ? 'Minim 2 șantiere în zonă' : 'Minim 2 · micșorează harta') : 'Fă traseul (' + n + ')';
 }
 function areaMode(on) {
   S.areaOn = on; $('#areaBar').hidden = !on;
   if (on) { if (!S.areaHooked && map) { map.on('moveend', areaUpdate); S.areaHooked = true; } closeSheet(); if (S.selectMode) setSelectMode(false); areaUpdate(); }
+  else { drawStop(); setAreaPoly(null); }
 }
+/* freehand drawing: one finger traces the outline, lifting it closes the zone */
+const DRAW = { pts: [], on: false };
+function drawStart() { $('#drawPad').hidden = false; DRAW.pts = []; $('#drawPath').setAttribute('d', ''); }
+function drawStop() { $('#drawPad').hidden = true; DRAW.on = false; }
+function drawD() { return DRAW.pts.length ? 'M' + DRAW.pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') : ''; }
+(() => {
+  const pad = $('#drawPad');
+  const xy = e => { const r = pad.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  pad.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; DRAW.on = true; DRAW.pts = [xy(e)]; try { pad.setPointerCapture(e.pointerId); } catch (x) {} e.preventDefault(); });
+  pad.addEventListener('pointermove', e => {
+    if (!DRAW.on) return; const p = xy(e); const q = DRAW.pts[DRAW.pts.length - 1];
+    if (Math.hypot(p[0] - q[0], p[1] - q[1]) >= 5) { DRAW.pts.push(p); $('#drawPath').setAttribute('d', drawD()); }
+    e.preventDefault();
+  });
+  const end = () => {
+    if (!DRAW.on) return; DRAW.on = false;
+    const P = DRAW.pts; let A = 0; for (let i = 0, j = P.length - 1; i < P.length; j = i++) A += (P[j][0] + P[i][0]) * (P[j][1] - P[i][1]);
+    if (P.length < 6 || Math.abs(A / 2) < 2500) { toast('Desenează un contur mai mare, cu degetul pe hartă'); DRAW.pts = []; $('#drawPath').setAttribute('d', ''); return; }
+    // simplify: keep at most ~120 points
+    const step = Math.max(1, Math.ceil(P.length / 120));
+    const poly = P.filter((p, i) => i % step === 0).map(p => { const ll = map.unproject(p); return [+ll.lng.toFixed(6), +ll.lat.toFixed(6)]; });
+    drawStop(); setAreaPoly(poly); areaUpdate();
+  };
+  pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
+})();
+$('#areaDraw').addEventListener('click', drawStart);
+$('#areaClear').addEventListener('click', () => { setAreaPoly(null); areaUpdate(); });
+$('#drawCancel').addEventListener('click', () => { drawStop(); areaUpdate(); });
 $('#areaGo').addEventListener('click', () => {
   const cand = areaSites(); if (cand.length < 2) return;
   areaMode(false);
