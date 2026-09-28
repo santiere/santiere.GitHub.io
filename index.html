@@ -310,6 +310,10 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .drawsvg{position:absolute;inset:0;width:100%;height:100%}
 #drawPath{fill:color-mix(in srgb,var(--amber) 18%,transparent);stroke:var(--amber);stroke-width:4;stroke-linejoin:round;stroke-linecap:round}
 .drawhint{position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--sat) + 12px);display:flex;align-items:center;gap:10px;background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 6px 6px 16px;box-shadow:var(--shadow);font-weight:600;font-size:14px;white-space:nowrap}
+.who-seg{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.who-seg .chip{border:2px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:7px 14px;font-weight:700;font-size:14px}
+.who-seg .chip.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface))}
+.op-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
 .toast{display:flex;align-items:center;gap:12px;pointer-events:auto}
 .toast-undo{border:0;background:var(--amber);color:var(--amber-ink);font-weight:700;border-radius:8px;padding:6px 10px;font-size:14px}
 .state-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -842,11 +846,16 @@ function fillOcr() {
   const el = $('#ocrText'); const s = S.sites.get(S.openId); if (!el || !s || !S.ocrRaw) return;
   el.textContent = (s.poze || []).map(p => S.ocrRaw[p.f] || '').join('\n———\n').trim() || 'Nu s-a putut citi text din poză.';
 }
+/* ============ roles: admin (Ionuț) or operator ============ */
+const isOp = () => window.PWA_role === 'op';
+// what an operator may not do: delete or edit sites and photos, change states by hand, export
+const OP_BLOCK = new Set(['setActive', 'setState', 'finish', 'markToday', 'delVisit', 'edit', 'editSave', 'movePin', 'delSite', 'csv']);
 /* ============ status ============ */
 function status(s) { if (s.inactiv) return 'off'; if (!s.ultima) return 'due'; return daysBetween(s.ultima, today()) >= CYCLE ? 'due' : 'wait'; }
 function stageBtn(s, cls) {
   const st = status(s);
   if (st === 'wait') return `<button class="btn stage-off" disabled>Actualizat · revine ${roShort(addDays(s.ultima, CYCLE))}</button>`;
+  if (st === 'off' && isOp()) return `<button class="btn stage-off" disabled>Finalizat</button>`;
   if (st === 'off') return `<button class="btn" data-act="setActive" data-id="${s.id}" data-v="0">Finalizat · redeschide</button>`;
   return `<button class="btn ${cls || 'amber'}" data-act="visit" data-id="${s.id}">Actualizează șantier</button>`;
 }
@@ -859,7 +868,7 @@ function stateSeg(s) {
     ${opt('off', 'Finalizat', 'lucrare terminată')}
   </div>`;
 }
-function finishBtn(s) { return s.inactiv ? '' : `<button class="btn ghost" data-act="setState" data-id="${s.id}" data-v="off">✓ Finalizat</button>`; }
+function finishBtn(s) { return s.inactiv || isOp() ? '' : `<button class="btn ghost" data-act="setState" data-id="${s.id}" data-v="off">✓ Finalizat</button>`; }
 function statusLabel(s) {
   const st = status(s);
   if (st === 'off') return ['off', 'Finalizat'];
@@ -1226,7 +1235,7 @@ function viewSite() {
   if (vis) for (const [vid, v] of Object.entries(vis)) if (v) events.push({ d: v.d, t: 'Vizită', s: '', vid, n: (v.poze || []).length });
   events.sort((a, b) => (b.d || '').localeCompare(a.d || ''));
   const [k] = statusLabel(s);
-  return `<div class="row sp" style="margin:2px 0 8px"><button class="btn sm ghost" data-act="back">‹ Înapoi</button><button class="btn sm ghost" data-act="edit" data-id="${s.id}">Editează</button></div>
+  return `<div class="row sp" style="margin:2px 0 8px"><button class="btn sm ghost" data-act="back">‹ Înapoi</button>${isOp() ? '' : `<button class="btn sm ghost" data-act="edit" data-id="${s.id}">Editează</button>`}</div>
   <div class="board">
     <div class="kicker"><span>Șantier ${esc(s.id.toUpperCase())}</span>${pillHTML(s)}</div>
     <h2>${esc(s.name)}</h2>
@@ -1243,9 +1252,9 @@ function viewSite() {
   ${photos.length ? `<div class="strip">${photos.map(p => `<button class="ph" data-act="photo" data-kind="${p.kind}" data-id="${esc(p.id)}" data-d="${p.d || ''}">${photoEl(p, 'img')}<div class="cap num">${roDate(p.d)} · ${esc(p.cap)}</div></button>`).join('')}</div>` : '<div class="sub">Nicio poză încă.</div>'}
   ${!vis && S.visitsFor !== s.id ? '<div class="sub">Se încarcă vizitele…</div>' : ''}
   <h3>Istoric</h3>
-  <ul class="tl">${events.map(e => `<li><div class="row sp"><span class="d num">${roDate(e.d)}</span>${e.vid ? `<button class="btn sm ghost danger" data-act="delVisit" data-id="${s.id}" data-vid="${e.vid}">Șterge</button>` : ''}</div><div class="s">${esc(e.t)}${e.n ? ' · ' + e.n + ' poze' : ''}${e.s ? ' — ' + esc(e.s) : ''}</div></li>`).join('')}</ul>
-  <h3>Stare șantier</h3>
-  ${stateSeg(s)}
+  <ul class="tl">${events.map(e => `<li><div class="row sp"><span class="d num">${roDate(e.d)}</span>${e.vid && !isOp() ? `<button class="btn sm ghost danger" data-act="delVisit" data-id="${s.id}" data-vid="${e.vid}">Șterge</button>` : ''}</div><div class="s">${esc(e.t)}${e.n ? ' · ' + e.n + ' poze' : ''}${e.s ? ' — ' + esc(e.s) : ''}</div></li>`).join('')}</ul>
+  ${isOp() ? '' : `<h3>Stare șantier</h3>
+  ${stateSeg(s)}`}
   <div class="sub" style="margin-top:8px">Roșu = de fotografiat. Albastru = fotografiat, revine singur după ${CYCLE} de zile. Gri = lucrare terminată, nu mai apare în ciclu.</div>
   <div style="height:10px"></div>`;
 }
@@ -1308,7 +1317,7 @@ function viewRoute() {
     <span class="mini"><button data-act="up" data-i="${i}" aria-label="Mută în sus">↑</button><button data-act="down" data-i="${i}" aria-label="Mută în jos">↓</button><button data-act="done" data-id="${s.id}" aria-label="Vizitat" style="${done ? 'background:var(--ok);color:#fff;border-color:var(--ok)' : ''}">✓</button><button data-act="toggleStop" data-id="${s.id}" aria-label="Scoate">✕</button></span></div>`; }).join('')}
   <h3>Salvează</h3>
   <div class="row"><input class="in grow" id="routeName" placeholder="Nume traseu, ex. Sector 3 – marți" value="${esc(S.routeDraft != null ? S.routeDraft : (S.route.name || ''))}"><button class="btn" data-act="saveRoute">Salvează</button></div>
-  ${downloads ? '<div class="btns" style="margin-top:8px"><button class="btn ghost" data-act="csv">Descarcă lista (CSV)</button></div>' : ''}`}
+  ${downloads && !isOp() ? '<div class="btns" style="margin-top:8px"><button class="btn ghost" data-act="csv">Descarcă lista (CSV)</button></div>' : ''}`}
   ${S.routes.length ? `<h3>Trasee salvate</h3>${S.routes.map(r => `<div class="leg"><span><b>${esc(r.name || 'Fără nume')}</b> <span class="sub">· ${(r.stops || []).length} opriri</span></span><span class="row"><button class="btn sm" data-act="loadRoute" data-id="${r.id}">Încarcă</button><button class="btn sm ghost danger" data-act="delRoute" data-id="${r.id}">Șterge</button></span></div>`).join('')}` : ''}
   <div style="height:10px"></div>`;
 }
@@ -1506,12 +1515,35 @@ document.addEventListener('click', async (e) => {
   const a = t.dataset.act, id = t.dataset.id;
   if (a === 'ocr') { loadOcr(); return; }
   if (t.tagName === 'A') return;
+  if (isOp() && OP_BLOCK.has(a)) { toast('Nu ai drept pentru această acțiune'); return; }
   switch (a) {
     case 'open': openSite(id, S.view); break;
     case 'back': if (S.view === 'visit' || S.view === 'edit') { S.visitForm = null; openSite(S.openId, S.back); } else if (S.back === 'list' || S.back === 'route') go(S.back, { restore: true }); else if (S.back === 'card') openCard(S.openId); else closeSheet(); break;
     case 'toggleStop': toggleStop(id); break;
     case 'actMode': ACT.mode = t.dataset.v; ACT.sel = null; render(); break;
     case 'actBar': ACT.sel = +t.dataset.i; render(); break;
+    case 'actWho': ACT.who = t.dataset.v; render(); break;
+    case 'actRefresh': toast('Se reîncarcă…', 1200); ACT.push(); ACT.fetch(); break;
+    case 'opAdd': {
+      if (isOp()) break;
+      const name = ($('#opName').value || '').trim(), pass = ($('#opPass').value || '').trim();
+      if (!name) { toast('Scrie numele operatorului'); break; }
+      if (pass.length < 6) { toast('Parola trebuie să aibă minim 6 caractere'); break; }
+      t.disabled = true; t.textContent = 'Se adaugă…';
+      try {
+        const K = await shaHex('santiere|' + pass); const h = await shaHex(K);
+        const w = await window.PWA_makeSlot(pass);
+        await CLOUD.req('/users', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, h, slotId: w.slotId, slot: w.slot }) });
+        toast('„' + name + '” poate intra cu parola aleasă'); ACT.remote = null; ACT.fetch();
+      } catch (err) { toast('Nu s-a putut adăuga: ' + (err.message || err)); t.disabled = false; t.textContent = 'Adaugă'; }
+      break;
+    }
+    case 'opDel': {
+      if (isOp()) break;
+      if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă'; break; }
+      try { await CLOUD.req('/users?id=' + encodeURIComponent(id), { method: 'DELETE' }); toast('Accesul a fost scos'); ACT.fetch(); } catch (err) { toast('Nu s-a putut: ' + (err.message || err)); }
+      break;
+    }
     case 'visit': { const vs = S.sites.get(t.dataset.id || S.openId); if (vs && status(vs) !== 'due') { toast('Șantierul e actualizat; revine după ' + CYCLE + ' de zile'); break; } qcOpen({ siteId: t.dataset.id || S.openId }); break; }
     case 'edit': go('edit'); break;
     case 'photo': openPhoto(t.dataset.kind, id, t.dataset.d); break;
@@ -1647,7 +1679,7 @@ async function saveNewSite() {
 $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   const t = b.dataset.tab; if (S.selectMode) setSelectMode(false);
   if (b.getAttribute('aria-current') === 'page' && !(t === 'route' && S.navOn && S.navPaused)) { S.addForm = null; S.moveId = null; closeSheet(); }
-  else if (t === 'activ') { ACT.sel = null; go('activ'); }
+  else if (t === 'activ') { ACT.sel = null; go('activ'); if (!isOp()) ACT.fetch(); }
   else if (t === 'route' && S.navOn && S.navPaused) { S.navPaused = false; closeSheet(); $('#nav').hidden = false; $('.tabs').hidden = true; navShow(false); }
   else go(t);
 }));
@@ -1688,6 +1720,8 @@ function saptName(dt) {
   const wd = (x.getDay() + 6) % 7; const sun = new Date(x.getFullYear(), x.getMonth(), x.getDate() + (6 - wd) + (wd >= 5 ? 7 : 0));
   return sun.getFullYear() + '-' + pad(sun.getMonth() + 1) + ' Săptămâna ' + Math.ceil(sun.getDate() / 7);
 }
+const shaHex = async t => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))].map(x => x.toString(16).padStart(2, '0')).join('');
+const photoDay = dt => { const m = /^(\d{4}):(\d\d):(\d\d)/.exec(dt || ''); return m ? m[1] + '-' + m[2] + '-' + m[3] : today(); };
 function panelStamp(s) {
   const p = (s.poze || [])[0]; const t = s.panouT || (p && p.t) || '';
   return /^\d{4}:\d\d:\d\d \d\d:\d\d:\d\d$/.test(t) ? t.replace(/:/g, '').replace(' ', '-') : '';
@@ -1789,12 +1823,12 @@ $('#qc').addEventListener('click', async e => {
         if (snap.exists) await ref.update({ v: { [vid]: visit } }); else await ref.set({ v: { [vid]: visit } });
         await patchSite(site.id, { ultima: d, ultimaApp: d, inactiv: false });
         const [pa] = site.panouA ? [site.panouA] : await uploadFiles([f.panouR.blob], null, true);
-        await OB.add(k, { siteId: site.id, siteName: saptName(f.santierR.dt), name: site.name, nou: 0, stamp: site.id, t: Date.now(), p: pa, s: aid, lat: g && g.lat, lng: g && g.lng }, files);
+        await OB.add(k, { siteId: site.id, siteName: saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: site.name, nou: 0, stamp: site.id, t: Date.now(), p: pa, s: aid, lat: g && g.lat, lng: g && g.lng }, files);
       } else {
         const gp = f.panouR.gps || g;
         const r = await createSite({ id: sid, panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt }, null);
         const s2 = r.assets || {};
-        await OB.add(k, { siteId: sid, siteName: saptName(f.santierR.dt), name: 'Șantier nou', nou: 1, stamp: sid, t: Date.now(), p: s2.p, s: s2.s, lat: gp.lat, lng: gp.lng }, files);
+        await OB.add(k, { siteId: sid, siteName: saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: 'Șantier nou', nou: 1, stamp: sid, t: Date.now(), p: s2.p, s: s2.s, lat: gp.lat, lng: gp.lng }, files);
       }
       saved = true; ACT.site(sid, !site);
     } catch (err) { toast('Nu s-a salvat în aplicație: ' + (err.code || err.message)); f.saving = false; e.target.disabled = false; e.target.textContent = 'Salvează'; }
@@ -1817,6 +1851,7 @@ const CLOUD = {
   async req(path, opt) {
     const key = await CLOUD.k(); if (!key) throw new Error('fără cheie');
     const r = await fetch(CLOUD.url + path, Object.assign({}, opt, { headers: Object.assign({ 'x-key': key }, (opt && opt.headers) || {}) }));
+    if (r.status === 401 && isOp()) { try { localStorage.removeItem('harta_pass'); localStorage.removeItem('harta_slot'); } catch (e) {} alert('Accesul tău a fost oprit. Cere o parolă nouă.'); location.reload(); }
     if (!r.ok) throw new Error('server ' + r.status);
     return r.json();
   },
@@ -1890,7 +1925,7 @@ const OB = {
         if (only && !only.includes(k)) continue;
         try {
           for (const w of ['p', 's']) await CLOUD.req('/f/' + k + '/' + w + '.jpg', { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: await OB.blobOf(k, w) });
-          await CLOUD.req('/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k, nou: v.nou, stamp: v.stamp, siteId: v.siteId, siteName: v.siteName, t: v.t, lat: v.lat, lng: v.lng }) });
+          await CLOUD.req('/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k, nou: v.nou, stamp: v.stamp, siteId: v.siteId, siteName: v.siteName, name: v.name, d: v.d, t: v.t, lat: v.lat, lng: v.lng }) });
           v.sent = true; delete OB.files[k]; await OB.save();
         } catch (e) { allOk = false; if (!navigator.onLine) break; }
         OB.ui();
@@ -2479,17 +2514,33 @@ setInterval(() => {
   ACT.day(today()).s += 30; ACT.dirty = true;
 }, 30000);
 setInterval(() => ACT.save(), 60000);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') ACT.save(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { ACT.save(); ACT.push(); } });
+// km and time go to the cloud too, so Ionuț sees every operator's activity (the sites are counted there from the photos)
+ACT.push = async () => {
+  if (!ACT.loaded || typeof CLOUD === 'undefined') return;
+  const z = {}; for (let i = 0; i < 7; i++) { const d = addDays(today(), -i); const v = ACT.z[d]; if (v && (v.m || v.s)) z[d] = { m: Math.round(v.m || 0), s: Math.round(v.s || 0) }; }
+  if (!Object.keys(z).length) return;
+  try { await CLOUD.req('/act', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ z }) }); } catch (e) {}
+};
+setInterval(() => ACT.push(), 300000);
+// admin: everyone's activity and the list of operators
+ACT.who = 'me'; ACT.remote = null; ACT.ops = null;
+ACT.fetch = async () => {
+  try { ACT.remote = (await CLOUD.req('/act')).users || {}; } catch (e) { ACT.remote = ACT.remote || {}; ACT.remoteErr = 1; }
+  try { ACT.ops = (await CLOUD.req('/users')).users || []; } catch (e) { ACT.ops = ACT.ops || []; }
+  if (S.view === 'activ') render();
+};
+function actTotals(zmap, key, mode) { const b = actBuckets(mode, zmap).find(x => x.k === key); return b || { u: 0, n: 0, m: 0, s: 0 }; }
 
 const ZILE_S = ['Dum', 'Lun', 'Mar', 'Mie', 'Joi', 'Vin', 'Sâm'];
 function weekStart(d) { const x = pISO(d); const k = (x.getDay() + 6) % 7; x.setDate(x.getDate() - k); return iso(x); }
-function actBuckets(mode) {
+function actBuckets(mode, zmap) {
   const t = today(); const out = [];
   if (mode === 'z') for (let i = 13; i >= 0; i--) { const d = addDays(t, -i); out.push({ k: d, x: String(+d.slice(8, 10)), lab: ZILE_S[pISO(d).getDay()] + ' ' + roShort(d).replace(/ \d{4}$/, '') }); }
   else if (mode === 's') { const w0 = weekStart(t); for (let i = 11; i >= 0; i--) { const w = addDays(w0, -7 * i); out.push({ k: w, x: String(+w.slice(8, 10)), lab: 'Săpt. ' + roShort(w).replace(/ \d{4}$/, '') + ' – ' + roShort(addDays(w, 6)).replace(/ \d{4}$/, '') }); } }
   else { const d = pISO(t); for (let i = 11; i >= 0; i--) { const m = new Date(d.getFullYear(), d.getMonth() - i, 1); const k = iso(m).slice(0, 7); out.push({ k, x: LUNI[m.getMonth()], lab: LUNI[m.getMonth()] + ' ' + m.getFullYear() }); } }
   const idx = {}; out.forEach((b, i) => { idx[b.k] = i; b.u = 0; b.n = 0; b.m = 0; b.s = 0; });
-  for (const [d, z] of Object.entries(ACT.z)) {
+  for (const [d, z] of Object.entries(zmap || ACT.z)) {
     const k = mode === 'z' ? d : mode === 's' ? weekStart(d) : d.slice(0, 7);
     const b = out[idx[k]]; if (!b) continue;
     for (const v of Object.values(z.ids || {})) v === 'n' ? b.n++ : b.u++;
@@ -2521,14 +2572,32 @@ function actChart(bs, sel) {
 }
 function viewActiv() {
   if (!ACT.loaded) { ACT.load(); return '<div class="empty">Se încarcă activitatea…</div>'; }
-  const mode = ACT.mode; const bs = actBuckets(mode);
+  const admin = !isOp();
+  if (admin && !ACT.remote && !ACT.fetching) { ACT.fetching = 1; ACT.fetch().then(() => { ACT.fetching = 0; }); }
+  const R = ACT.remote || {};
+  const people = admin ? [['me', 'Eu']].concat(Object.entries(R).filter(([id, u]) => id !== 'admin' && !u.gone).map(([id, u]) => [id, u.name])) : [];
+  if (!people.some(p => p[0] === ACT.who)) ACT.who = 'me';
+  const zmap = ACT.who === 'me' ? ACT.z : (R[ACT.who] && R[ACT.who].z) || {};
+  const mode = ACT.mode; const bs = actBuckets(mode, zmap);
   const sel = ACT.sel != null && ACT.sel < bs.length ? ACT.sel : bs.length - 1; const b = bs[sel];
   const cur = { z: 'Azi', s: 'Săptămâna aceasta', l: 'Luna aceasta' }[mode];
   const title = sel === bs.length - 1 ? cur : b.lab;
   const seg = (k, l) => `<button class="state-opt${mode === k ? ' on' : ''}" data-act="actMode" data-v="${k}" aria-pressed="${mode === k}"><b>${l}</b></button>`;
   const rows = bs.slice().reverse().filter(r => r.u + r.n || r.m > 50 || r.s >= 60);
-  const any = Object.keys(ACT.z).length;
-  return `<h2>Activitate</h2>
+  const any = Object.keys(zmap).length;
+  const whoSeg = people.length > 1 ? `<div class="who-seg" role="group" aria-label="Persoană">${people.map(([id, n]) => `<button class="chip${ACT.who === id ? ' on' : ''}" data-act="actWho" data-v="${esc(id)}" aria-pressed="${ACT.who === id}">${esc(n)}</button>`).join('')}</div>` : '';
+  const team = admin && people.length > 1 ? `<h3>Toți · ${esc(title)}</h3>
+  <table class="act-tab"><thead><tr><th>Persoană</th><th class="num">Verificate</th><th class="num">Noi</th><th class="num">Km</th><th class="num">Timp</th></tr></thead>
+  <tbody>${people.map(([id, n]) => { const t = actTotals(id === 'me' ? ACT.z : (R[id] && R[id].z) || {}, b.k, mode); return `<tr><td>${esc(n)}</td><td class="num">${t.u + t.n}</td><td class="num">${t.n}</td><td class="num">${km(t.m)}</td><td class="num">${t.s >= 60 ? hm(t.s) : '—'}</td></tr>`; }).join('')}</tbody></table>` : '';
+  const opsBox = admin ? `<h3>Operatori</h3>
+  ${(ACT.ops || []).map(o => `<div class="op-row"><div class="grow"><b>${esc(o.name)}</b><div class="sub">adăugat ${o.c ? roDate(new Date(o.c).toISOString().slice(0, 10)) : ''}</div></div><button class="btn sm ghost danger" data-act="opDel" data-id="${esc(o.id)}">Scoate accesul</button></div>`).join('') || `<div class="sub">${ACT.ops ? 'Niciun operator încă.' : 'Se încarcă…'}</div>`}
+  <div class="note" style="margin-top:10px"><b style="color:var(--ink)">Adaugă operator</b>
+    <input class="in" id="opName" placeholder="Nume, ex. Operator 1" autocomplete="off" style="margin-top:8px">
+    <input class="in" id="opPass" placeholder="Parola lui (minim 6 caractere)" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" style="margin-top:8px">
+    <button class="btn amber" style="width:100%;margin-top:8px" data-act="opAdd">Adaugă</button>
+    <div class="sub" style="margin-top:6px">Operatorul deschide aplicația pe telefonul lui și scrie parola asta. Poate naviga, fotografia și adăuga șantiere noi; nu poate șterge sau edita nimic.</div></div>` : '';
+  return `<div class="row sp"><h2>Activitate</h2>${admin ? '<button class="btn sm ghost" data-act="actRefresh">Reîncarcă</button>' : ''}</div>
+  ${whoSeg}
   <div class="act-seg" role="group" aria-label="Perioadă">${seg('z', 'Zile')}${seg('s', 'Săptămâni')}${seg('l', 'Luni')}</div>
   <div class="act-per">${esc(title)}</div>
   <div class="act-tiles">
@@ -2538,11 +2607,13 @@ function viewActiv() {
   </div>
   <div class="ch-legend"><span><i class="sw u"></i>Actualizate</span><span><i class="sw n"></i>Noi</span><span class="sub">Atinge o bară pentru detalii</span></div>
   <div class="ch-wrap">${actChart(bs, sel)}</div>
+  ${team}
   ${any ? `<h3>Detaliu</h3>
   <table class="act-tab"><thead><tr><th>${{ z: 'Zi', s: 'Săptămână', l: 'Lună' }[mode]}</th><th class="num">Verificate</th><th class="num">Noi</th><th class="num">Km</th><th class="num">Timp</th></tr></thead>
   <tbody>${rows.map(r => `<tr><td>${esc(r.lab)}</td><td class="num">${r.u + r.n}</td><td class="num">${r.n}</td><td class="num">${km(r.m)}</td><td class="num">${r.s >= 60 ? hm(r.s) : '—'}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">Nimic în această perioadă.</td></tr>'}</tbody></table>`
     : '<div class="note" style="margin-top:12px">Activitatea se înregistrează automat: fiecare șantier actualizat sau adăugat, kilometrii și timpul cât aplicația e deschisă cu GPS.</div>'}
-  <div class="sub" style="margin-top:10px">Kilometrii și timpul sunt măsurați de acest telefon.</div>
+  <div class="sub" style="margin-top:10px">${ACT.who === 'me' ? 'Kilometrii și timpul sunt măsurați de acest telefon.' : 'Șantierele se numără din pozele urcate; km și timpul vin de pe telefonul operatorului.'}</div>
+  ${opsBox}
   <div style="height:10px"></div>`;
 }
 

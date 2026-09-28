@@ -28,18 +28,48 @@
 
   /* ---------- crypto ---------- */
   let keyResolve; const keyReady = new Promise(r => { keyResolve = r; });
+  const API = 'https://santiere-api.i-spridon.workers.dev';
+  let saltP = null;
   async function deriveKey(pass) {
-    const salt = Uint8Array.from(atob((await (await fetch('data/salt.json')).json()).salt), c => c.charCodeAt(0));
+    if (!saltP) saltP = fetch('data/salt.json').then(r => r.json()).then(j => Uint8Array.from(atob(j.salt), c => c.charCodeAt(0)));
+    const salt = await saltP;
     const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
-    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, true, ['decrypt', 'encrypt']);
   }
   async function decryptWith(key, buf) { const u = new Uint8Array(buf); return crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.slice(0, 12) }, key, u.slice(12)); }
   async function decrypt(buf) { return decryptWith(await keyReady, buf); }
   async function fetchEnc(path) { const r = await fetch(path); if (!r.ok) throw new Error(path + ' ' + r.status); return decrypt(await r.arrayBuffer()); }
   async function encJSON(path) { return JSON.parse(new TextDecoder().decode(await fetchEnc(path))); }
+  const hex = b => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+  const b64e = b => btoa(String.fromCharCode(...new Uint8Array(b)));
+  const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  async function checkKey(key) { const r = await fetch('data/check.enc'); await decryptWith(key, await r.arrayBuffer()); return key; }
+  // admin: the password opens the data directly. operator: the password opens a copy of the data key kept on the server
   async function tryPass(pass) {
-    try { const key = await deriveKey(pass); const r = await fetch('data/check.enc'); await decryptWith(key, await r.arrayBuffer()); return key; } catch (e) { return null; }
+    let key = null;
+    try { key = await checkKey(await deriveKey(pass)); window.PWA_role = 'admin'; return key; } catch (e) {}
+    try {
+      const sid = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('slot|' + pass)));
+      let slot = null;
+      try { const r = await fetch(API + '/slot/' + sid); if (r.ok) slot = await r.json(); else if (r.status === 404) { localStorage.removeItem('harta_slot'); return null; } } catch (e) {}
+      if (!slot) { try { const c = JSON.parse(localStorage.getItem('harta_slot') || 'null'); if (c && c.sid === sid) slot = c.slot; } catch (e) {} }
+      if (!slot) return null;
+      const pk = await deriveKey(pass);
+      const raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(slot.iv) }, pk, b64d(slot.ct));
+      key = await checkKey(await crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['decrypt']));
+      try { localStorage.setItem('harta_slot', JSON.stringify({ sid, slot })); } catch (e) {}
+      window.PWA_role = 'op'; return key;
+    } catch (e) { return null; }
   }
+  // admin only: wrap the data key with an operator's password
+  window.PWA_makeSlot = async pass => {
+    const k = await keyReady; if (window.PWA_role !== 'admin') throw new Error('doar admin');
+    const raw = await crypto.subtle.exportKey('raw', k);
+    const pk = await deriveKey(pass); const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, pk, raw);
+    const slotId = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('slot|' + pass)));
+    return { slotId, slot: { iv: b64e(iv), ct: b64e(ct) } };
+  };
   function lockScreen(msg) {
     return new Promise(async resolve => {
       if (!document.body) await new Promise(r => document.addEventListener('DOMContentLoaded', r, { once: true }));
