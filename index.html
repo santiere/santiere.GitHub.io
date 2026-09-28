@@ -360,7 +360,9 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .state-opt.off.on{border-color:var(--off);background:color-mix(in srgb,var(--off) 20%,var(--surface))}
 .state-opt.on b::before{content:'● ';}
 .state-opt.due.on b{color:var(--due)}.state-opt.wait.on b{color:var(--wait)}
-.obbtn{pointer-events:auto;align-self:flex-start;border:0;border-radius:999px;background:var(--amber);color:var(--amber-ink);font-weight:700;font-size:14px;padding:9px 14px;box-shadow:var(--shadow)}
+.obbtn{pointer-events:auto;align-self:flex-start;border:0;border-radius:999px;background:var(--surface);color:var(--muted);font-weight:600;font-size:12.5px;padding:5px 11px;box-shadow:0 2px 8px rgba(20,30,36,.16);display:inline-flex;align-items:center;gap:2px}
+.obbtn b{color:var(--ink)}.obbtn.busy span{animation:obp 1.4s ease-in-out infinite}@keyframes obp{50%{opacity:.45}}
+.obbtn.stuck{background:var(--amber);color:var(--amber-ink)}.obbtn.stuck b{color:var(--amber-ink)}
 .qc-status{margin:6px 0 4px;font-weight:600;font-size:15px}.qc-status.ok{color:#1E8E3E}.qc-status.wait{color:#B3261E}
 /* crosshair for placing a new site */
 .cross{position:absolute;left:50%;top:50%;width:36px;height:36px;margin:-36px 0 0 -18px;z-index:3;pointer-events:none}
@@ -392,7 +394,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
       <select id="loc" aria-label="Zonă"><option value="">Toate zonele</option></select>
     </div>
     <div class="chips" id="chips" role="group" aria-label="Filtru stare"></div>
-    <button class="obbtn" id="obBtn" type="button" hidden><span>⏳ Se urcă în cloud: </span><b>0</b></button>
+    <button class="obbtn" id="obBtn" type="button" hidden><span>☁︎ De trimis </span><b>0</b></button>
   </div>
   <div class="fab-col">
     <button class="fab" id="btnHome" title="Toată harta" aria-label="Arată toate șantierele">
@@ -1975,7 +1977,7 @@ const CLOUD = {
     const key = await CLOUD.k(); if (!key) throw new Error('fără cheie');
     const r = await fetch(CLOUD.url + path, Object.assign({}, opt, { headers: Object.assign({ 'x-key': key }, (opt && opt.headers) || {}) }));
     if (r.status === 401 && isOp()) { try { localStorage.removeItem('harta_pass'); localStorage.removeItem('harta_slot'); } catch (e) {} alert('Accesul tău a fost oprit. Cere o parolă nouă.'); location.reload(); }
-    if (!r.ok) throw new Error('server ' + r.status);
+    if (!r.ok) { let m = ''; try { m = (await r.json()).error || ''; } catch (e) {} throw new Error('server ' + r.status + (m ? ': ' + m : '')); }
     return r.json();
   },
   // push one change of a site's state (updated / finished / new site) to everybody
@@ -2037,9 +2039,16 @@ const OB = {
   async save() { if (db) await db.doc('outbox/q').set({ items: OB.items }); },
   pending() { return Object.entries(OB.items).filter(([, v]) => !v.sent).sort((a, b) => a[1].t - b[1].t); },
   async add(k, v, files) { OB.items[k] = v; OB.files[k] = files; await OB.save(); OB.ui(); },
+  // the photo to send: kept in memory right after saving, otherwise read straight from the phone's storage; always a JPEG
   async blobOf(k, which) {
-    const f = OB.files[k]; if (f) return f[which === 'p' ? 0 : 1];
-    return await (await fetch('_blob/' + OB.items[k][which])).blob();
+    const f = OB.files[k]; let b = f ? f[which === 'p' ? 0 : 1] : null;
+    const id = OB.items[k][which];
+    if (!b && id && assets && assets.get) b = await assets.get(id);
+    if (!b && id) { const r = await fetch('_blob/' + id); if (r.ok) b = await r.blob(); }
+    if (!b) throw new Error('poza nu mai e pe telefon');
+    const head = new Uint8Array(await b.slice(0, 2).arrayBuffer());
+    if (head[0] !== 0xFF || head[1] !== 0xD8) b = await shrink(b, 4032, 0.95);
+    return b;
   },
   // upload waiting pairs to the cloud, oldest first; resolves true when `only` all went up
   pump(only) {
@@ -2051,21 +2060,30 @@ const OB = {
         try {
           for (const w of ['p', 's']) await CLOUD.req('/f/' + k + '/' + w + '.jpg', { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: await OB.blobOf(k, w) });
           await CLOUD.req('/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k, nou: v.nou, stamp: v.stamp, siteId: v.siteId, siteName: v.siteName, name: v.name, d: v.d, t: v.t, lat: v.lat, lng: v.lng }) });
-          v.sent = true; delete OB.files[k]; await OB.save();
-        } catch (e) { allOk = false; if (!navigator.onLine) break; }
+          v.sent = true; delete v.err; delete OB.files[k]; await OB.save();
+        } catch (e) { allOk = false; v.tries = (v.tries || 0) + 1; v.err = String((e && (e.message || e.code)) || e).slice(0, 120); if (!navigator.onLine) break; }
         OB.ui();
       }
       return allOk;
     })().finally(() => { OB.busy = null; OB.ui(); });
     return OB.busy;
   },
+  // small cloud chip: sending happens by itself (now, every 30 s, when the signal returns); it only asks for attention after repeated failures
   ui() {
-    const n = OB.pending().length; const b = $('#obBtn'); if (!b) return;
-    b.hidden = !n; b.querySelector('b').textContent = n;
-    b.querySelector('span').textContent = OB.busy ? '⏳ Se urcă în cloud: ' : '📤 Neurcate (apasă pentru reîncercare): ';
+    const p = OB.pending(), n = p.length; const b = $('#obBtn'); if (!b) return;
+    b.hidden = !n; if (!n) return;
+    const stuck = !OB.busy && p.some(([, v]) => (v.tries || 0) >= 3);
+    b.classList.toggle('stuck', stuck); b.classList.toggle('busy', !!OB.busy);
+    b.querySelector('span').textContent = stuck ? '☁︎ Netrimise ' : OB.busy ? '☁︎ Se trimit ' : '☁︎ De trimis ';
+    b.querySelector('b').textContent = n;
   },
 };
-$('#obBtn').addEventListener('click', () => OB.pump());
+$('#obBtn').addEventListener('click', () => {
+  const p = OB.pending(); if (!p.length) return;
+  const e = p.map(([, v]) => v.err).filter(Boolean)[0];
+  toast(navigator.onLine ? (OB.busy ? 'Pozele se trimit acum…' : 'Retrimit acum' + (e ? ' (ultima eroare: ' + e + ')' : '') + '. Se reîncearcă singur la 30 de secunde.') : 'Fără internet — pozele pleacă singure când revine semnalul.');
+  OB.pump();
+});
 
 /* ---------- route from an area: the part of the map on screen, or a zone drawn with the finger ---------- */
 function inPoly(x, y, P) { let ins = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) ins = !ins; } return ins; }

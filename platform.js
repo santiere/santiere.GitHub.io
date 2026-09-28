@@ -166,6 +166,7 @@
       await req('blobs', 'readwrite', s => s.put(blob, id));
       return { id, url: new URL('_blob/' + id, location.href.replace(/[^/]*([?#].*)?$/, '')).pathname, sizeBytes: blob.size, contentType: blob.type || 'image/jpeg' };
     },
+    async get(id) { try { return (await req('blobs', 'readonly', s => s.get(id))) || null; } catch (e) { return null; } },
     async list() { return { assets: [], usage: {} }; },
     async delete(id) { await req('blobs', 'readwrite', s => s.delete(id)); return { deleted: true }; },
   };
