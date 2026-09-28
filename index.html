@@ -310,6 +310,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .drawsvg{position:absolute;inset:0;width:100%;height:100%}
 #drawPath{fill:color-mix(in srgb,var(--amber) 18%,transparent);stroke:var(--amber);stroke-width:4;stroke-linejoin:round;stroke-linecap:round}
 .drawhint{position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--sat) + 12px);display:flex;align-items:center;gap:10px;background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 6px 6px 16px;box-shadow:var(--shadow);font-weight:600;font-size:14px;white-space:nowrap}
+.who-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:6px;font-size:14px;color:var(--muted)}.who-bar b{color:var(--ink)}
 .who-seg{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .who-seg .chip{border:2px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:7px 14px;font-weight:700;font-size:14px}
 .who-seg .chip.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface))}
@@ -1525,6 +1526,17 @@ document.addEventListener('click', async (e) => {
     case 'actMode': ACT.mode = t.dataset.v; ACT.sel = null; render(); break;
     case 'actBar': ACT.sel = +t.dataset.i; render(); break;
     case 'actWho': ACT.who = t.dataset.v; render(); break;
+    case 'logout': {
+      const n = OB.pending().length;
+      if (n) { toast('Mai sunt ' + n + ' perechi de poze neurcate. Așteaptă să urce, apoi ieși din cont.', 4000); break; }
+      if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă ieșirea'; break; }
+      t.disabled = true; t.textContent = 'Ies…';
+      try { await ACT.push(); } catch (err) {}
+      try { if (db) await db.doc('activ/zile').set({ z: {} }); } catch (err) {}
+      try { ['harta_pass', 'harta_slot', 'harta_me', 'harta_stateU'].forEach(k => localStorage.removeItem(k)); } catch (err) {}
+      location.reload();
+      break;
+    }
     case 'actRefresh': toast('Se reîncarcă…', 1200); ACT.push(); ACT.fetch(); break;
     case 'opAdd': {
       if (isOp()) break;
@@ -1896,7 +1908,7 @@ const CLOUD = {
   },
   start() {
     try { window.PWA_me = JSON.parse(localStorage.getItem('harta_me') || 'null'); } catch (e) {}
-    CLOUD.req('/me').then(me => { window.PWA_me = me; try { localStorage.setItem('harta_me', JSON.stringify(me)); } catch (e) {} }).catch(() => {});
+    CLOUD.req('/me').then(me => { window.PWA_me = me; try { localStorage.setItem('harta_me', JSON.stringify(me)); } catch (e) {} const go = () => ACT.loaded ? ACT.mergeServer() : setTimeout(go, 1000); go(); }).catch(() => {});
     try { CLOUD.stateU = JSON.parse(localStorage.getItem('harta_stateU') || '{}'); } catch (e) {}
     CLOUD.pull(); OB.pump();
     setInterval(() => { if (document.visibilityState === 'visible') { CLOUD.pull(); OB.pump(); } }, 30000);
@@ -2530,6 +2542,15 @@ ACT.push = async () => {
 setInterval(() => ACT.push(), 300000);
 // admin: everyone's activity and the list of operators
 ACT.who = 'me'; ACT.remote = null; ACT.ops = null;
+// what the server knows about my own activity (e.g. after logging in on this phone again): merged into the local copy
+ACT.mergeServer = async () => {
+  try {
+    const me = window.PWA_me; if (!me || !ACT.loaded) return;
+    const u = ((await CLOUD.req('/act')).users || {})[me.id]; if (!u || !u.z) return;
+    for (const [d, v] of Object.entries(u.z)) { const z = ACT.day(d); Object.assign(z.ids, v.ids || {}); z.m = Math.max(z.m || 0, v.m || 0); z.s = Math.max(z.s || 0, v.s || 0); }
+    ACT.dirty = true; ACT.save(); if (S.view === 'activ') render();
+  } catch (e) {}
+};
 ACT.fetch = async () => {
   try { ACT.remote = (await CLOUD.req('/act')).users || {}; } catch (e) { ACT.remote = ACT.remote || {}; ACT.remoteErr = 1; }
   try { ACT.ops = (await CLOUD.req('/users')).users || []; } catch (e) { ACT.ops = ACT.ops || []; }
@@ -2601,7 +2622,9 @@ function viewActiv() {
     <input class="in" id="opPass" placeholder="Parola lui (minim 6 caractere)" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" style="margin-top:8px">
     <button class="btn amber" style="width:100%;margin-top:8px" data-act="opAdd">Adaugă</button>
     <div class="sub" style="margin-top:6px">Operatorul deschide aplicația pe telefonul lui și scrie parola asta. Poate naviga, fotografia și adăuga șantiere noi; nu poate șterge sau edita nimic.</div></div>` : '';
+  const me = window.PWA_me && window.PWA_me.name;
   return `<div class="row sp"><h2>Activitate</h2>${admin ? '<button class="btn sm ghost" data-act="actRefresh">Reîncarcă</button>' : ''}</div>
+  <div class="who-bar"><span>Conectat${me ? ' ca <b>' + esc(me) + '</b>' : ''}</span><button class="btn sm ghost" data-act="logout">Ieși din cont</button></div>
   ${whoSeg}
   <div class="act-seg" role="group" aria-label="Perioadă">${seg('z', 'Zile')}${seg('s', 'Săptămâni')}${seg('l', 'Luni')}</div>
   <div class="act-per">${esc(title)}</div>
