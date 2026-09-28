@@ -822,7 +822,7 @@ const S = {
   sites: new Map(), shards: {}, loaded: false, dbOk: null,
   show: { due: true, wait: true, off: false }, loc: '', q: '',
   route: { stops: [], done: [], start: null, name: '' }, routes: [],
-  view: null, openId: null, back: null, selectMode: false, ocr: null,
+  pend: {}, view: null, openId: null, back: null, selectMode: false, ocr: null,
 };
 let db = null, assets = null, downloads = null, map = null;
 
@@ -1127,13 +1127,22 @@ function rebuildSites() {
     const ss = (d && d.s) || {};
     for (const [id, s] of Object.entries(ss)) if (s && !s.sters && typeof s.lat === 'number') m.set(id, Object.assign({}, s, { id, _sh: sh }));
   }
-  S.sites = m;
+  S.sites = m; S.pend = {};
 }
+// fields of a site that, once edited on one phone, are copied to every phone
+const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const SYNC_E = ['name', 'beneficiar', 'denumire', 'adresa', 'constructor', 'autorizatie', 'finalizare', 'strada', 'loc', 'lat', 'lng'];
 async function patchSite(id, patch) {
   const s = S.sites.get(id); if (!s) return;
+  // changes saved a moment ago may not be in S.sites yet: layer them on top so nothing is sent stale
+  const prev = Object.assign({}, s, S.pend[id] || {});
+  const ek = Object.keys(patch).filter(k => SYNC_E.includes(k));
+  if (ek.length) patch.edk = [...new Set([...(prev.edk || []), ...ek])];
+  S.pend[id] = Object.assign(S.pend[id] || {}, patch);
   try { await db.doc('sites/' + s._sh).update({ s: { [id]: patch } }); }
   catch (e) { toast('Nu am putut salva: ' + (e.code || e.message)); throw e; }
-  if ('ultima' in patch || 'inactiv' in patch) { const x = {}; if ('ultima' in patch) x.ultima = patch.ultima || ''; if ('inactiv' in patch) x.inactiv = !!patch.inactiv; CLOUD.push(id, x); }
+  // every change that matters to the others goes to the shared state at once: stage, finished, deleted, edited details, moved pin
+  if ('ultima' in patch || 'inactiv' in patch || ek.length || patch.sters) CLOUD.push(id, null, Object.assign({}, prev, patch));
 }
 function pickShard() {
   const counts = Object.entries(S.shards).map(([k, d]) => [k, Object.keys((d && d.s) || {}).length]).sort((a, b) => a[1] - b[1]);
@@ -1981,12 +1990,17 @@ const CLOUD = {
     return r.json();
   },
   // push one change of a site's state (updated / finished / new site) to everybody
-  async push(sid, extra) {
-    const s = S.sites.get(sid) || {}; if (!S.sites.get(sid) && !(extra && extra.site)) return;
+  async push(sid, extra, cur) {
+    const s = cur || S.sites.get(sid) || {}; if (!cur && !S.sites.get(sid) && !(extra && extra.site)) return;
     const u = Date.now(); CLOUD.stateU[sid] = u;
     const v = { ultima: s.ultima || '', inactiv: !!s.inactiv, u };
-    if (s.manual) v.site = { name: s.name, lat: s.lat, lng: s.lng, loc: s.loc || '', strada: s.strada || '', creat: s.creat || u, panouT: s.panouT || '' };
+    if (s.sters) { v.sters = true; const sent = (() => { try { return JSON.parse(localStorage.getItem('harta_sters_sent') || '{}'); } catch (e) { return {}; } })(); sent[sid] = 1; try { localStorage.setItem('harta_sters_sent', JSON.stringify(sent)); } catch (e) {} }
+    else {
+      if (s.manual) v.site = { name: s.name, lat: s.lat, lng: s.lng, loc: s.loc || '', strada: s.strada || '', creat: s.creat || u, panouT: s.panouT || '' };
+      if (s.edk && s.edk.length && !isOp()) { v.e = {}; for (const k of s.edk) v.e[k] = own(s, k) && s[k] != null ? s[k] : ''; }
+    }
     Object.assign(v, extra || {});
+    try { localStorage.setItem('harta_stateU', JSON.stringify(CLOUD.stateU)); } catch (e) {}
     try { await CLOUD.req('/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [sid]: v }) }); }
     catch (e) { CLOUD.pendingState = Object.assign(CLOUD.pendingState || {}, { [sid]: v }); }
   },
@@ -2000,17 +2014,26 @@ const CLOUD = {
         if ((CLOUD.stateU[sid] || 0) >= v.u) continue;
         CLOUD.stateU[sid] = v.u;
         const s = S.sites.get(sid);
+        if (v.sters) {   // deleted on another phone: off the map, the list and the route here too
+          if (s) {
+            await db.doc('sites/' + s._sh).update({ s: { [sid]: { sters: true } } });
+            if (S.route.stops.includes(sid)) { S.route.stops = S.route.stops.filter(x => x !== sid); saveRouteSoon(); }
+            if (S.openId === sid) closeSheet();
+            changed++;
+          }
+          continue;
+        }
         if (!s && v.site) {   // a new site added by another operator
           const sh = pickShard(); const ref = db.doc('sites/' + sh); const snap = await ref.get();
-          const site = Object.assign({ poze: [], manual: true, deScanat: true }, v.site, { ultima: v.ultima, ultimaApp: v.ultima, inactiv: !!v.inactiv });
+          const site = Object.assign({ poze: [], manual: true, deScanat: true }, v.site, v.e || {}, { ultima: v.ultima, ultimaApp: v.ultima, inactiv: !!v.inactiv }, v.e ? { edk: Object.keys(v.e) } : {});
           if (snap.exists) await ref.update({ s: { [sid]: site } }); else await ref.set({ s: { [sid]: site } });
           changed++; continue;
         }
         if (!s) continue;
-        if ((s.ultima || '') !== (v.ultima || '') || !!s.inactiv !== !!v.inactiv) {
-          await db.doc('sites/' + s._sh).update({ s: { [sid]: { ultima: v.ultima || '', ultimaApp: v.ultima || '', inactiv: !!v.inactiv } } });
-          changed++;
-        }
+        const up = {};
+        if ((s.ultima || '') !== (v.ultima || '') || !!s.inactiv !== !!v.inactiv) Object.assign(up, { ultima: v.ultima || '', ultimaApp: v.ultima || '', inactiv: !!v.inactiv });
+        if (v.e) { for (const [k, x] of Object.entries(v.e)) if (SYNC_E.includes(k) && (own(s, k) && s[k] != null ? s[k] : '') !== x) up[k] = x; if (Object.keys(up).some(k => SYNC_E.includes(k))) up.edk = [...new Set([...(s.edk || []), ...Object.keys(v.e)])]; }
+        if (Object.keys(up).length) { await db.doc('sites/' + s._sh).update({ s: { [sid]: up } }); changed++; }
       }
       try { localStorage.setItem('harta_stateU', JSON.stringify(CLOUD.stateU)); } catch (e) {}
       if (changed) refresh();
@@ -2021,7 +2044,14 @@ const CLOUD = {
     CLOUD.req('/me').then(me => { window.PWA_me = me; try { localStorage.setItem('harta_me', JSON.stringify(me)); } catch (e) {} const go = () => ACT.loaded ? ACT.mergeServer() : setTimeout(go, 1000); go(); }).catch(() => {});
     try { CLOUD.stateU = JSON.parse(localStorage.getItem('harta_stateU') || '{}'); } catch (e) {}
     CLOUD.pull(); OB.pump();
-    setInterval(() => { if (document.visibilityState === 'visible') { CLOUD.pull(); OB.pump(); } }, 30000);
+    // sites deleted on this phone before deletions were shared: tell the others once
+    if (!isOp()) setTimeout(async () => {
+      let sent = {}; try { sent = JSON.parse(localStorage.getItem('harta_sters_sent') || '{}'); } catch (e) {}
+      for (const d of Object.values(S.shards)) for (const [id, x] of Object.entries((d && d.s) || {})) if (x && x.sters && !sent[id]) { await CLOUD.push(id, null, Object.assign({}, x, { id })); sent[id] = 1; }
+      try { localStorage.setItem('harta_sters_sent', JSON.stringify(sent)); } catch (e) {}
+    }, 6000);
+    setInterval(() => { if (document.visibilityState === 'visible') CLOUD.pull(); }, 15000);
+    setInterval(() => { if (document.visibilityState === 'visible') OB.pump(); }, 30000);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { CLOUD.pull(); OB.pump(); } });
     window.addEventListener('online', () => { CLOUD.pull(); OB.pump(); });
   },
