@@ -412,12 +412,12 @@ ol.steps .mi{flex:none;color:var(--ink)}
 <script>
 /* ============ road router (edge-based Dijkstra on an OSM drivable graph) ============ */
 const Router = (() => {
-  let G = null;
+  let G = null; const graphs = {}; let T = null, TURN = 1;
   const TYPES = { uint32: Uint32Array, int32: Int32Array, uint16: Uint16Array, uint8: Uint8Array, int8: Int8Array };
   const DEG = 360 / 256;
   const CELL = 0.004; // ~400 m grid for snapping
 
-  function init(buf, meta) {
+  function init(buf, meta, key) {
     const P = {};
     for (const p of meta.parts) P[p.k] = new TYPES[p.t](buf, p.o, p.n);
     const NV = meta.NV, NA = meta.NA;
@@ -443,6 +443,7 @@ const Router = (() => {
     }
     G = Object.assign(P, { NV, NA, from, restr, edgeArcs, grid, names: meta.names,
       dist: new Float64Array(NA).fill(Infinity), prev: new Int32Array(NA).fill(-1), touched: [] });
+    graphs[key || 'car'] = G; T = G.time; TURN = 1;
     return G;
   }
   function arcPts(P, from, a) { // [[lat,lng],...] along the arc direction
@@ -454,6 +455,9 @@ const Router = (() => {
     out.push([P.nodes[2 * t] / 1e6, P.nodes[2 * t + 1] / 1e6]);
     return out;
   }
+  // car: drivable graph; bike / foot: the slow graph with its own travel times (65535 = not allowed)
+  function use(key, mode) { G = graphs[key]; T = mode === 'bike' ? G.timeB : G.time; TURN = mode === 'foot' ? 0.1 : mode === 'bike' ? 0.35 : 1; }
+  const OKA = a => T[a] !== 65535;
   const pts = a => arcPts(G, G.from, a);
   function hav(a, b) { const R = 6371000, r = Math.PI / 180, dLa = (b[0] - a[0]) * r, dLo = (b[1] - a[1]) * r; const x = Math.sin(dLa / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); }
   function cum(p) { const c = [0]; for (let i = 1; i < p.length; i++) c.push(c[i - 1] + hav(p[i - 1], p[i])); return c; }
@@ -469,7 +473,8 @@ const Router = (() => {
         const l = G.grid.get(gx * 100000 + gy); if (!l) continue;
         for (const e of l) {
           if (seen.has(e)) continue; seen.add(e);
-          const a = G.edgeArcs.get(e)[0]; const p = pts(a); const c = cum(p);
+          const ea = G.edgeArcs.get(e); if (!ea.some(OKA)) continue;
+          const a = ea[0]; const p = pts(a); const c = cum(p);
           for (let i = 0; i < p.length - 1; i++) {
             const ax = (p[i][1] - lng) * kx, ay = (p[i][0] - lat) * ky, bx = (p[i + 1][1] - lng) * kx, by = (p[i + 1][0] - lat) * ky;
             const dx = bx - ax, dy = by - ay; const L2 = dx * dx + dy * dy;
@@ -484,6 +489,7 @@ const Router = (() => {
     if (!best) return null;
     const out = [];
     for (const a of G.edgeArcs.get(best.e)) {
+      if (!OKA(a)) continue;
       const fwd = a === best.a || G.from[a] === G.from[best.a];
       const t = best.total > 0 ? (fwd ? best.along / best.total : 1 - best.along / best.total) : 0;
       out.push({ arc: a, t: Math.max(0, Math.min(1, t)) });
@@ -500,12 +506,12 @@ const Router = (() => {
   function turnCost(a, b, options) {
     const d = turnDelta(a, b), ad = Math.abs(d);
     const x = options > 2 ? 3 : 0; // crossing an intersection
-    if (ad < 25) return x;
-    if (ad < 60) return x + 2;
-    if (ad < 150) return x + (d > 0 ? 6 : 15);
-    return 30;
+    if (ad < 25) return x * TURN;
+    if (ad < 60) return (x + 2) * TURN;
+    if (ad < 150) return (x + (d > 0 ? 6 : 15)) * TURN;
+    return 30 * TURN;
   }
-  const ARC_T = a => G.time[a] / 10;
+  const ARC_T = a => T[a] / 10;
 
   // one source -> many targets; returns [{cost(s), arcs:[...], srcT, dstT}] (null when unreachable)
   function search(src, targets, opts) {
@@ -536,8 +542,9 @@ const Router = (() => {
       const e0 = G.first[h], e1 = G.first[h + 1];
       const R = G.restr.get(a);
       for (let b = e0; b < e1; b++) {
+        if (T[b] === 65535) continue;
         let pen = 0;
-        if (G.edge[b] === G.edge[a]) { if (e1 - e0 > 1) continue; pen = 30; }
+        if (G.edge[b] === G.edge[a]) { if (e1 - e0 > 1) continue; pen = 30 * TURN; }
         if (R) { if (R.only.length && !R.only.includes(b)) continue; if (R.no.includes(b)) continue; }
         const base = d + pen + turnCost(a, b, e1 - e0);
         const nd = base + ARC_T(b);
@@ -639,7 +646,7 @@ const Router = (() => {
     }
     return ({ straight: 'Continuă înainte', 'slight right': 'Ține la dreapta', 'slight left': 'Ține la stânga', right: 'Virează la dreapta', left: 'Virează la stânga', 'sharp right': 'Virează brusc la dreapta', 'sharp left': 'Virează brusc la stânga', uturn: 'Întoarce' })[s.mod] + pe;
   }
-  return { init, snap, search, describe, text, loaded: () => !!G, pts, hav };
+  return { init, use, snap, search, describe, text, loaded: () => !!G, has: k => !!graphs[k], pts, hav };
 })();
 
 
@@ -1533,6 +1540,7 @@ document.addEventListener('click', async (e) => {
     case 'clearRoute': if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă golirea'; break; } S.route = { stops: [], done: [], start: S.route.start, name: '' }; saveRouteSoon(); refresh(); break;
     case 'optimize': optimizeRoute(); break;
     case 'roadOpt': computeRoute(true); break;
+    case 'setMode': setMode(t.dataset.v); break;
     case 'areaMode': areaMode(true); break;
     case 'navTo': navTo(t.dataset.id); break;
     case 'roadKeep': computeRoute(false); break;
@@ -1998,19 +2006,29 @@ function tryLocate() {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') tick(); });
 })();
 /* ============ road routing + turn-by-turn navigation ============ */
-let graphP = null;
+const graphP = {};
+const MODES = { car: 'Mașină', bike: 'Bicicletă', foot: 'Pe jos' };
+try { S.mode = localStorage.getItem('harta_mode') || 'car'; } catch (e) { S.mode = 'car'; }
+if (!MODES[S.mode]) S.mode = 'car';
 function loadGraph() {
-  if (!graphP) graphP = (async () => {
-    const j = await fetch('route/graph.json').then(r => { if (!r.ok) throw new Error('graph ' + r.status); return r.json(); });
+  const key = S.mode === 'car' ? 'car' : 'slow';
+  if (!graphP[key]) graphP[key] = (async () => {
+    const j = await fetch(key === 'car' ? 'route/graph.json' : 'route/graph_slow.json').then(r => { if (!r.ok) throw new Error('graph ' + r.status); return r.json(); });
     const buf = await gunzip(b64(j.b64));
     await new Promise(r => setTimeout(r, 0));
-    Router.init(buf, j.meta);
+    Router.init(buf, j.meta, key);
     return true;
-  })().catch(e => { graphP = null; throw e; });
-  return graphP;
+  })().catch(e => { graphP[key] = null; throw e; });
+  const mode = S.mode;
+  return graphP[key].then(() => Router.use(key, mode));
+}
+function setMode(m) {
+  if (!MODES[m] || m === S.mode) return;
+  S.mode = m; try { localStorage.setItem('harta_mode', m); } catch (e) {}
+  S.autoSig = null; refresh();
 }
 const tick = () => new Promise(r => setTimeout(r, 0));
-const routeSig = () => (S.me ? 'me' : S.route.start ? S.route.start.lat + ',' + S.route.start.lng : '-') + '|' + S.route.stops.filter(id => !S.route.done.includes(id)).join(',');
+const routeSig = () => S.mode + '|' + (S.me ? 'me' : S.route.start ? S.route.start.lat + ',' + S.route.start.lng : '-') + '|' + S.route.stops.filter(id => !S.route.done.includes(id)).join(',');
 function fmtDist(m) { return m < 950 ? Math.max(10, Math.round(m / 10) * 10) + ' m' : (m / 1000).toFixed(m < 9500 ? 1 : 0).replace('.', ',') + ' km'; }
 function fmtTime(s) { const m = Math.round(s / 60); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min'; }
 function routeMsg(t) { S.routeMsg = t; const el = $('#routeMsg'); if (el) el.textContent = t || ''; }
@@ -2134,16 +2152,19 @@ function autoRoute(n) {
 function routeSection() {
   const pending = S.route.stops.filter(id => !S.route.done.includes(id));
   const ok = navValid();
-  let html = `<div class="btns" style="margin-top:10px"><button class="btn amber" data-act="roadOpt" ${S.routing ? 'disabled' : ''}>Calculează cel mai rapid traseu</button></div>
+  // the fastest order is always computed automatically, for the chosen way of travel
+  if (!ok && pending.length && !S.routing && S.autoSig !== routeSig()) { S.autoSig = routeSig(); setTimeout(() => computeRoute(true), 0); }
+  const opt = (k, ic) => `<button class="state-opt${S.mode === k ? ' on' : ''}" data-act="setMode" data-v="${k}" aria-pressed="${S.mode === k}" ${S.routing ? 'disabled' : ''}><b>${ic} ${MODES[k]}</b></button>`;
+  let html = `<div class="act-seg mode-seg" role="group" aria-label="Mod de deplasare">${opt('car', '🚗')}${opt('bike', '🚲')}${opt('foot', '🚶')}</div>
   <div class="sub" id="routeMsg" style="margin-top:6px">${esc(S.routeMsg || '')}</div>`;
   if (ok) {
     const t = S.nav.total;
-    html += `<div class="stats"><div class="stat"><b class="num">${(t.dist / 1000).toFixed(1).replace('.', ',')}</b><span>km pe străzi</span></div><div class="stat"><b class="num">${fmtTime(t.time)}</b><span>de condus</span></div><div class="stat"><b class="num">${fmtTime(t.time + pending.length * 420)}</b><span>cu 7 min/oprire</span></div></div>
+    html += `<div class="stats"><div class="stat"><b class="num">${(t.dist / 1000).toFixed(1).replace('.', ',')}</b><span>km de parcurs</span></div><div class="stat"><b class="num">${fmtTime(t.time)}</b><span>${S.mode === 'car' ? 'de condus' : S.mode === 'bike' ? 'pe bicicletă' : 'de mers pe jos'}</span></div><div class="stat"><b class="num">${fmtTime(t.time + pending.length * 420)}</b><span>cu 7 min/oprire</span></div></div>
     <button class="btn primary" style="width:100%;height:50px;font-size:16px" data-act="navStart">▶ Pornește navigarea</button>
     <h3>Etape</h3>
     ${S.nav.legs.map((l, k) => { const s = S.sites.get(l.to); return `<details class="legd"><summary><span class="n num">${k + 1}</span><span class="grow"><b>${esc(s ? s.name : '')}</b><span class="sub"> · ${fmtDist(l.dist)} · ${fmtTime(l.time)}</span></span></summary><ol class="steps">${l.steps.map(st => `<li>${maneuverIcon(st, 20)}<span class="grow">${esc(Router.text(st))}</span><span class="sub num">${st.dist ? fmtDist(st.dist) : ''}</span></li>`).join('')}</ol></details>`; }).join('')}`;
-  } else if (S.nav) {
-    html += `<div class="note" style="margin-top:8px">Traseul s-a schimbat. Recalculează-l.</div>`;
+  } else if (pending.length && !S.routeMsg) {
+    html += `<div class="note" style="margin-top:8px">Se calculează cel mai rapid traseu…</div>`;
   }
   return html;
 }
