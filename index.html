@@ -134,6 +134,7 @@ h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
 /* panel-style detail header (mimics the site board) */
 .board{border:2px solid var(--ink);border-radius:6px;padding:10px 12px 12px;margin-top:6px;background:var(--surface)}
 .board .kicker{font-family:var(--f-display);font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;border-bottom:2px solid var(--ink);padding-bottom:6px;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px}
+.board .kicker{align-items:center;min-width:0}.board .kicker .kid{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.board .kicker .pill{flex:none;letter-spacing:.06em;font-size:11.5px}
 .board dl{display:grid;grid-template-columns:minmax(92px,32%) 1fr;gap:6px 10px;margin:0;font-size:14px}
 .board dt{color:var(--muted);font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;padding-top:2px}
 .board dd{margin:0;overflow-wrap:anywhere}
@@ -1252,6 +1253,8 @@ function photoEl(p, cls) {
   if (p.kind === 'a') return `<span class="${cls}" style="background-image:url('_blob/${esc(p.id)}')"></span>`;
   return `<span class="${cls}" data-pid="${esc(p.id)}"></span>`;
 }
+// short status pill for the site header (the return date is already shown under the name)
+function pillShort(s) { const k = statusLabel(s)[0]; return `<span class="pill ${k}">${k === 'wait' ? 'Actualizat' : k === 'due' ? 'De actualizat' : 'Finalizat'}</span>`; }
 function pillHTML(s) { const [k, l] = statusLabel(s); return `<span class="pill ${k}">${esc(l)}</span>`; }
 function subtitle(s) { const st = s.strada && !norm(s.name).includes(norm(s.strada).replace(/^(str|bd|sos|intr|pta)\. /, '')) ? s.strada : null; return [st, s.loc].filter(Boolean).join(' · '); }
 const junk = b => !b || /\d{5,}|\btel\b|^(constructor\w*|beneficiar\w*|proiectant\w*|executant\w*)$/i.test(b.trim());
@@ -1298,7 +1301,7 @@ function viewSite() {
   const [k] = statusLabel(s);
   return `<div class="row sp" style="margin:2px 0 8px"><button class="btn sm ghost" data-act="back">‹ Înapoi</button>${isOp() ? '' : `<button class="btn sm ghost" data-act="edit" data-id="${s.id}">Editează</button>`}</div>
   <div class="board">
-    <div class="kicker"><span>Șantier ${esc(s.id.toUpperCase())}</span>${pillHTML(s)}</div>
+    <div class="kicker"><span class="kid">Șantier ${esc(s.id.toUpperCase())}</span>${pillShort(s)}</div>
     <h2>${esc(s.name)}</h2>
     <div class="sub num" style="margin-top:4px">${k === 'off' ? 'Lucrare finalizată' : s.ultima ? 'Actualizat ' + roDate(s.ultima) + (k === 'wait' ? ' · din nou la ' + roDate(addDays(s.ultima, CYCLE)) : '') : 'Neactualizat încă'}</div>
   </div>
