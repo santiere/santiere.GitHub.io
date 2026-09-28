@@ -169,23 +169,15 @@
   /* ---------- screen always on ---------- */
   let lock = null, noSleep = null;
   async function keepAwake() {
-    if (localStorage.getItem('harta_awake') === '0') return;
     try { if ('wakeLock' in navigator) { lock = await navigator.wakeLock.request('screen'); lock.addEventListener('release', () => { lock = null; }); return; } } catch (e) {}
     try { if (!noSleep && window.NoSleep) noSleep = new NoSleep(); if (noSleep) { const r = noSleep.enable(); if (r && r.catch) r.catch(() => {}); } } catch (e) {}
   }
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(); });
   ['touchend', 'click'].forEach(ev => document.addEventListener(ev, function once() { keepAwake(); }, { once: true }));
   window.addEventListener('load', keepAwake);
-  window.PWA_awake = { get on() { return localStorage.getItem('harta_awake') !== '0'; }, set(on) { localStorage.setItem('harta_awake', on ? '1' : '0'); if (on) keepAwake(); else { try { lock && lock.release(); } catch (e) {} try { noSleep && noSleep.disable(); } catch (e) {} } } };
-
-  document.addEventListener('DOMContentLoaded', () => {
-    const col = document.querySelector('.fab-col'); if (!col) return;
-    const b = document.createElement('button'); b.className = 'fab'; b.id = 'btnAwake'; b.title = 'Ecran mereu aprins'; b.setAttribute('aria-label', 'Ecran mereu aprins');
-    b.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
-    const sync = () => b.setAttribute('aria-pressed', window.PWA_awake.on ? 'true' : 'false');
-    b.addEventListener('click', () => { window.PWA_awake.set(!window.PWA_awake.on); sync(); const t = document.getElementById('toast'); if (t) { t.textContent = window.PWA_awake.on ? 'Ecranul rămâne aprins' : 'Ecranul se poate stinge'; t.hidden = false; setTimeout(() => { t.hidden = true; }, 1600); } });
-    col.appendChild(b); sync();
-  });
+  try { localStorage.removeItem('harta_awake'); } catch (e) {}
+  /* no page zoom: pinch / double-tap act on the map only */
+  ['gesturestart', 'gesturechange'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
 
   /* ---------- offline cache ---------- */
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
