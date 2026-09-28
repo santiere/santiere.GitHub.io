@@ -3,6 +3,8 @@
 <head>
 <title>Harta Șantierelor</title>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' data: blob: https://santiere-api.i-spridon.workers.dev; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#172026">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1542,7 +1544,7 @@ document.addEventListener('click', async (e) => {
       if (isOp()) break;
       const name = ($('#opName').value || '').trim(), pass = ($('#opPass').value || '').trim();
       if (!name) { toast('Scrie numele operatorului'); break; }
-      if (pass.length < 6) { toast('Parola trebuie să aibă minim 6 caractere'); break; }
+      if (pass.length < 10 || !/[0-9]/.test(pass) || !/[A-Za-z]/.test(pass)) { toast('Parola: minim 10 caractere, cu litere și cifre (ex. Operator1-4827)', 4000); break; }
       t.disabled = true; t.textContent = 'Se adaugă…';
       try {
         const K = await shaHex('santiere|' + pass); const h = await shaHex(K);
@@ -1551,6 +1553,11 @@ document.addEventListener('click', async (e) => {
         toast('„' + name + '” poate intra cu parola aleasă'); ACT.remote = null; ACT.fetch();
       } catch (err) { const m = String(err.message || err); toast(/409/.test(m) ? 'Parola e deja folosită de alt operator. Alege alta.' : 'Nu s-a putut adăuga: ' + m, 4000); t.disabled = false; t.textContent = 'Adaugă'; }
       break;
+    }
+    case 'opGen': {
+      const base = (($('#opName').value || 'Operator').normalize('NFD').replace(/[^A-Za-z0-9]/g, '') || 'Operator').slice(0, 14);
+      const n = crypto.getRandomValues(new Uint32Array(1))[0] % 9000 + 1000;
+      $('#opPass').value = base + '-' + n; break;
     }
     case 'opDel': {
       if (isOp()) break;
@@ -1702,6 +1709,33 @@ let qT; $('#q').addEventListener('input', e => { clearTimeout(qT); qT = setTimeo
 
 $('#q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.target.blur(); go('list'); } });
 $('#grab').addEventListener('click', () => { if (S.view === 'visit' || S.view === 'edit') return; S.moveId = null; closeSheet(); });
+// pull the panel down to close it (from the handle, or from the top of the content); sideways to the left in landscape
+(() => {
+  const sh = $('#sheet'), body = $('#body'); let st = null;
+  const land = () => innerWidth > innerHeight && innerHeight < 600;
+  sh.addEventListener('touchstart', e => {
+    if (S.view === 'visit' || S.view === 'edit' || e.touches.length !== 1) return;
+    const t = e.touches[0]; const onGrab = e.target.closest('#grab');
+    if (!onGrab && (body.scrollTop > 0 || e.target.closest('input,textarea,select,.ch,.strip'))) return;
+    st = { x: t.clientX, y: t.clientY, d: 0, on: false, grab: !!onGrab };
+  }, { passive: true });
+  sh.addEventListener('touchmove', e => {
+    if (!st) return; const t = e.touches[0];
+    const dx = t.clientX - st.x, dy = t.clientY - st.y;
+    const d = land() ? -dx : dy;
+    if (!st.on) { if (Math.abs(d) < 10) return; if (d < 0 || (!land() && Math.abs(dx) > Math.abs(dy)) || (land() && Math.abs(dy) > Math.abs(dx)) || (!st.grab && body.scrollTop > 0)) { st = null; return; } st.on = true; sh.style.transition = 'none'; }
+    st.d = Math.max(0, d); sh.style.transform = land() ? `translateX(${-st.d}px)` : `translateY(${st.d}px)`;
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+  const end = () => {
+    if (!st) return; const s0 = st; st = null; if (!s0.on) return;
+    sh.style.transition = 'transform .2s ease';
+    const close = s0.d > Math.min(120, (land() ? sh.offsetWidth : sh.offsetHeight) * 0.25);
+    sh.style.transform = close ? (land() ? 'translateX(-110%)' : 'translateY(110%)') : '';
+    setTimeout(() => { sh.style.transition = ''; sh.style.transform = ''; if (close) { S.moveId = null; closeSheet(); } }, 200);
+  };
+  sh.addEventListener('touchend', end); sh.addEventListener('touchcancel', end);
+})();
 $('#btnSel').addEventListener('click', () => setSelectMode(!S.selectMode));
 $('#selFab').addEventListener('click', () => { if (S.selectMode) { setSelectMode(false); go('route'); } else setSelectMode(true); });
 $('#selDone').addEventListener('click', () => { setSelectMode(false); go('route'); });
@@ -2619,11 +2653,11 @@ function viewActiv() {
   ${(ACT.ops || []).map(o => `<div class="op-row"><div class="grow"><b>${esc(o.name)}</b><div class="sub">adăugat ${o.c ? roDate(new Date(o.c).toISOString().slice(0, 10)) : ''}</div></div><button class="btn sm ghost danger" data-act="opDel" data-id="${esc(o.id)}">Scoate accesul</button></div>`).join('') || `<div class="sub">${ACT.ops ? 'Niciun operator încă.' : 'Se încarcă…'}</div>`}
   <div class="note" style="margin-top:10px"><b style="color:var(--ink)">Adaugă operator</b>
     <input class="in" id="opName" placeholder="Nume, ex. Operator 1" autocomplete="off" style="margin-top:8px">
-    <input class="in" id="opPass" placeholder="Parola lui (minim 6 caractere)" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" style="margin-top:8px">
+    <div class="row" style="gap:8px;margin-top:8px"><input class="in grow" id="opPass" placeholder="Parola lui, ex. Operator1-4827" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"><button class="btn sm" data-act="opGen">Generează</button></div>
     <button class="btn amber" style="width:100%;margin-top:8px" data-act="opAdd">Adaugă</button>
-    <div class="sub" style="margin-top:6px">Operatorul deschide aplicația pe telefonul lui și scrie parola asta. Poate naviga, fotografia și adăuga șantiere noi; nu poate șterge sau edita nimic.</div></div>` : '';
+    <div class="sub" style="margin-top:6px">Parola: minim 10 caractere, cu litere și cifre (ex. Operator1-4827). Operatorul deschide aplicația pe telefonul lui și scrie parola asta. Poate naviga, fotografia și adăuga șantiere noi; nu poate șterge sau edita nimic.</div></div>` : '';
   const me = window.PWA_me && window.PWA_me.name;
-  return `<div class="row sp"><h2>Activitate</h2>${admin ? '<button class="btn sm ghost" data-act="actRefresh">Reîncarcă</button>' : ''}</div>
+  return `<div class="row sp"><h2>Activitate</h2>${admin ? '<button class="btn sm ghost" data-act="actRefresh" aria-label="Aduce datele noi" title="Aduce datele noi" style="font-size:20px;line-height:1">↻</button>' : ''}</div>
   <div class="who-bar"><span>Conectat${me ? ' ca <b>' + esc(me) + '</b>' : ''}</span><button class="btn sm ghost" data-act="logout">Ieși din cont</button></div>
   ${whoSeg}
   <div class="act-seg" role="group" aria-label="Perioadă">${seg('z', 'Zile')}${seg('s', 'Săptămâni')}${seg('l', 'Luni')}</div>
