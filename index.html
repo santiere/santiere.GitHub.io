@@ -282,6 +282,28 @@ ol.steps .mi{flex:none;color:var(--ink)}
   .np-txt{flex-direction:column;align-items:center;gap:2px}.np-txt b{font-size:16px}.np-txt span{font-size:12.5px}
   .np-track{flex:1;width:12px;height:auto}
   .np-fill{top:auto;right:0;width:auto;height:var(--p,0%)}
+  /* gauge tucked into the bottom-left corner, clear of the island and the rounded screen corner */
+  .nav-prog{left:12px;bottom:24px;width:52px;height:min(30vh,128px);padding:8px 0;gap:6px;border-radius:12px}
+  .np-txt b{font-size:14px}.np-txt span{font-size:11px}.np-track{width:10px}
+  /* compact top bar */
+  .nav-bot{width:auto;max-width:min(400px,44vw);margin-left:8px;padding:6px 8px 6px 12px;border-radius:0 0 14px 14px}
+  .nav-bot .row{gap:8px!important}
+  .nav-eta{font-size:14px;line-height:1.2}#navSub{font-size:12px;line-height:1.2}
+  #navExit{height:30px;padding:0 10px;font-size:13px}
+  /* smaller side buttons */
+  .nav-side{gap:8px}
+  .nav-fab{width:44px;height:44px;font-size:26px;border-radius:12px}
+  .nav-new{width:44px;padding:6px 0 5px;font-size:9.5px;border-radius:12px}.nav-new svg{width:17px;height:17px}
+  /* compact photo dialog */
+  .qc-card{max-width:520px;padding:10px 14px 12px}
+  .qc-card .lock-k{font-size:11px;padding-bottom:4px;margin-bottom:6px}
+  .qc-site{margin:0 0 6px;font-size:14px}
+  .qc-tile{height:30vh}
+  .qc-n{width:38px;height:38px;font-size:16px}.qc-l{font-size:14px}.qc-s{font-size:11px}
+  .qc-gps{margin-top:6px;font-size:12.5px}
+  .qc-big{height:40px;font-size:15px;margin-top:6px}
+  #qcCancel{height:36px;min-height:0;padding:0 12px;font-size:14px}
+  .qc-card .btns{margin-top:6px!important;gap:6px}
 }
 /* activity dashboard */
 .act-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
@@ -2536,7 +2558,7 @@ async function navTo(id) {
 
 // map padding so the car sits in the free part of the screen (right side in landscape)
 function navPad(top, bot, extra) {
-  if (innerWidth > innerHeight && innerHeight < 600) { const w = $('#navBot').getBoundingClientRect().width; return { top: 20, bottom: 20 + extra / 2, left: w + 10, right: 60 }; }
+  if (innerWidth > innerHeight && innerHeight < 600) { const hb = $('#navBot').getBoundingClientRect().height; return { top: hb + Math.round(innerHeight * 0.15), bottom: 20, left: 70, right: 70 }; }
   const hb = $('#navBot').getBoundingClientRect().height; const hp = $('#navProg').getBoundingClientRect().height; return { top: hb + Math.round(innerHeight * 0.3), bottom: 40 + hp + extra / 2, left: 0, right: 0 };
 }
 window.addEventListener('resize', () => { if (S.navOn && S.me) setTimeout(() => navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }, true), 250); });
