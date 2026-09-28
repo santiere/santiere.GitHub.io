@@ -882,10 +882,29 @@ function statusLabel(s) {
 }
 const deadlinePassed = s => s.finalizare && s.finalizare < today();
 
+/* ============ cities ============ */
+// each city has its own iCloud folder (SANTIERE/<id>/…); a site belongs to the city whose box holds it, else the nearest one
+const CITIES = [
+  { id: 'Bucuresti', name: 'București', c: [26.1025, 44.4355], bbox: [25.6, 44.0, 26.6, 45.1] },
+  { id: 'Constanta', name: 'Constanța', c: [28.634, 44.182], bbox: [28.3, 43.9, 28.9, 44.5] },
+  { id: 'Craiova', name: 'Craiova', c: [23.800, 44.318], bbox: [23.5, 44.1, 24.1, 44.5] },
+];
+function cityOf(lat, lng) {
+  let best = CITIES[0], bd = Infinity;
+  for (const c of CITIES) {
+    const [w, so, e, n] = c.bbox;
+    if (lng >= w && lng <= e && lat >= so && lat <= n) return c;
+    const d = (lat - (so + n) / 2) ** 2 + ((lng - (w + e) / 2) * 0.72) ** 2; if (d < bd) { bd = d; best = c; }
+  }
+  return best;
+}
+// folder prefix sent with each photo pair: București keeps the plain week name (as before), other cities get "Oras/"
+const cityDir = (lat, lng) => { const c = cityOf(lat, lng); return c.id === 'Bucuresti' ? '' : c.id + '/'; };
+
 /* ============ filtering ============ */
 function matches(s) {
   if (!S.show[status(s)]) return false;
-  if (S.loc && (s.loc || '') !== S.loc) return false;
+  if (S.loc) { if (S.loc[0] === '@') { if (cityOf(s.lat, s.lng).id !== S.loc.slice(1)) return false; } else if ((s.loc || '') !== S.loc) return false; }
   if (S.q) {
     const q = norm(S.q);
     const hay = norm([s.name, s.strada, s.loc].join(' '));
@@ -1057,6 +1076,11 @@ function fitAll(list) {
   const b = new maplibregl.LngLatBounds(); arr.forEach(s => b.extend([s.lng, s.lat]));
   map.fitBounds(b, { padding: { top: 130, bottom: sheetPad() + 30, left: 30, right: 60 }, maxZoom: 15, duration: 600 });
 }
+function fitLoc() {
+  if (!map) return;
+  if (S.loc[0] === '@' && !visibleSites().length) { const c = CITIES.find(x => '@' + x.id === S.loc); if (c) { map.easeTo({ center: c.c, zoom: 12.3, padding: { top: 110, bottom: sheetPad() + 20, left: 0, right: 0 }, duration: 600 }); } return; }
+  fitAll();
+}
 function placeCross() {
   const c = $('#cross'); if (c.hasAttribute('hidden') || !map) return;
   const p = map.project(map.getCenter());
@@ -1128,7 +1152,9 @@ function buildLocOptions() {
   const c = new Map(); for (const s of S.sites.values()) if (s.loc) c.set(s.loc, (c.get(s.loc) || 0) + 1);
   const arr = [...c.entries()].sort((a, b) => { const sa = /^Sector/.test(a[0]), sb = /^Sector/.test(b[0]); return sa !== sb ? (sa ? -1 : 1) : (sa ? a[0].localeCompare(b[0]) : b[1] - a[1]); });
   const sel = $('#loc'); const cur = S.loc;
-  sel.innerHTML = '<option value="">Toate zonele</option>' + arr.map(([k, n]) => `<option value="${esc(k)}"${k === cur ? ' selected' : ''}>${esc(k)} (${n})</option>`).join('');
+  const cc = {}; for (const s of S.sites.values()) { const k = cityOf(s.lat, s.lng).id; cc[k] = (cc[k] || 0) + 1; }
+  sel.innerHTML = '<option value="">Toate zonele</option><optgroup label="Orașe">' + CITIES.map(c => `<option value="@${c.id}"${'@' + c.id === cur ? ' selected' : ''}>${esc(c.name)} (${cc[c.id] || 0})</option>`).join('') + '</optgroup>'
+    + '<optgroup label="Zone">' + arr.map(([k, n]) => `<option value="${esc(k)}"${k === cur ? ' selected' : ''}>${esc(k)} (${n})</option>`).join('') + '</optgroup>';
 }
 function refresh() {
   buildChips();
@@ -1662,7 +1688,7 @@ document.addEventListener('change', async (e) => {
     render(true);
     const pv = $('#visitPrev'); if (pv) pv.innerHTML = f.files.slice(0, 12).map(x => `<img src="${URL.createObjectURL(x)}" alt="">`).join('');
   }
-  if (e.target.id === 'loc') { S.loc = e.target.value; S.listMax = 150; refresh(); if (S.loc) fitAll(); }
+  if (e.target.id === 'loc') { S.loc = e.target.value; S.listMax = 150; refresh(); if (S.loc) fitLoc(); }
 });
 function shotBase(t) { const d = new Date(t || Date.now()); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + '_' + pad(d.getHours()) + pad(d.getMinutes()); }
 async function createSite(o, prog) {
@@ -1671,7 +1697,7 @@ async function createSite(o, prog) {
   prog && prog('Salvez…');
   let near = null, nd = 3;
   for (const x of S.sites.values()) { const dd = hav({ lat: o.lat, lng: o.lng }, x); if (dd < nd && x.loc) { nd = dd; near = x; } }
-  const site = { name: 'Șantier nou · ' + roDate(d), lat: +o.lat.toFixed(6), lng: +o.lng.toFixed(6), loc: near ? near.loc : '', strada: near && nd < 0.15 ? near.strada || '' : '', ultima: d, inactiv: false, creat: Date.now(), manual: true, deScanat: true, poze: [], panouA: pid, santierA: sid, panouT: o.panouT || '' };
+  const site = { name: 'Șantier nou · ' + roDate(d), lat: +o.lat.toFixed(6), lng: +o.lng.toFixed(6), loc: near ? near.loc : cityOf(o.lat, o.lng).name, strada: near && nd < 0.15 ? near.strada || '' : '', ultima: d, inactiv: false, creat: Date.now(), manual: true, deScanat: true, poze: [], panouA: pid, santierA: sid, panouT: o.panouT || '' };
   const sh = pickShard();
   const ref = db.doc('sites/' + sh); const snap = await ref.get();
   if (snap.exists) await ref.update({ s: { [id]: site } }); else await ref.set({ s: { [id]: site } });
@@ -1872,12 +1898,12 @@ $('#qc').addEventListener('click', async e => {
         if (snap.exists) await ref.update({ v: { [vid]: visit } }); else await ref.set({ v: { [vid]: visit } });
         await patchSite(site.id, { ultima: d, ultimaApp: d, inactiv: false });
         const [pa] = site.panouA ? [site.panouA] : await uploadFiles([f.panouR.blob], null, true);
-        await OB.add(k, { siteId: site.id, siteName: saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: site.name, nou: 0, stamp: site.id, t: Date.now(), p: pa, s: aid, lat: g && g.lat, lng: g && g.lng }, files);
+        await OB.add(k, { siteId: site.id, siteName: cityDir(site.lat, site.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: site.name, nou: 0, stamp: site.id, t: Date.now(), p: pa, s: aid, lat: g && g.lat, lng: g && g.lng }, files);
       } else {
         const gp = f.panouR.gps || g;
         const r = await createSite({ id: sid, panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt }, null);
         const s2 = r.assets || {};
-        await OB.add(k, { siteId: sid, siteName: saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: 'Șantier nou', nou: 1, stamp: sid, t: Date.now(), p: s2.p, s: s2.s, lat: gp.lat, lng: gp.lng }, files);
+        await OB.add(k, { siteId: sid, siteName: cityDir(gp.lat, gp.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: 'Șantier nou', nou: 1, stamp: sid, t: Date.now(), p: s2.p, s: s2.s, lat: gp.lat, lng: gp.lng }, files);
       }
       saved = true; ACT.site(sid, !site);
     } catch (err) { toast('Nu s-a salvat în aplicație: ' + (err.code || err.message)); f.saving = false; e.target.disabled = false; e.target.textContent = 'Salvează'; }
