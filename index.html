@@ -39,6 +39,8 @@
   --ground:#0F1417; --surface:#182025; --surface-2:#1E272D; --ink:#E6ECEE; --muted:#9AA8AF; --line:#2B353B;
   --amber:#F5B82E; --amber-ink:#2A1E00; --due:#FF5A4E; --wait:#4C94F2; --accent:#4C94F2; --ch-u:#4C94F2; --ch-n:#BF8414; --off:#7C878D; --ok:#4DB27C; --danger:#FF6B61; --shadow:0 8px 30px rgba(0,0,0,.5);}
 [hidden]{display:none!important}
+.me-arrow{display:none;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}
+.me.nav .me-arrow{display:block}.me.nav .me-dot,.me.nav .me-cone,.me.nav .me-acc{display:none!important}
 .rz-note{margin-top:5px;font-size:13px;font-weight:600;color:#8E44DD}.rz-t{color:#8E44DD;font-weight:600}
 :root[data-theme="dark"] .rz-note,:root[data-theme="dark"] .rz-t{color:#C49BFF}
 :root[data-theme="dark"] .qc-tile{background:var(--surface-2);border-color:#56626B}
@@ -1156,6 +1158,7 @@ function pickShard() {
 let routeTimer = null, routeDirty = false;
 function saveRouteSoon() {
   if (typeof RZ !== 'undefined') RZ.sendSoon();
+  if (S.navOn && S.nav && !navValid()) { clearTimeout(S.navEditT); S.navEditT = setTimeout(() => { if (S.navOn && !navValid()) { if (S.navTrack) S.navTrack.busy = false; navReroute(); } }, 400); }
   routeDirty = true; S.routeUpd = Date.now(); clearTimeout(routeTimer);
   routeTimer = setTimeout(async () => {
     try { await db.doc('trasee/curent').set({ stops: S.route.stops, done: S.route.done, start: S.route.start || null, name: S.route.name || '', upd: S.routeUpd }); }
@@ -2254,14 +2257,15 @@ function onGeoPos(p) {
   const btn = $('#btnMe'); if (btn) btn.classList.remove('seeking');
   if (!S.meMarker) {
     const mk = document.createElement('div'); mk.className = 'me';
-    mk.innerHTML = '<div class="me-acc"></div><div class="me-cone"></div><div class="me-dot"></div>';
+    mk.innerHTML = '<div class="me-acc"></div><div class="me-cone"></div><div class="me-dot"></div><svg class="me-arrow" viewBox="0 0 40 40" width="48" height="48"><path d="M20 3 L35 35 L20 27 L5 35 Z" fill="#1A73E8" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>';
+    if (S.navOn) mk.classList.add('nav');
     S.meMarker = new maplibregl.Marker({ element: mk, rotationAlignment: 'map' }).setLngLat([c.longitude, c.latitude]).addTo(map);
   }
   S.meMarker.setLngLat([c.longitude, c.latitude]);
   const el = S.meMarker.getElement();
   const acc = el.querySelector('.me-acc'); if (acc) { const px = Math.min(300, c.accuracy / (156543.03 * Math.cos(c.latitude * Math.PI / 180) / Math.pow(2, map.getZoom()))); acc.style.width = acc.style.height = Math.max(22, 2 * px) + 'px'; }
   const cone = el.querySelector('.me-cone');
-  if (c.heading != null && !isNaN(c.heading) && (c.speed == null || c.speed > 0.8)) { cone.style.display = 'block'; S.meMarker.setRotation(c.heading); } else if (c.heading == null || isNaN(c.heading)) cone.style.display = 'none';
+  if (!S.navOn) { if (c.heading != null && !isNaN(c.heading) && (c.speed == null || c.speed > 0.8)) { cone.style.display = 'block'; S.meMarker.setRotation(c.heading); } else if (c.heading == null || isNaN(c.heading)) cone.style.display = 'none'; }
   if (S.navOn) { navGps(c); return; }
   if (S.follow) map.easeTo({ center: [c.longitude, c.latitude], duration: 600 });
   if (!prev) {
@@ -2521,6 +2525,8 @@ function navStart() {
   S.navList = null; S.navOn = true; S.navPos = 0; S.voice = false;
   S.navTot = S.nav.legs.reduce((a, l) => a + l.dist, 0);
   closeSheet(); $('#nav').hidden = false; $('.top').hidden = true; $('.fab-col').hidden = true; $('.tabs').hidden = true;
+  if (S.meMarker) S.meMarker.getElement().classList.add('nav');
+  try { map.setLayoutProperty('route-start', 'visibility', 'none'); } catch (e) {}
   if (S.voice && 'speechSynthesis' in window) { try { speechSynthesis.getVoices(); } catch (e) {} }
   S.navTrack = { off: 0, lastReroute: 0 }; S.navGpsFollow = false;
   navShow(true);
@@ -2528,7 +2534,7 @@ function navStart() {
   else if (typeof locateNow === 'function' && S.geoErr != null) locateNow();
 }
 function navStop() {
-  S.navOn = false; $('#nav').hidden = true; $('.top').hidden = false; $('.fab-col').hidden = false; $('.tabs').hidden = false;
+  S.navOn = false; $('#nav').hidden = true; if (S.meMarker) { S.meMarker.getElement().classList.remove('nav'); S.meMarker.setRotation(0); } try { map.setLayoutProperty('route-start', 'visibility', 'visible'); } catch (e) {} $('.top').hidden = false; $('.fab-col').hidden = false; $('.tabs').hidden = false;
   if (S.navWatch != null) { try { navigator.geolocation.clearWatch(S.navWatch); } catch (e) {} S.navWatch = null; }
   try { speechSynthesis.cancel(); } catch (e) {}
   if (map) map.easeTo({ pitch: 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 500 });
@@ -2606,7 +2612,10 @@ async function navReroute() {
   try {
     await loadGraph();
     const cur = navItem().leg;
-    const rest = S.nav.legs.slice(cur).filter(l => !S.route.done.includes(l.to)).map(l => S.sites.get(l.to)).filter(Boolean);
+    const pend = S.route.stops.filter(id => !S.route.done.includes(id));
+    const curTo = S.nav.legs[cur] && S.nav.legs[cur].to;
+    const rest = (curTo && pend.includes(curTo) ? [curTo, ...pend.filter(x => x !== curTo)] : pend).map(id => S.sites.get(id)).filter(Boolean);
+    if (!rest.length) { toast('Traseul e gata'); navStop(); return; }
     const pts = [{ lat: S.me.lat, lng: S.me.lng, label: 'Locația mea' }].concat(rest);
     const snaps = pts.map(p => Router.snap(p.lat, p.lng)); if (!snaps[0]) return;
     const legs = []; let prev = 0;
@@ -2619,6 +2628,7 @@ async function navReroute() {
     if (!legs.length || !S.navOn) return;
     const total = legs.reduce((x, l) => ({ time: x.time + l.time, dist: x.dist + l.dist }), { time: 0, dist: 0 });
     S.nav = { legs, total, sig: routeSig(), start: pts[0], first: null };
+    S.navTot = Math.max(S.navTot || 0, total.dist);
     S.navList = null; S.navPos = 0; S.navAnn = {}; tr.off = 0;
     speak('Recalculez traseul');
     navShow(false); navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }, true);
@@ -2633,12 +2643,11 @@ function navGps(c, quiet) {
   const L = legGeom(S.nav.legs[it.leg]);
   const pr = projectOnLeg(L, c.latitude, c.longitude);
   const acc = c.accuracy || 20;
-  // off the route? recalculate from where I am (needs 3 fixes in a row, max once every 8 s)
-  const limit = Math.max(45, Math.min(acc * 1.5, 120));
-  if (pr.d > limit) {
-    tr.off++;
-    if (tr.off >= 3 && Date.now() - tr.lastReroute > 8000) { navReroute(); }
-  } else tr.off = 0;
+  // off the route? recalculate from where I am: 2 fixes beyond the limit, or 3 fixes in a row moving away from the line
+  const limit = Math.max(35, Math.min(acc * 1.3, 90));
+  if (pr.d > limit) tr.off++; else tr.off = 0;
+  tr.away = pr.d > 20 && tr.lastD != null && pr.d > tr.lastD + 3 ? (tr.away || 0) + 1 : 0; tr.lastD = pr.d;
+  if ((tr.off >= 2 || tr.away >= 3) && Date.now() - tr.lastReroute > 6000) { tr.away = 0; navReroute(); }
   // which maneuver comes next on this leg
   let j = it.j;
   if (pr.d <= limit) {
@@ -2670,6 +2679,7 @@ function navGps(c, quiet) {
   let brg = map ? map.getBearing() : 0;
   if (c.heading != null && !isNaN(c.heading) && (c.speed == null || c.speed > 1.5)) brg = c.heading;
   else if (pr.d <= limit) { const i2 = Math.min(L.coords.length - 1, pr.i + 1); brg = bearingTo(L.coords[pr.i], L.coords[i2]); }
+  if (S.meMarker) S.meMarker.setRotation(brg);
   if (map && !S.navFree) {
     const top = $('#navTopBox').getBoundingClientRect().height + 20, bot = $('#navBot').getBoundingClientRect().height + 20;
     map.easeTo({ center: [c.longitude, c.latitude], bearing: brg, zoom: S.navZoom || 17, pitch: 50, padding: navPad(top, bot, 120), duration: 900 });
