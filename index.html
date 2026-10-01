@@ -2535,7 +2535,7 @@ function navStart() {
   if (S.meMarker) S.meMarker.getElement().classList.add('nav');
   try { map.setLayoutProperty('route-start', 'visibility', 'none'); } catch (e) {}
   if (S.voice && 'speechSynthesis' in window) { try { speechSynthesis.getVoices(); } catch (e) {} }
-  S.navTrack = { off: 0, lastReroute: 0 }; S.navGpsFollow = false;
+  S.navTrack = { off: 0, lastReroute: 0 }; S.navGpsFollow = false; S.navSpd = null; S.navDz = null;
   navShow(true);
   if (S.me && Date.now() - (S.me.t || 0) < 30000) navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc });
   else if (typeof locateNow === 'function' && S.geoErr != null) locateNow();
@@ -2690,8 +2690,22 @@ function navGps(c, quiet) {
   if (S.meMarker) S.meMarker.setRotation(brg);
   if (map && !S.navFree) {
     const top = $('#navTopBox').getBoundingClientRect().height + 20, bot = $('#navBot').getBoundingClientRect().height + 20;
-    map.easeTo({ center: [c.longitude, c.latitude], bearing: brg, zoom: S.navZoom || 17, pitch: 50, padding: navPad(top, bot, 120), duration: 900 });
+    map.easeTo({ center: [c.longitude, c.latitude], bearing: brg, zoom: navSpeedZoom(c), pitch: 50, padding: navPad(top, bot, 120), duration: 900 });
   }
+}
+
+/* ---------- zoom follows the speed (like Waze): farther out when driving fast, back in when slowing down ---------- */
+function navSpeedZoom(c) {
+  const now = Date.now(), sp0 = S.navSpd || { v: 0, lat: c.latitude, lng: c.longitude, t: now };
+  let v = c.speed != null && !isNaN(c.speed) && c.speed >= 0 ? c.speed : null;   // m/s from the phone
+  if (v == null && now - sp0.t > 500) v = Router.hav([sp0.lat, sp0.lng], [c.latitude, c.longitude]) / ((now - sp0.t) / 1000);
+  const ema = v == null ? sp0.v : sp0.v * 0.6 + v * 0.4;   // smoothed, so the map doesn't pump at every fix
+  S.navSpd = { v: ema, lat: c.latitude, lng: c.longitude, t: now };
+  const kmh = ema * 3.6;
+  // 0–20 km/h: your own zoom; then out by up to 2.2 levels around 80 km/h
+  let dz = Math.max(0, Math.min(2.2, (kmh - 20) / 27));
+  if (S.navDz != null && Math.abs(dz - S.navDz) < 0.3) dz = S.navDz; else S.navDz = dz;
+  return (S.navZoom || 17) - dz;
 }
 
 /* ---------- looking around during navigation (like Waze): back to my position after 12 s without touching ---------- */
