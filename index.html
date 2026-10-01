@@ -1035,8 +1035,8 @@ function addSiteLayers() {
   add({ id: 'area-fill', type: 'fill', source: 'area', paint: { 'fill-color': C.amber, 'fill-opacity': 0.12 } });
   add({ id: 'area-line', type: 'line', source: 'area', layout: { 'line-join': 'round' }, paint: { 'line-color': C.amber, 'line-width': 3, 'line-dasharray': [2, 1.2] } });
   add({ id: 'route-straight', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['has', 'straight']], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': C.ink, 'line-opacity': 0.6, 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.2, 15, 3], 'line-dasharray': [1.2, 1.4] } });
-  add({ id: 'route-case', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#5A3B00', 'line-opacity': ['case', ['==', ['get', 'dim'], 1], 0.25, 0.9], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 9, 18, 18] } });
-  add({ id: 'route-line', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': C.amber, 'line-opacity': ['case', ['==', ['get', 'dim'], 1], 0.35, 1], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 14, 6, 18, 13] } });
+  add({ id: 'route-case', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#5A3B00', 'line-opacity': ['case', ['==', ['get', 'pass'], 1], 0.2, ['==', ['get', 'dim'], 1], 0.5, 0.9], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 9, 18, 18] } });
+  add({ id: 'route-line', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': C.amber, 'line-opacity': ['case', ['==', ['get', 'pass'], 1], 0.45, ['==', ['get', 'dim'], 1], 0.7, 1], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 14, 6, 18, 13] } });
   add({ id: 'route-start', type: 'circle', source: 'route', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 7, 'circle-color': C.ink, 'circle-stroke-color': C.surface, 'circle-stroke-width': 2.5 } });
   add({ id: 'sites-hit', type: 'circle', source: 'sites', paint: { 'circle-radius': 17, 'circle-opacity': 0 } });
   add({ id: 'sites-selring', type: 'circle', source: 'sites', filter: ['==', ['get', 'sel'], 1], paint: {
@@ -2480,7 +2480,18 @@ function navValid() { return S.nav && S.nav.sig === routeSig(); }
 function routeFeatures() {
   const rf = [];
   if (navValid()) {
-    S.nav.legs.forEach((l, k) => rf.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: l.coords }, properties: { leg: k, dim: S.navOn && k !== navItem().leg ? 1 : 0 } }));
+    const cur = S.navOn ? navItem().leg : -1; const pj = S.navProj;
+    S.nav.legs.forEach((l, k) => {
+      const line = (coords, props) => coords.length > 1 && rf.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: Object.assign({ leg: k }, props) });
+      if (!S.navOn) return line(l.coords, {});
+      if (k < cur) return line(l.coords, { pass: 1 });   // already driven: faded
+      if (k > cur) return line(l.coords, { dim: 1 });    // later stops: a little lighter
+      // current stop: faded behind me, full colour ahead
+      if (pj && pj.leg === k && pj.i < l.coords.length - 1) {
+        line(l.coords.slice(0, pj.i + 1).concat([pj.pt]), { pass: 1 });
+        line([pj.pt].concat(l.coords.slice(pj.i + 1)), {});
+      } else line(l.coords, {});
+    });
   } else {
     const pts = S.route.stops.map(id => S.sites.get(id)).filter(Boolean);
     const coords = (S.me ? [S.me] : []).concat(pts).map(p => [p.lng, p.lat]);
@@ -2568,7 +2579,7 @@ function navStart() {
   try { localStorage.setItem('harta_nav', String(Date.now())); } catch (e) {}
   try { map.setLayoutProperty('route-start', 'visibility', 'none'); } catch (e) {}
   if (S.voice && 'speechSynthesis' in window) { try { speechSynthesis.getVoices(); } catch (e) {} }
-  S.navTrack = { off: 0, lastReroute: 0 }; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navBrg = null; S.navLastFix = 0;
+  S.navTrack = { off: 0, lastReroute: 0 }; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null;
   navShow(true);
   if (S.me && Date.now() - (S.me.t || 0) < 30000) navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc });
   else if (typeof locateNow === 'function' && S.geoErr != null) locateNow();
@@ -2671,7 +2682,7 @@ async function navReroute() {
     const total = legs.reduce((x, l) => ({ time: x.time + l.time, dist: x.dist + l.dist }), { time: 0, dist: 0 });
     S.nav = { legs, total, sig: routeSig(), start: pts[0], first: null };
     S.navTot = Math.max(S.navTot || 0, total.dist);
-    S.navList = null; S.navPos = 0; S.navAnn = {}; tr.off = 0;
+    S.navList = null; S.navPos = 0; S.navAnn = {}; tr.off = 0; S.navProj = null;
     speak('Recalculez traseul');
     navShow(false); navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }, true);
   } catch (e) { } finally { tr.busy = false; }
@@ -2712,6 +2723,12 @@ function navGpsInner(c, quiet) {
     if (it.s.type === 'arrive' && j < it.j) j = it.j;
     const gi = items.findIndex(x => x.leg === it.leg && x.j === j);
     if (gi >= 0 && gi !== S.navPos && gi > S.navPos - 1) { S.navPos = gi; S.navGpsFollow = true; navShow(false); }
+  }
+  if (pr.d <= limit && L.coords[pr.i + 1]) {
+    const seg = L.cum[pr.i + 1] - L.cum[pr.i], t = seg ? Math.max(0, Math.min(1, (pr.pos - L.cum[pr.i]) / seg)) : 0;
+    const a = L.coords[pr.i], b2 = L.coords[pr.i + 1];
+    S.navProj = { leg: it.leg, i: pr.i, pt: [a[0] + (b2[0] - a[0]) * t, a[1] + (b2[1] - a[1]) * t] };
+    try { const src = map && map.getSource('route'); if (src) src.setData({ type: 'FeatureCollection', features: routeFeatures() }); } catch (e) {}
   }
   const cur = items[S.navPos];
   const toMan = Math.max(0, (pr.d <= limit ? L.cum[L.stepAt[cur.j]] - pr.pos : Router.hav([c.latitude, c.longitude], cur.s.loc)));
