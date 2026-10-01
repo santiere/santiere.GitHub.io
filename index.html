@@ -834,10 +834,15 @@ let db = null, assets = null, downloads = null, map = null;
 
 /* ============ static data: tiles, glyphs, photos ============ */
 // Map tiles, fonts and panel photos ship as JSON files holding base64 data.
-const bundleCache = new Map();
+// kept in memory only for the most recently used bundles, so a long day on the road does not fill the phone's memory
+const bundleCache = new Map(); const BUNDLE_MAX = 36;
 function bundle(path) {
-  if (!bundleCache.has(path)) bundleCache.set(path, fetch(path).then(r => { if (!r.ok) throw new Error(path + ' ' + r.status); return r.json(); }).catch(e => { bundleCache.delete(path); throw e; }));
-  return bundleCache.get(path);
+  let p = bundleCache.get(path);
+  if (p) { bundleCache.delete(path); bundleCache.set(path, p); return p; }
+  p = fetch(path).then(r => { if (!r.ok) throw new Error(path + ' ' + r.status); return r.json(); }).catch(e => { bundleCache.delete(path); throw e; });
+  bundleCache.set(path, p);
+  while (bundleCache.size > BUNDLE_MAX) bundleCache.delete(bundleCache.keys().next().value);
+  return p;
 }
 function b64(str) { const bin = atob(str); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
 let TIDX = null, PIDX = null;
@@ -868,6 +873,7 @@ const FONTDIR = { 'Noto Sans Regular': 'NotoSansRegular', 'Noto Sans Medium': 'N
 const photoURL = new Map();
 function panelPhoto(id) {
   if (window.PWA_photo) return PWA_photo(id);
+  if (photoURL.size > 80) { const [k0, p0] = photoURL.entries().next().value; photoURL.delete(k0); Promise.resolve(p0).then(u => { if (u) setTimeout(() => URL.revokeObjectURL(u), 60000); }).catch(() => {}); }
   if (!photoURL.has(id)) photoURL.set(id, (async () => {
     const idx = PIDX || await photoIndexP; const n = idx[id]; if (n == null) return null;
     const j = await bundle('f/' + String(n).padStart(3, '0') + '.json');
@@ -1065,7 +1071,11 @@ function initMap() {
   map = new maplibregl.Map({
     container: 'map', style: buildStyle(isDark()), center: [26.1025, 44.4355], zoom: 10.6, minZoom: 7, maxZoom: 19,
     attributionControl: { compact: true }, dragRotate: false, pitchWithRotate: false, touchPitch: false, maxPitch: 70, fadeDuration: 150,
+    pixelRatio: Math.min(2, window.devicePixelRatio || 1), maxTileCacheSize: 160, refreshExpiredTiles: false,
   });
+  // if iOS takes the graphics memory away (long in background), the map redraws itself when it comes back
+  map.on('webglcontextlost', () => { S.glLost = true; });
+  map.on('webglcontextrestored', () => { S.glLost = false; try { map.triggerRepaint(); updateMap(); } catch (e) {} });
   map.touchZoomRotate.disableRotation();
   map.on('style.load', addSiteLayers);
   map.on('click', (e) => {
@@ -1635,6 +1645,9 @@ document.addEventListener('click', async (e) => {
       if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă ieșirea'; break; }
       t.disabled = true; t.textContent = 'Ies…';
       try { await ACT.push(); } catch (err) {}
+      try { await CLOUD.pull(); } catch (err) {}   // sends any change still waiting
+      if (CLOUD.pendingState) { toast('Unele modificări nu au plecat încă (fără internet). Încearcă din nou când ai semnal.', 4000); t.disabled = false; t.textContent = 'Ieși din cont'; t.dataset.confirm = ''; break; }
+      try { localStorage.removeItem('harta_nav'); localStorage.removeItem('harta_sters_sent'); } catch (err) {}
       try { if (db) await db.doc('activ/zile').set({ z: {} }); } catch (err) {}
       try { ['harta_pass', 'harta_slot', 'harta_me', 'harta_stateU'].forEach(k => localStorage.removeItem(k)); } catch (err) {}
       location.reload();
@@ -1907,7 +1920,7 @@ function qcRender() {
     const sub = f[k] && !r ? 'pregătesc poza…' : f[k] ? 'atinge pentru altă poză' : 'atinge pentru cameră';
     return `<label class="qc-tile ${r ? 'done' : ''}">${f[k] ? `<img src="${f[k + 'Url']}" alt="">` : `<span class="qc-n">${n}</span>`}<span class="qc-l">${r ? '✓ ' + label : label}</span><span class="qc-s">${sub}</span><input type="file" accept="image/*" capture="environment" data-qc="${k}"></label>`;
   };
-  const panelTile = site ? `<div class="qc-tile done qc-fixed" id="qcPanelView">${f.panouUrl ? `<img src="${f.panouUrl}" alt="">` : '<span class="qc-s">Se încarcă panoul…</span>'}<span class="qc-l">N · Panou șantier</span><span class="qc-s">din fotografiile tale</span></div>` : tile('panou', 'N', 'Panou șantier');
+  const panelTile = site ? `<div class="qc-tile done qc-fixed" id="qcPanelView">${f.panouUrl ? `<img src="${f.panouUrl}" alt="">` : `<span class="qc-s">${f.panouR && f.panouR.missing ? 'Panoul original se ia seara din iCloud' : 'Se încarcă panoul…'}</span>`}<span class="qc-l">N · Panou șantier</span><span class="qc-s">din fotografiile tale</span></div>` : tile('panou', 'N', 'Panou șantier');
   const ready = (site ? f.panouR : f.panouR) && f.santierR;
   box.innerHTML = `<div class="qc-site">${site ? `<b>${esc(site.name)}</b>` : '<b>Șantier nou</b>'}</div>
     <div class="qc-tiles">${panelTile}${tile('santier', 'Na', 'Stadiu șantier')}</div>
@@ -1917,13 +1930,17 @@ function qcRender() {
 }
 async function qcLoadPanel(f) {
   const s = S.sites.get(f.siteId); if (!s) return;
+  let b = null;
   try {
     const url = s.panouA ? '_blob/' + s.panouA : (s.poze && s.poze[0]) ? await panelPhoto(s.poze[0].f) : null;
-    if (!url) return;
-    const b = await (await fetch(url)).blob();
-    if (QC.f !== f) return;
-    f.panou = b; f.panouUrl = URL.createObjectURL(b); f.panouR = { blob: b }; qcRender();
+    if (url) { const r = await fetch(url); if (r.ok) b = await r.blob(); }
   } catch (e) {}
+  // a site a colleague added: its panel is shared through the cloud
+  if (!b || b.size < 100) { b = null; try { const key = await CLOUD.k(); const r = key && await fetch(CLOUD.url + '/f/' + encodeURIComponent(s.id) + '/p.jpg', { headers: { 'x-key': key } }); if (r && r.ok) b = await r.blob(); } catch (e) {} }
+  if (QC.f !== f) return;
+  if (b && b.size >= 100) { f.panou = b; f.panouUrl = URL.createObjectURL(b); f.panouR = { blob: b }; }
+  else f.panouR = { blob: null, missing: true };   // no panel on this phone: the stage photo can still be saved; the original panel comes from iCloud in the evening
+  qcRender();
 }
 function qcOpen(o) {
   const f = QC.f = { siteId: o.siteId || null, id: o.siteId ? null : uid('n') };
@@ -1937,7 +1954,7 @@ function qcOpen(o) {
     if (!!gpsFresh() !== !!$('.qc-gps.ok')) qcRender();
   }, 2000);
 }
-function qcClose() { $('#qc').hidden = true; QC.f = null; clearInterval(QC.timer); if (S.navOn) navShow(false); else refresh(); }
+function qcClose() { const f0 = QC.f; if (f0) for (const k of ['panouUrl', 'santierUrl']) if (f0[k]) setTimeout(() => URL.revokeObjectURL(f0[k]), 1000); $('#qc').hidden = true; QC.f = null; clearInterval(QC.timer); if (S.navOn) navShow(false); else refresh(); }
 $('#navNew').addEventListener('click', () => qcOpen({ isNew: true }));
 async function toJpeg(file) {
   if (file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name || '')) return file;
@@ -1975,7 +1992,8 @@ $('#qc').addEventListener('click', async e => {
     e.target.disabled = true;
     const sid = site ? site.id : f.id;
     const pName = site ? 'P_' + (panelStamp(site) || 'X') + '.jpg' : 'PN_' + sid + '.jpg';
-    const files = [new File([f.panouR.blob], pName, { type: 'image/jpeg' }), new File([f.santierR.blob], 'S_' + sid + '.jpg', { type: 'image/jpeg' })];
+    const pBlob = f.panouR.blob || f.santierR.blob;   // missing panel (colleague's site, not on this phone): placeholder, the shortcut takes the original from _Panouri
+    const files = [new File([pBlob], pName, { type: 'image/jpeg' }), new File([f.santierR.blob], 'S_' + sid + '.jpg', { type: 'image/jpeg' })];
     const k = uid('o');
     e.target.textContent = 'Se salvează…'; f.saving = true;
     let saved = false;
@@ -1988,7 +2006,7 @@ $('#qc').addEventListener('click', async e => {
         const visit = { d, poze: [aid], t: Date.now(), gps: g ? [+g.lat.toFixed(6), +g.lng.toFixed(6)] : null };
         if (snap.exists) await ref.update({ v: { [vid]: visit } }); else await ref.set({ v: { [vid]: visit } });
         await patchSite(site.id, { ultima: d, ultimaApp: d, inactiv: false });
-        const [pa] = site.panouA ? [site.panouA] : await uploadFiles([f.panouR.blob], null, true);
+        const [pa] = site.panouA ? [site.panouA] : f.panouR.blob ? await uploadFiles([f.panouR.blob], null, true) : [aid];
         await OB.add(k, { siteId: site.id, siteName: cityDir(site.lat, site.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: site.name, nou: 0, stamp: site.id, t: Date.now(), p: pa, s: aid, lat: g && g.lat, lng: g && g.lng }, files);
       } else {
         const gp = f.panouR.gps || g;
@@ -2002,6 +2020,7 @@ $('#qc').addEventListener('click', async e => {
     if (QC.f === f) qcClose();
     toast('✓ Salvat' + (site ? ' · ' + site.name : ''));
     OB.pump([k]);   // photos go up in the background
+    if (!site) CLOUD.sharePanel(sid, f.panouR.blob);   // colleagues can see / use the panel of this new site
   }
 });
 /* ---------- Cloud: photos go up automatically, site states are shared in real time ---------- */
@@ -2022,6 +2041,13 @@ const CLOUD = {
     return r.json();
   },
   // push one change of a site's state (updated / finished / new site) to everybody
+  // the panel of a new site, kept in the cloud (30 days) so other phones can show it and update the site
+  // changes that could not be sent yet survive a restart of the app
+  savePS() { try { if (CLOUD.pendingState && Object.keys(CLOUD.pendingState).length) localStorage.setItem('harta_ps', JSON.stringify(CLOUD.pendingState)); else localStorage.removeItem('harta_ps'); } catch (e) {} },
+  async sharePanel(sid, blob, n = 0) {
+    try { await CLOUD.req('/f/' + encodeURIComponent(sid) + '/p.jpg', { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: blob }); }
+    catch (e) { if (n < 5) setTimeout(() => CLOUD.sharePanel(sid, blob, n + 1), 30000 * (n + 1)); }
+  },
   async push(sid, extra, cur) {
     const s = cur || S.sites.get(sid) || {}; if (!cur && !S.sites.get(sid) && !(extra && extra.site)) return;
     const u = Date.now(); CLOUD.stateU[sid] = u;
@@ -2034,12 +2060,12 @@ const CLOUD = {
     Object.assign(v, extra || {});
     try { localStorage.setItem('harta_stateU', JSON.stringify(CLOUD.stateU)); } catch (e) {}
     try { await CLOUD.req('/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [sid]: v }) }); }
-    catch (e) { CLOUD.pendingState = Object.assign(CLOUD.pendingState || {}, { [sid]: v }); }
+    catch (e) { CLOUD.pendingState = Object.assign(CLOUD.pendingState || {}, { [sid]: v }); CLOUD.savePS(); }
   },
   async pull() {
     if (!db || !S.loaded) return;
     try {
-      if (CLOUD.pendingState) { const ps = CLOUD.pendingState; CLOUD.pendingState = null; await CLOUD.req('/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ps) }).catch(() => { CLOUD.pendingState = Object.assign(ps, CLOUD.pendingState || {}); }); }
+      if (CLOUD.pendingState) { const ps = CLOUD.pendingState; CLOUD.pendingState = null; await CLOUD.req('/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ps) }).then(() => CLOUD.savePS()).catch(() => { CLOUD.pendingState = Object.assign(ps, CLOUD.pendingState || {}); CLOUD.savePS(); }); }
       const st = await CLOUD.req('/state');
       let changed = 0; const skipped = [];
       for (const [sid, v] of Object.entries(st)) {
@@ -2080,6 +2106,7 @@ const CLOUD = {
     try { window.PWA_me = JSON.parse(localStorage.getItem('harta_me') || 'null'); } catch (e) {}
     CLOUD.req('/me').then(me => { window.PWA_me = me; try { localStorage.setItem('harta_me', JSON.stringify(me)); } catch (e) {} const go = () => ACT.loaded ? ACT.mergeServer() : setTimeout(go, 1000); go(); }).catch(() => {});
     try { CLOUD.stateU = JSON.parse(localStorage.getItem('harta_stateU') || '{}'); } catch (e) {}
+    try { const ps = JSON.parse(localStorage.getItem('harta_ps') || 'null'); if (ps) CLOUD.pendingState = Object.assign(ps, CLOUD.pendingState || {}); } catch (e) {}
     CLOUD.pull(); OB.pump();
     // sites deleted on this phone before deletions were shared: tell the others once
     if (!isOp()) setTimeout(async () => {
@@ -2268,7 +2295,7 @@ function onGeoPos(p) {
     if (S.navOn) mk.classList.add('nav');
     S.meMarker = new maplibregl.Marker({ element: mk, rotationAlignment: 'map' }).setLngLat([c.longitude, c.latitude]).addTo(map);
   }
-  S.meMarker.setLngLat([c.longitude, c.latitude]);
+  if (!S.navOn) S.meMarker.setLngLat([c.longitude, c.latitude]);   // while navigating the arrow glides (see navGps)
   const el = S.meMarker.getElement();
   const acc = el.querySelector('.me-acc'); if (acc) { const px = Math.min(300, c.accuracy / (156543.03 * Math.cos(c.latitude * Math.PI / 180) / Math.pow(2, map.getZoom()))); acc.style.width = acc.style.height = Math.max(22, 2 * px) + 'px'; }
   const cone = el.querySelector('.me-cone');
@@ -2295,6 +2322,11 @@ function locateNow() {
     startGeoWatch();
   }, e => onGeoErr(e, true), { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
 }
+// during navigation: if the phone stops sending positions for 20 s, restart the GPS watch
+setInterval(() => { if (S.navOn && document.visibilityState === 'visible' && (!S.me || Date.now() - (S.me.t || 0) > 20000)) startGeoWatch(); }, 10000);
+// an unexpected error must never stop the app: log it and carry on
+window.addEventListener('error', e => { try { console.error('[harta]', e.message); } catch (x) {} });
+window.addEventListener('unhandledrejection', e => { try { console.error('[harta]', e.reason && (e.reason.message || e.reason)); } catch (x) {} });
 function startGeoWatch() {
   if (S.geoWatch != null) { try { navigator.geolocation.clearWatch(S.geoWatch); } catch (e) {} }
   try { S.geoWatch = navigator.geolocation.watchPosition(onGeoPos, e => onGeoErr(e, false), { enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 }); } catch (e) {}
@@ -2533,14 +2565,16 @@ function navStart() {
   S.navTot = S.nav.legs.reduce((a, l) => a + l.dist, 0);
   closeSheet(); $('#nav').hidden = false; $('.top').hidden = true; $('.fab-col').hidden = true; $('.tabs').hidden = true;
   if (S.meMarker) S.meMarker.getElement().classList.add('nav');
+  try { localStorage.setItem('harta_nav', String(Date.now())); } catch (e) {}
   try { map.setLayoutProperty('route-start', 'visibility', 'none'); } catch (e) {}
   if (S.voice && 'speechSynthesis' in window) { try { speechSynthesis.getVoices(); } catch (e) {} }
-  S.navTrack = { off: 0, lastReroute: 0 }; S.navGpsFollow = false; S.navSpd = null; S.navDz = null;
+  S.navTrack = { off: 0, lastReroute: 0 }; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navBrg = null; S.navLastFix = 0;
   navShow(true);
   if (S.me && Date.now() - (S.me.t || 0) < 30000) navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc });
   else if (typeof locateNow === 'function' && S.geoErr != null) locateNow();
 }
 function navStop() {
+  try { localStorage.removeItem('harta_nav'); } catch (e) {}
   clearTimeout(S.navFreeT); S.navFree = false; { const rb = $('#navRecenter'); if (rb) rb.hidden = true; }
   S.navOn = false; $('#nav').hidden = true; if (S.meMarker) { S.meMarker.getElement().classList.remove('nav'); S.meMarker.setRotation(0); } try { map.setLayoutProperty('route-start', 'visibility', 'visible'); } catch (e) {} $('.top').hidden = false; $('.fab-col').hidden = false; $('.tabs').hidden = false;
   if (S.navWatch != null) { try { navigator.geolocation.clearWatch(S.navWatch); } catch (e) {} S.navWatch = null; }
@@ -2642,10 +2676,24 @@ async function navReroute() {
     navShow(false); navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }, true);
   } catch (e) { } finally { tr.busy = false; }
 }
+// one GPS fix → the arrow and the camera glide to it in the time until the next fix (no stop-and-go)
+function navGlide(to, dur) {
+  if (!S.meMarker) return;
+  cancelAnimationFrame(S.mkRaf);
+  const from = S.meMarker.getLngLat(); const t0 = performance.now();
+  if (Math.abs(from.lat - to[1]) + Math.abs(from.lng - to[0]) > 0.003) { S.meMarker.setLngLat(to); return; }   // big jump: no animation
+  const step = now => { const k = Math.min(1, (now - t0) / dur); S.meMarker.setLngLat([from.lng + (to[0] - from.lng) * k, from.lat + (to[1] - from.lat) * k]); if (k < 1) S.mkRaf = requestAnimationFrame(step); };
+  S.mkRaf = requestAnimationFrame(step);
+}
 function navGps(c, quiet) {
+  try { navGpsInner(c, quiet); } catch (e) { try { console.error('[nav]', e); } catch (x) {} }   // one bad fix must not stop the guidance
+}
+function navGpsInner(c, quiet) {
   if (!S.navOn || !S.nav) return;
   S.me = Object.assign(S.me || {}, { lat: c.latitude, lng: c.longitude });
-  if (S.meMarker) S.meMarker.setLngLat([c.longitude, c.latitude]);
+  const nowT = Date.now(); const dur = Math.max(250, Math.min(1100, (nowT - (S.navLastFix || nowT - 1000)) * 0.95)); S.navLastFix = nowT;
+  if (!quiet || !S.mkRaf) navGlide([c.longitude, c.latitude], quiet ? 300 : dur);
+  if (nowT - (S.navSaved || 0) > 60000) { S.navSaved = nowT; try { localStorage.setItem('harta_nav', String(nowT)); } catch (e) {} }
   const tr = S.navTrack || (S.navTrack = { off: 0, lastReroute: 0 });
   const items = navItems(); const it = items[S.navPos]; if (!it) return;
   const L = legGeom(S.nav.legs[it.leg]);
@@ -2687,10 +2735,13 @@ function navGps(c, quiet) {
   let brg = map ? map.getBearing() : 0;
   if (c.heading != null && !isNaN(c.heading) && (c.speed == null || c.speed > 1.5)) brg = c.heading;
   else if (pr.d <= limit) { const i2 = Math.min(L.coords.length - 1, pr.i + 1); brg = bearingTo(L.coords[pr.i], L.coords[i2]); }
+  // steady direction: ignore tiny wobbles, soften the rest
+  if (S.navBrg != null) { const d = ((brg - S.navBrg + 540) % 360) - 180; brg = Math.abs(d) < 3 ? S.navBrg : S.navBrg + d * 0.6; }
+  brg = (brg + 360) % 360; S.navBrg = brg;
   if (S.meMarker) S.meMarker.setRotation(brg);
   if (map && !S.navFree) {
     const top = $('#navTopBox').getBoundingClientRect().height + 20, bot = $('#navBot').getBoundingClientRect().height + 20;
-    map.easeTo({ center: [c.longitude, c.latitude], bearing: brg, zoom: navSpeedZoom(c), pitch: 50, padding: navPad(top, bot, 120), duration: 900 });
+    map.easeTo({ center: [c.longitude, c.latitude], bearing: brg, zoom: navSpeedZoom(c), pitch: 50, padding: navPad(top, bot, 120), duration: quiet ? 400 : dur, easing: t => t });
   }
 }
 
@@ -2743,6 +2794,21 @@ function navProg(leg, remD) {
   $('#npPct').textContent = pct + '%';
   box.setAttribute('aria-label', 'Progres traseu: ' + Math.min(leg, n) + ' din ' + n + ' șantiere, ' + pct + '%');
 }
+
+/* ---------- if iOS reloaded the app while navigating (it does that after a while in the background), pick up where we were ---------- */
+(() => {
+  let t = 0; try { t = +localStorage.getItem('harta_nav') || 0; } catch (e) {}
+  if (!t || Date.now() - t > 3 * 3600e3) return;
+  let n = 0;
+  const tryResume = () => {
+    if (S.navOn) return;
+    const pend = S.route && S.route.stops.some(id => !S.route.done.includes(id));
+    if (S.loaded && S.me && pend && S.sites.size) {
+      computeRoute(false).then(() => { if (navValid() && !S.navOn) { navStart(); toast('Am reluat navigarea'); } }).catch(() => {});
+    } else if (++n < 45) setTimeout(tryResume, 1000);
+  };
+  setTimeout(tryResume, 1500);
+})();
 
 /* ============ Activity: sites checked, km driven, time in the field (recorded on this phone) ============ */
 const ACT = {
