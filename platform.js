@@ -48,7 +48,15 @@
   // admin: the password opens the data directly. operator: the password opens a copy of the data key kept on the server
   async function tryPass(pass) {
     let key = null;
-    try { key = await checkKey(await deriveKey(pass)); window.PWA_role = 'admin'; return key; } catch (e) {}
+    // admin: the password opens the admin copy of the data key (data/admin.json); the old direct password is retired
+    try {
+      const a = await fetch('data/admin.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null);
+      if (a) {
+        const raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(a.iv) }, await deriveKey(pass), b64d(a.ct));
+        key = await checkKey(await crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, true, ['decrypt', 'encrypt']));
+        window.PWA_role = 'admin'; return key;
+      }
+    } catch (e) {}
     try {
       const sid = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('slot|' + pass)));
       let slot = null;
