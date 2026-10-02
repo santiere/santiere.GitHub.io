@@ -818,6 +818,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const CYCLE = 30;      // a site comes back as "De actualizat" 30 days after its last photo
 const C2_DAYS = 80;    // the second client gets a site again at least 80 days after the last photo sent to him
+const STOP_S = 60;       // time spent at a site: about one minute (two photos)
 const FORCED = '1970-01-01';   // "De actualizat" set by hand by the admin, whatever the dates say
 const STADII = ['Organizare de șantier', 'Săpătură / fundații', 'Structură', 'Închideri / acoperiș', 'Finisaje / instalații', 'Finalizat'];
 const pad = n => String(n).padStart(2, '0');
@@ -1063,11 +1064,9 @@ function addSiteLayers() {
   add({ id: 'route-case', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']], ['!', ['has', 'turn']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#5A3B00', 'line-opacity': ['case', ['==', ['get', 'pass'], 1], 0.07, ['==', ['get', 'dim'], 1], 0.1, 0.9], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 9, 18, 18] } });
   // navigation: only the road to the next stop is in full colour; the rest of the route (driven or still to come) is faded to about a third
   add({ id: 'route-line', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']], ['!', ['has', 'turn']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': C.amber, 'line-opacity': ['case', ['==', ['get', 'pass'], 1], 0.25, ['==', ['get', 'dim'], 1], 0.35, 1], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 14, 6, 18, 13] } });
-  // the next turn: a white band with a row of arrows along it
-  if (!map.hasImage('chev')) { const cv = document.createElement('canvas'); cv.width = cv.height = 48; const x = cv.getContext('2d'); x.lineWidth = 9; x.lineCap = 'round'; x.lineJoin = 'round'; x.strokeStyle = '#0B57D0'; x.beginPath(); x.moveTo(15, 9); x.lineTo(33, 24); x.lineTo(15, 39); x.stroke(); map.addImage('chev', x.getImageData(0, 0, 48, 48), { pixelRatio: 2 }); }
-  add({ id: 'route-turn-case', type: 'line', source: 'route', filter: ['==', ['get', 'turn'], 1], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#0B57D0', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 11, 16, 16, 19, 24] } });
-  add({ id: 'route-turn', type: 'line', source: 'route', filter: ['==', ['get', 'turn'], 1], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#FFFFFF', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 8, 16, 12.5, 19, 19] } });
-  add({ id: 'route-turn-arr', type: 'symbol', source: 'route', filter: ['==', ['get', 'turn'], 1], layout: { 'symbol-placement': 'line', 'symbol-spacing': ['interpolate', ['linear'], ['zoom'], 12, 15, 17, 20], 'icon-image': 'chev', 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.5, 16, 0.72, 19, 1], 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-rotation-alignment': 'map', 'icon-padding': 0 } });
+  // the next turn: a row of white arrows drawn on the route line itself (the line stays whole)
+  if (!map.hasImage('chev2')) { const cv = document.createElement('canvas'); cv.width = cv.height = 48; const x = cv.getContext('2d'); x.lineCap = 'round'; x.lineJoin = 'round'; const ch = () => { x.beginPath(); x.moveTo(16, 10); x.lineTo(32, 24); x.lineTo(16, 38); x.stroke(); }; x.lineWidth = 13; x.strokeStyle = '#4A2F00'; ch(); x.lineWidth = 7.5; x.strokeStyle = '#FFFFFF'; ch(); map.addImage('chev2', x.getImageData(0, 0, 48, 48), { pixelRatio: 2 }); }
+  add({ id: 'route-turn-arr', type: 'symbol', source: 'route', filter: ['==', ['get', 'turn'], 1], layout: { 'symbol-placement': 'line', 'symbol-spacing': ['interpolate', ['linear'], ['zoom'], 12, 13, 17, 18], 'icon-image': 'chev2', 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.42, 16, 0.6, 19, 0.85], 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-rotation-alignment': 'map', 'icon-padding': 0 } });
   add({ id: 'route-start', type: 'circle', source: 'route', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 7, 'circle-color': C.ink, 'circle-stroke-color': C.surface, 'circle-stroke-width': 2.5 } });
   add({ id: 'sites-hit', type: 'circle', source: 'sites', paint: { 'circle-radius': 17, 'circle-opacity': 0 } });
   add({ id: 'sites-selring', type: 'circle', source: 'sites', filter: ['==', ['get', 'sel'], 1], paint: {
@@ -1428,7 +1427,7 @@ function viewList() {
 function routeStats(stops) {
   let km = 0; let prev = S.me || null;
   for (const s of stops) { if (prev) km += hav(prev, s); prev = s; }
-  const road = km * 1.35; const min = road / 24 * 60 + stops.length * 7;
+  const road = km * 1.35; const min = road / 24 * 60 + stops.length * STOP_S / 60;
   return { road, min };
 }
 function gLegs(stops, start) {
@@ -2749,7 +2748,7 @@ function turnArrow() {
   const leg = S.nav.legs[it.leg]; if (!leg || !leg.steps) return null;
   const L = legGeom(leg), c = L.coords, at = L.cum[L.stepAt[it.j]]; if (at == null) return null;
   const mpp = map ? 78271.5 * Math.cos(c[L.stepAt[it.j]][1] * Math.PI / 180) / Math.pow(2, map.getZoom()) : 1;
-  const a = Math.max(0, at - Math.min(160, Math.max(30, 40 * mpp))), b = Math.min(L.cum[c.length - 1], at + Math.min(300, Math.max(it.s.type === 'roundabout' ? 80 : 45, 85 * mpp)));
+  const a = Math.max(0, at - Math.min(160, Math.max(22, 40 * mpp))), b = Math.min(L.cum[c.length - 1], at + Math.min(300, Math.max(it.s.type === 'roundabout' ? 70 : 32, 80 * mpp)));
   if (b - a < 15) return null;
   const at_ = d => { let i = 1; while (i < c.length - 1 && L.cum[i] < d) i++; const s = L.cum[i] - L.cum[i - 1], t = s ? (d - L.cum[i - 1]) / s : 0; return [c[i - 1][0] + (c[i][0] - c[i - 1][0]) * t, c[i - 1][1] + (c[i][1] - c[i - 1][1]) * t]; };
   const out = [at_(a)];
@@ -2776,7 +2775,7 @@ function routeSection() {
   <div class="sub" id="routeMsg" style="margin-top:6px">${esc(S.routeMsg || '')}</div>`;
   if (ok) {
     const t = S.nav.total;
-    html += `<div class="stats"><div class="stat"><b class="num">${(t.dist / 1000).toFixed(1).replace('.', ',')}</b><span>km de parcurs</span></div><div class="stat"><b class="num">${fmtTime(t.time)}</b><span>${S.mode === 'car' ? 'de condus' : 'cu scuterul'}</span></div><div class="stat"><b class="num">${fmtTime(t.time + pending.length * 420)}</b><span>cu 7 min/oprire</span></div></div>
+    html += `<div class="stats"><div class="stat"><b class="num">${(t.dist / 1000).toFixed(1).replace('.', ',')}</b><span>km de parcurs</span></div><div class="stat"><b class="num">${fmtTime(t.time)}</b><span>${S.mode === 'car' ? 'de condus' : 'cu scuterul'}</span></div><div class="stat"><b class="num">${fmtTime(t.time + pending.length * STOP_S)}</b><span>cu 1 min/oprire</span></div></div>
     <button class="btn primary" style="width:100%;height:50px;font-size:16px" data-act="navStart">▶ Pornește navigarea</button>`;
   } else if (pending.length && !S.routeMsg) {
     html += `<div class="note" style="margin-top:8px">Se calculează cel mai rapid traseu…</div>`;
@@ -2861,7 +2860,7 @@ function navShow(say) {
   // remaining time/distance (legs ahead + remaining part of the current leg, proportional by distance)
   const L = S.nav.legs[it.leg]; let doneInLeg = 0; for (const x of L.steps) { if (x === it.s) break; doneInLeg += x.dist; }
   const fr = L.dist ? Math.max(0, 1 - doneInLeg / L.dist) : 0;
-  let remT = L.time * fr, remD = L.dist * fr; for (let k = it.leg + 1; k < S.nav.legs.length; k++) { remT += S.nav.legs[k].time; remD += S.nav.legs[k].dist; }
+  let remT = L.time * fr, remD = L.dist * fr; for (let k = it.leg + 1; k < S.nav.legs.length; k++) { remT += S.nav.legs[k].time + STOP_S; remD += S.nav.legs[k].dist; }
   const eta = new Date(Date.now() + remT * 1000);
   $('#navEta').textContent = 'Sosire ' + pad(eta.getHours()) + ':' + pad(eta.getMinutes()) + ' · ' + fmtDist(remD) + ' · ' + fmtTime(remT);
   navProg(it.leg, remD);
@@ -2997,7 +2996,7 @@ function navGpsInner(c, quiet) {
   // remaining time and distance from the real position
   const legLeft = Math.max(0, L.dist - (pr.d <= limit ? pr.pos : 0));
   let remD = legLeft, remT = L.dist ? L.time * legLeft / L.dist : 0;
-  for (let k = cur.leg + 1; k < S.nav.legs.length; k++) { remD += S.nav.legs[k].dist; remT += S.nav.legs[k].time; }
+  for (let k = cur.leg + 1; k < S.nav.legs.length; k++) { remD += S.nav.legs[k].dist; remT += S.nav.legs[k].time + STOP_S; }
   const eta = new Date(Date.now() + remT * 1000);
   $('#navEta').textContent = 'Sosire ' + pad(eta.getHours()) + ':' + pad(eta.getMinutes()) + ' · ' + fmtDist(remD) + ' · ' + fmtTime(remT);
   navProg(cur.leg, remD);
