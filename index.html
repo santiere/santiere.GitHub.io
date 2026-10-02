@@ -285,6 +285,17 @@ ol.steps .mi{flex:none;color:var(--ink)}
   .qc-big{height:46px;margin-top:8px}
   .geohelp{align-items:center}.geohelp-card{max-height:96%;overflow-y:auto}
 }
+/* the sign with the next maneuver: under the top bar, on the left */
+.nav-sign{--nav-bg:#1557B8;order:2;align-self:flex-start;margin:10px 0 0 12px;display:flex;align-items:center;gap:12px;background:#1557B8;color:#fff;border-radius:16px;padding:10px 16px 10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.32);max-width:min(74vw,300px);pointer-events:none}
+.ns-ic{flex:none;display:grid;place-items:center}
+.ns-t{display:flex;flex-direction:column;min-width:0}
+.ns-t b{font-family:var(--f-display);font-size:28px;font-weight:700;line-height:1}
+.ns-t span{font-size:14.5px;font-weight:600;line-height:1.2;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.nav-bot{order:1}
+@media (orientation: landscape) and (max-height: 600px) {
+  .nav-sign{margin:6px 0 0 8px;padding:6px 12px 6px 8px;border-radius:12px;gap:8px;max-width:min(300px,40vw)}
+  .nav-sign .mi{width:44px;height:44px}.ns-t b{font-size:21px}.ns-t span{font-size:12.5px;margin-top:2px}
+}
 /* navigation: map only, no turn-by-turn text on screen */
 .nav-topbox{display:none!important}
 .nav{justify-content:flex-start}
@@ -450,6 +461,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
       <button class="nav-new" id="navNew" aria-label="Șantier nou"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Șantier<br>nou</span></button>
     </div>
     <div class="nav-prog" id="navProg" role="progressbar" aria-label="Progres traseu"><div class="np-txt"><b class="num" id="npStops">0/0</b><span class="num" id="npPct">0%</span></div><div class="np-track"><div class="np-fill" id="npFill"></div></div></div>
+    <div class="nav-sign" id="navSign" hidden><div class="ns-ic" id="nsIc"></div><div class="ns-t"><b class="num" id="nsDist"></b><span id="nsTxt"></span></div></div>
     <div class="nav-bot" id="navBot">
       <div class="row sp" style="gap:10px"><div class="grow"><div class="nav-eta num" id="navEta"></div><div class="sub" id="navSub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div></div><button class="btn sm exit" id="navExit">✕ Ieși</button></div>
       <div class="btns" id="navMove" style="margin-top:10px"><button class="btn" id="navPrev" aria-label="Indicația anterioară">◀</button><button class="btn primary" id="navNext">Următorul ▶</button></div>
@@ -1064,9 +1076,6 @@ function addSiteLayers() {
   add({ id: 'route-case', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']], ['!', ['has', 'turn']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#5A3B00', 'line-opacity': ['case', ['==', ['get', 'pass'], 1], 0.07, ['==', ['get', 'dim'], 1], 0.1, 0.9], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 9, 18, 18] } });
   // navigation: only the road to the next stop is in full colour; the rest of the route (driven or still to come) is faded to about a third
   add({ id: 'route-line', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']], ['!', ['has', 'turn']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': C.amber, 'line-opacity': ['case', ['==', ['get', 'pass'], 1], 0.25, ['==', ['get', 'dim'], 1], 0.35, 1], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 14, 6, 18, 13] } });
-  // the next turn: a row of white arrows drawn on the route line itself (the line stays whole)
-  if (!map.hasImage('chev2')) { const cv = document.createElement('canvas'); cv.width = cv.height = 48; const x = cv.getContext('2d'); x.lineCap = 'round'; x.lineJoin = 'round'; const ch = () => { x.beginPath(); x.moveTo(16, 10); x.lineTo(32, 24); x.lineTo(16, 38); x.stroke(); }; x.lineWidth = 13; x.strokeStyle = '#4A2F00'; ch(); x.lineWidth = 7.5; x.strokeStyle = '#FFFFFF'; ch(); map.addImage('chev2', x.getImageData(0, 0, 48, 48), { pixelRatio: 2 }); }
-  add({ id: 'route-turn-arr', type: 'symbol', source: 'route', filter: ['==', ['get', 'turn'], 1], layout: { 'symbol-placement': 'line', 'symbol-spacing': ['interpolate', ['linear'], ['zoom'], 12, 13, 17, 18], 'icon-image': 'chev2', 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.42, 16, 0.6, 19, 0.85], 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-rotation-alignment': 'map', 'icon-padding': 0 } });
   add({ id: 'route-start', type: 'circle', source: 'route', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 7, 'circle-color': C.ink, 'circle-stroke-color': C.surface, 'circle-stroke-width': 2.5 } });
   add({ id: 'sites-hit', type: 'circle', source: 'sites', paint: { 'circle-radius': 17, 'circle-opacity': 0 } });
   add({ id: 'sites-selring', type: 'circle', source: 'sites', filter: ['==', ['get', 'sel'], 1], paint: {
@@ -2719,7 +2728,7 @@ function routeFeatures() {
   if (navValid()) {
     let cur = S.navOn ? navItem().leg : -1; const pj = S.navProj;
     // arrived and the site is already updated: the road to the next stop becomes the full-colour one at once
-    if (S.navOn) { const it = navItem(), to = S.sites.get(S.nav.legs[it.leg].to); if (it.s && it.s.type === 'arrive' && to && status(to) !== 'due' && it.leg + 1 < S.nav.legs.length) cur = it.leg + 1; }
+    if (S.navOn) { const it = navItem(), t0 = S.sites.get(S.nav.legs[it.leg].to), to = t0 && Object.assign({}, t0, S.pend[t0.id] || {}); if (it.s && it.s.type === 'arrive' && to && status(to) !== 'due' && it.leg + 1 < S.nav.legs.length) cur = it.leg + 1; }
     S.nav.legs.forEach((l, k) => {
       const line = (coords, props) => coords.length > 1 && rf.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: Object.assign({ leg: k }, props) });
       if (!S.navOn) return line(l.coords, {});
@@ -2736,27 +2745,10 @@ function routeFeatures() {
     const coords = (S.me ? [S.me] : []).concat(pts).map(p => [p.lng, p.lat]);
     if (coords.length > 1) rf.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { straight: 1 } });
   }
-  const ta = navValid() && S.navOn ? turnArrow() : null;
-  if (ta) rf.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: ta }, properties: { turn: 1 } });
   const st = S.me;
   if (st) rf.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [st.lng, st.lat] }, properties: {} });
   return rf;
 }
-// the piece of the route around the next maneuver, drawn as a row of arrows; long enough to be seen at any zoom (about 40 px before the turn, 85 px after)
-function turnArrow() {
-  const it = navItem(); if (!it || !it.s || (it.s.type !== 'turn' && it.s.type !== 'roundabout')) return null;
-  const leg = S.nav.legs[it.leg]; if (!leg || !leg.steps) return null;
-  const L = legGeom(leg), c = L.coords, at = L.cum[L.stepAt[it.j]]; if (at == null) return null;
-  const mpp = map ? 78271.5 * Math.cos(c[L.stepAt[it.j]][1] * Math.PI / 180) / Math.pow(2, map.getZoom()) : 1;
-  const a = Math.max(0, at - Math.min(160, Math.max(22, 40 * mpp))), b = Math.min(L.cum[c.length - 1], at + Math.min(300, Math.max(it.s.type === 'roundabout' ? 70 : 32, 80 * mpp)));
-  if (b - a < 15) return null;
-  const at_ = d => { let i = 1; while (i < c.length - 1 && L.cum[i] < d) i++; const s = L.cum[i] - L.cum[i - 1], t = s ? (d - L.cum[i - 1]) / s : 0; return [c[i - 1][0] + (c[i][0] - c[i - 1][0]) * t, c[i - 1][1] + (c[i][1] - c[i - 1][1]) * t]; };
-  const out = [at_(a)];
-  for (let i = 0; i < c.length; i++) if (L.cum[i] > a && L.cum[i] < b) out.push(c[i]);
-  out.push(at_(b));
-  return out;
-}
-
 function autoRoute(n) {
   if (!map) return;
   const c = map.getCenter(); const ctr = { lat: c.lat, lng: c.lng };
@@ -2846,6 +2838,19 @@ function navStop() {
   if (map) map.easeTo({ pitch: 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 500 });
   updateMap(); go('route');
 }
+// the sign with the next maneuver (arrow, distance left, what to do), like the board in Waze
+function navSign(it, d) {
+  const el = $('#navSign'); if (!el) return;
+  if (!it || !it.s) { el.hidden = true; return; }
+  el.hidden = false;
+  const site = S.sites.get(S.nav.legs[it.leg].to);
+  const key = S.navPos + '|' + it.leg + '|' + it.j;
+  if (el.dataset.k !== key) {
+    el.dataset.k = key; $('#nsIc').innerHTML = maneuverIcon(it.s, 58);
+    $('#nsTxt').textContent = it.s.type === 'arrive' ? 'Oprirea ' + (it.leg + 1) + (site ? ' · ' + site.name : '') + (it.s.side ? ' (pe ' + it.s.side + ')' : '') : Router.text(it.s);
+  }
+  $('#nsDist').textContent = it.s.type === 'depart' ? 'Start' : fmtDist(Math.max(0, d || 0));
+}
 function navShow(say) {
   const items = navItems(); const it = items[S.navPos]; if (!it) return;
   const prev = items[S.navPos - 1];
@@ -2853,6 +2858,7 @@ function navShow(say) {
   const site = S.sites.get(S.nav.legs[it.leg].to);
   $('#navIc').innerHTML = maneuverIcon(it.s, 52);
   $('#navDist').textContent = it.s.type === 'depart' ? 'Start' : fmtDist(dist);
+  navSign(it, dist);
   $('#navTxt').textContent = it.s.type === 'arrive' ? 'Ai ajuns: ' + (site ? site.name : '') + (it.s.side ? ' (pe ' + it.s.side + ')' : '') : Router.text(it.s);
   const nx = items[S.navPos + 1];
   $('#navThen').hidden = !nx || it.s.type === 'arrive';
@@ -2986,6 +2992,7 @@ function navGpsInner(c, quiet) {
   const cur = items[S.navPos];
   const toMan = Math.max(0, (pr.d <= limit ? L.cum[L.stepAt[cur.j]] - pr.pos : Router.hav([c.latitude, c.longitude], cur.s.loc)));
   $('#navDist').textContent = cur.s.type === 'depart' ? 'Start' : fmtDist(toMan);
+  navSign(cur, toMan);
   // voice: early warning, then at the turn
   if (!S.navAnn) S.navAnn = {};
   const key = S.navPos;
