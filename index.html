@@ -123,7 +123,9 @@ h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:42px;padding:0 14px;border-radius:11px;border:1px solid var(--line);background:var(--surface);font-weight:600;font-size:14.5px;text-decoration:none;color:var(--ink);white-space:nowrap}
 .btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 .btn.amber{background:var(--amber);color:var(--amber-ink);border-color:var(--amber)}
-.btn.ghost{border-color:transparent;background:var(--surface-2)}
+.btn.ghost{border-color:var(--line);background:var(--surface-2)}
+.btn.exit{background:var(--danger);border-color:var(--danger);color:#fff;font-weight:700;padding:0 14px;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.btn.act{border:1.5px solid var(--ink);background:var(--surface);font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .btn.danger{color:var(--danger)}
 .btn.sm{height:34px;padding:0 10px;font-size:13.5px;border-radius:9px}
 .btn:disabled{opacity:.5}
@@ -149,6 +151,7 @@ h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
 /* photos strip */
 .strip{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;scroll-snap-type:x mandatory}
 .ph{flex:none;width:118px;scroll-snap-align:start;border:0;padding:0;background:none;text-align:left}
+.ph-split{display:flex;gap:10px;align-items:flex-start}.ph-pan{flex:none;padding-right:10px;border-right:1px solid var(--line)}.ph-split .strip{min-width:0}
 .ph .img{display:block;width:118px;height:156px;border-radius:10px;background:var(--surface-2) center/cover no-repeat;border:1px solid var(--line)}
 .ph .cap{font-size:12px;color:var(--muted);margin-top:4px}
 
@@ -324,6 +327,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
 }
 /* activity dashboard */
 .act-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.act-seg.mode-seg{grid-template-columns:1fr 1fr}
 .act-seg .state-opt{padding:9px 6px;min-height:0}.act-seg .state-opt.on b::before{content:none}
 .act-seg .state-opt.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface))}
 .act-per{margin:14px 0 8px;font-weight:700;font-size:15px;color:var(--muted)}
@@ -406,6 +410,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
     <button class="fab" id="btnHome" title="Toată harta" aria-label="Arată toate șantierele">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
     </button>
+    <button class="fab" id="btnNorth" title="Nordul în sus" aria-label="Pune nordul în sus" hidden><svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2.5 16 12H8z" fill="#D93025"/><path d="M12 21.5 8 12h8z" fill="currentColor" opacity=".45"/></svg></button>
     <button class="fab" id="btn3d" aria-pressed="false" title="Hartă 3D" aria-label="Hartă 3D" style="font-weight:700;font-size:15px">3D</button>
     <button class="fab" id="btnTheme" aria-pressed="false" title="Mod noapte" aria-label="Mod noapte"></button>
     <button class="fab" id="btnMe" title="Locația mea" aria-label="Locația mea">
@@ -446,7 +451,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
     </div>
     <div class="nav-prog" id="navProg" role="progressbar" aria-label="Progres traseu"><div class="np-txt"><b class="num" id="npStops">0/0</b><span class="num" id="npPct">0%</span></div><div class="np-track"><div class="np-fill" id="npFill"></div></div></div>
     <div class="nav-bot" id="navBot">
-      <div class="row sp" style="gap:10px"><div class="grow"><div class="nav-eta num" id="navEta"></div><div class="sub" id="navSub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div></div><button class="btn sm ghost" id="navExit">Ieși</button></div>
+      <div class="row sp" style="gap:10px"><div class="grow"><div class="nav-eta num" id="navEta"></div><div class="sub" id="navSub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div></div><button class="btn sm exit" id="navExit">✕ Ieși</button></div>
       <div class="btns" id="navMove" style="margin-top:10px"><button class="btn" id="navPrev" aria-label="Indicația anterioară">◀</button><button class="btn primary" id="navNext">Următorul ▶</button></div>
       <div class="btns" id="navArrive" hidden style="margin-top:10px"><button class="btn amber" id="navVisit">Adaugă stadiu</button><button class="btn primary" id="navNextLeg">Pornește spre următoarea</button></div>
     </div>
@@ -509,7 +514,21 @@ const Router = (() => {
     return out;
   }
   // car: drivable graph; bike / foot: the slow graph with its own travel times (65535 = not allowed)
-  function use(key, mode) { G = graphs[key]; T = mode === 'bike' ? G.timeB : G.time; TURN = mode === 'foot' ? 0.1 : mode === 'bike' ? 0.35 : 1; }
+  function use(key, mode) {
+    G = graphs[key];
+    if (mode === 'scooter') { if (!G.timeS) G.timeS = scooterTimes(G); T = G.timeS; TURN = 0.8; }
+    else { T = mode === 'bike' ? G.timeB : G.time; TURN = mode === 'foot' ? 0.1 : mode === 'bike' ? 0.35 : 1; }
+  }
+  // scooter: same streets and one-ways as cars, no motorways; slips through traffic (15% faster than cars) but never above 45 km/h
+  function scooterTimes(P) {
+    const n = P.time.length, out = new Uint16Array(n);
+    for (let a = 0; a < n; a++) {
+      if ((P.cls[a] & 15) === 1) { out[a] = 65535; continue; }
+      const L = P.len[a], t = P.time[a] / 10, v = Math.min(12.5, Math.max(1.5, L / t * 1.15));
+      out[a] = Math.min(65534, Math.max(1, Math.round(L / v * 10)));
+    }
+    return out;
+  }
   const OKA = a => T[a] !== 65535;
   const pts = a => arcPts(G, G.from, a);
   function hav(a, b) { const R = 6371000, r = Math.PI / 180, dLa = (b[0] - a[0]) * r, dLo = (b[1] - a[1]) * r; const x = Math.sin(dLa / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); }
@@ -1041,8 +1060,14 @@ function addSiteLayers() {
   add({ id: 'area-fill', type: 'fill', source: 'area', paint: { 'fill-color': C.amber, 'fill-opacity': 0.12 } });
   add({ id: 'area-line', type: 'line', source: 'area', layout: { 'line-join': 'round' }, paint: { 'line-color': C.amber, 'line-width': 3, 'line-dasharray': [2, 1.2] } });
   add({ id: 'route-straight', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['has', 'straight']], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': C.ink, 'line-opacity': 0.6, 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.2, 15, 3], 'line-dasharray': [1.2, 1.4] } });
-  add({ id: 'route-case', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#5A3B00', 'line-opacity': ['case', ['==', ['get', 'pass'], 1], 0.2, ['==', ['get', 'dim'], 1], 0.5, 0.9], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 9, 18, 18] } });
-  add({ id: 'route-line', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': C.amber, 'line-opacity': ['case', ['==', ['get', 'pass'], 1], 0.45, ['==', ['get', 'dim'], 1], 0.7, 1], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 14, 6, 18, 13] } });
+  add({ id: 'route-case', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']], ['!', ['has', 'turn']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#5A3B00', 'line-opacity': ['case', ['==', ['get', 'pass'], 1], 0.07, ['==', ['get', 'dim'], 1], 0.1, 0.9], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 9, 18, 18] } });
+  // navigation: only the road to the next stop is in full colour; the rest of the route (driven or still to come) is faded to about a third
+  add({ id: 'route-line', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']], ['!', ['has', 'turn']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': C.amber, 'line-opacity': ['case', ['==', ['get', 'pass'], 1], 0.25, ['==', ['get', 'dim'], 1], 0.35, 1], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 14, 6, 18, 13] } });
+  // the next turn: a white band with a row of arrows along it
+  if (!map.hasImage('chev')) { const cv = document.createElement('canvas'); cv.width = cv.height = 48; const x = cv.getContext('2d'); x.lineWidth = 9; x.lineCap = 'round'; x.lineJoin = 'round'; x.strokeStyle = '#0B57D0'; x.beginPath(); x.moveTo(15, 9); x.lineTo(33, 24); x.lineTo(15, 39); x.stroke(); map.addImage('chev', x.getImageData(0, 0, 48, 48), { pixelRatio: 2 }); }
+  add({ id: 'route-turn-case', type: 'line', source: 'route', filter: ['==', ['get', 'turn'], 1], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#0B57D0', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 11, 16, 16, 19, 24] } });
+  add({ id: 'route-turn', type: 'line', source: 'route', filter: ['==', ['get', 'turn'], 1], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#FFFFFF', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 8, 16, 12.5, 19, 19] } });
+  add({ id: 'route-turn-arr', type: 'symbol', source: 'route', filter: ['==', ['get', 'turn'], 1], layout: { 'symbol-placement': 'line', 'symbol-spacing': ['interpolate', ['linear'], ['zoom'], 12, 15, 17, 20], 'icon-image': 'chev', 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.5, 16, 0.72, 19, 1], 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-rotation-alignment': 'map', 'icon-padding': 0 } });
   add({ id: 'route-start', type: 'circle', source: 'route', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 7, 'circle-color': C.ink, 'circle-stroke-color': C.surface, 'circle-stroke-width': 2.5 } });
   add({ id: 'sites-hit', type: 'circle', source: 'sites', paint: { 'circle-radius': 17, 'circle-opacity': 0 } });
   add({ id: 'sites-selring', type: 'circle', source: 'sites', filter: ['==', ['get', 'sel'], 1], paint: {
@@ -1082,7 +1107,7 @@ function initMap() {
   // if iOS takes the graphics memory away (long in background), the map redraws itself when it comes back
   map.on('webglcontextlost', () => { S.glLost = true; });
   map.on('webglcontextrestored', () => { S.glLost = false; try { map.triggerRepaint(); updateMap(); } catch (e) {} });
-  map.touchZoomRotate.disableRotation();
+  map.on('rotate', northBtn); map.on('pitch', northBtn);
   map.on('style.load', addSiteLayers);
   map.on('click', (e) => {
     const f = map.queryRenderedFeatures(e.point, { layers: ['sites-hit'] });
@@ -1347,7 +1372,7 @@ function viewSite() {
   if (vis) for (const [vid, v] of Object.entries(vis)) if (v) events.push({ d: v.d, t: 'Vizită', s: '', vid, n: (v.poze || []).length });
   events.sort((a, b) => (b.d || '').localeCompare(a.d || ''));
   const [k] = statusLabel(s);
-  return `<div class="row sp" style="margin:2px 0 8px"><button class="btn sm ghost" data-act="back">‹ Înapoi</button>${isOp() ? '' : `<button class="btn sm ghost" data-act="edit" data-id="${s.id}">Editează</button>`}</div>
+  return `<div class="row sp" style="margin:2px 0 8px"><button class="btn sm ghost" data-act="back">‹ Înapoi</button>${isOp() ? '' : `<button class="btn sm act" data-act="edit" data-id="${s.id}">✎ Editează</button>`}</div>
   <div class="board">
     <div class="kicker"><span class="kid">Șantier ${esc(s.id.toUpperCase())}</span>${pillShort(s)}</div>
     <h2>${esc(s.name)}</h2>
@@ -1361,7 +1386,11 @@ function viewSite() {
     <button class="btn ${inRoute ? 'amber' : ''}" data-act="toggleStop" data-id="${s.id}">${inRoute ? '✓ În traseu' : '+ Traseu'}</button>
   </div>
   <h3>Poze (${photos.length})</h3>
-  ${photos.length ? `<div class="strip">${photos.map(p => `<button class="ph" data-act="photo" data-kind="${p.kind}" data-id="${esc(p.id)}" data-d="${p.d || ''}">${photoEl(p, 'img')}<div class="cap num">${roDate(p.d)} · ${esc(p.cap)}</div></button>`).join('')}</div>` : '<div class="sub">Nicio poză încă.</div>'}
+  ${photos.length ? (() => {
+    const cell = p => `<button class="ph" data-act="photo" data-kind="${p.kind}" data-id="${esc(p.id)}" data-d="${p.d || ''}">${photoEl(p, 'img')}<div class="cap num">${roDate(p.d)} · ${esc(p.cap)}</div></button>`;
+    const pan = photos.find(p => p.cap === 'Panou'), rest = photos.filter(p => p !== pan);
+    return pan ? `<div class="ph-split"><div class="ph-pan">${cell(pan)}</div><div class="strip grow">${rest.length ? rest.map(cell).join('') : '<div class="sub" style="align-self:center">Încă nicio poză de stadiu.</div>'}</div></div>` : `<div class="strip">${photos.map(cell).join('')}</div>`;
+  })() : '<div class="sub">Nicio poză încă.</div>'}
   ${!vis && S.visitsFor !== s.id ? '<div class="sub">Se încarcă vizitele…</div>' : ''}
   <h3>Istoric</h3>
   <ul class="tl">${events.map(e => `<li><div class="row sp"><span class="d num">${roDate(e.d)}</span>${e.vid && !isOp() ? `<button class="btn sm ghost danger" data-act="delVisit" data-id="${s.id}" data-vid="${e.vid}">Șterge</button>` : ''}</div><div class="s">${esc(e.t)}${e.n ? ' · ' + e.n + ' poze' : ''}${e.s ? ' — ' + esc(e.s) : ''}</div></li>`).join('')}</ul>
@@ -1424,13 +1453,13 @@ function viewRoute() {
   <div class="sub" style="margin:4px 0 10px">${stops.length} opriri${S.route.done.length ? ' · ' + S.route.done.length + ' vizitate' : ''}</div>
   <div class="note">Plecare: <b style="color:var(--ink)">locația ta (GPS)</b>${S.me ? '' : ' · <span class="sub">aștept semnalul GPS…</span>'}</div>
   ${routeSection()}
+  ${trSendBox(pending.length)}
   <h3>Opriri</h3>
   ${stops.map((s, i) => { const done = S.route.done.includes(s.id); return `<div class="stop ${done ? 'done' : ''}"><span class="n num">${i + 1}</span><button class="main" style="border:0;background:none;text-align:left;padding:0;min-width:0" data-act="open" data-id="${s.id}"><div class="t">${esc(s.name)}</div><div class="m">${esc(subtitle(s))} · ${pillHTML(s)}${RZ.other(s.id) && !done ? ` <span class="rz-t">· îl are și ${esc(RZ.other(s.id).n || 'un coleg')}</span>` : ''}</div></button>
     <span class="mini"><button data-act="up" data-i="${i}" aria-label="Mută în sus">↑</button><button data-act="down" data-i="${i}" aria-label="Mută în jos">↓</button><button data-act="done" data-id="${s.id}" aria-label="Vizitat" style="${done ? 'background:var(--ok);color:#fff;border-color:var(--ok)' : ''}">✓</button><button data-act="toggleStop" data-id="${s.id}" aria-label="Scoate">✕</button></span></div>`; }).join('')}
   <h3>Salvează</h3>
   <div class="row"><input class="in grow" id="routeName" placeholder="Nume traseu, ex. Sector 3 – marți" value="${esc(S.routeDraft != null ? S.routeDraft : (S.route.name || ''))}"><button class="btn" data-act="saveRoute">Salvează</button></div>
-  ${downloads && !isOp() ? '<div class="btns" style="margin-top:8px"><button class="btn ghost" data-act="csv">Descarcă lista (CSV)</button></div>' : ''}
-  ${trSendBox(pending.length)}`}
+  ${downloads && !isOp() ? '<div class="btns" style="margin-top:8px"><button class="btn ghost" data-act="csv">Descarcă lista (CSV)</button></div>' : ''}`}
   ${trSentList()}
   ${S.routes.length ? `<h3>Trasee salvate</h3>${S.routes.map(r => `<div class="leg"><span><b>${esc(r.name || 'Fără nume')}</b> <span class="sub">· ${(r.stops || []).length} opriri</span></span><span class="row"><button class="btn sm" data-act="loadRoute" data-id="${r.id}">Încarcă</button><button class="btn sm ghost danger" data-act="delRoute" data-id="${r.id}">Șterge</button></span></div>`).join('')}` : ''}
   <div style="height:10px"></div>`;
@@ -1636,8 +1665,7 @@ function optimizeRoute() {
 }
 function addVisibleDue() {
   if (!map) return;
-  const b = map.getBounds();
-  const add = visibleSites().filter(s => status(s) === 'due' && b.contains([s.lng, s.lat]) && !S.route.stops.includes(s.id));
+  const add = visibleSites().filter(s => status(s) === 'due' && onScreen(s) && !S.route.stops.includes(s.id));
   if (!add.length) { toast('Niciun șantier activ nou în zona vizibilă'); return; }
   S.route.stops.push(...add.map(s => s.id)); optimizeRoute(); toast('Am adăugat ' + add.length + ' șantiere și am optimizat ordinea');
 }
@@ -1918,9 +1946,17 @@ $('#btnNew').addEventListener('click', () => { if (S.selectMode) setSelectMode(f
 function set3d(on) {
   S.is3d = on; $('#btn3d').setAttribute('aria-pressed', on); $('#btn3d').textContent = on ? '2D' : '3D';
   if (on) { map.touchZoomRotate.enableRotation(); map.touchPitch.enable(); map.dragRotate.enable(); map.easeTo({ pitch: 60, zoom: Math.max(map.getZoom(), 15.5), duration: 900 }); }
-  else { map.touchZoomRotate.disableRotation(); map.touchPitch.disable(); map.dragRotate.disable(); map.easeTo({ pitch: 0, bearing: 0, duration: 700 }); }
+  else { map.touchPitch.disable(); map.dragRotate.disable(); map.easeTo({ pitch: 0, bearing: 0, duration: 700 }); }
 }
 $('#btn3d').addEventListener('click', () => set3d(!S.is3d));
+// compass: shown only while the map is turned; one tap puts north back up
+function northBtn() {
+  const b = $('#btnNorth'); if (!b || !map) return; const br = map.getBearing();
+  b.hidden = Math.abs(br) < 1 || !!S.navOn; const sv = b.querySelector('svg'); if (sv) sv.style.transform = 'rotate(' + (-br) + 'deg)';
+}
+$('#btnNorth').addEventListener('click', () => { if (map) map.easeTo({ bearing: 0, duration: 400 }); });
+// is the site inside what the screen shows (also right when the map is turned)
+function onScreen(s) { const p = map.project([s.lng, s.lat]), c = map.getCanvas(); return p.x >= 0 && p.y >= 0 && p.x <= c.clientWidth && p.y <= c.clientHeight; }
 // day / night: night = dark map with light streets and a dark interface; remembered on this phone
 function setNight(on) {
   document.documentElement.setAttribute('data-theme', on ? 'dark' : 'light');
@@ -2384,8 +2420,8 @@ function areaGeo() { const P = S.areaPoly; return { type: 'FeatureCollection', f
 function setAreaPoly(P) { S.areaPoly = P; const src = map && map.getSource('area'); if (src) src.setData(areaGeo()); }
 function areaSites() {
   if (!map) return [];
-  const P = S.areaPoly; const b = map.getBounds();
-  const all = visibleSites().filter(s => status(s) === 'due' && (P ? inPoly(s.lng, s.lat, P) : b.contains([s.lng, s.lat])));
+  const P = S.areaPoly;
+  const all = visibleSites().filter(s => status(s) === 'due' && (P ? inPoly(s.lng, s.lat, P) : onScreen(s)));
   const mine = all.filter(s => !RZ.other(s.id)); S.areaSkip = all.length - mine.length;
   return mine;
 }
@@ -2533,11 +2569,11 @@ function tryLocate() {
 })();
 /* ============ road routing + turn-by-turn navigation ============ */
 const graphP = {};
-const MODES = { car: 'Mașină', bike: 'Bicicletă', foot: 'Pe jos' };
+const MODES = { car: 'Mașină', scooter: 'Scuter' };
 try { S.mode = localStorage.getItem('harta_mode') || 'car'; } catch (e) { S.mode = 'car'; }
 if (!MODES[S.mode]) S.mode = 'car';
 function loadGraph() {
-  const key = S.mode === 'car' ? 'car' : 'slow';
+  const key = 'car';   // car and scooter both use the road graph (the scooter with its own speeds, no motorways)
   if (!graphP[key]) graphP[key] = (async () => {
     const j = await fetch(key === 'car' ? 'route/graph.json' : 'route/graph_slow.json').then(r => { if (!r.ok) throw new Error('graph ' + r.status); return r.json(); });
     const buf = await gunzip(b64(j.b64));
@@ -2682,7 +2718,9 @@ function navValid() { return S.nav && S.nav.sig === routeSig(); }
 function routeFeatures() {
   const rf = [];
   if (navValid()) {
-    const cur = S.navOn ? navItem().leg : -1; const pj = S.navProj;
+    let cur = S.navOn ? navItem().leg : -1; const pj = S.navProj;
+    // arrived and the site is already updated: the road to the next stop becomes the full-colour one at once
+    if (S.navOn) { const it = navItem(), to = S.sites.get(S.nav.legs[it.leg].to); if (it.s && it.s.type === 'arrive' && to && status(to) !== 'due' && it.leg + 1 < S.nav.legs.length) cur = it.leg + 1; }
     S.nav.legs.forEach((l, k) => {
       const line = (coords, props) => coords.length > 1 && rf.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: Object.assign({ leg: k }, props) });
       if (!S.navOn) return line(l.coords, {});
@@ -2699,9 +2737,25 @@ function routeFeatures() {
     const coords = (S.me ? [S.me] : []).concat(pts).map(p => [p.lng, p.lat]);
     if (coords.length > 1) rf.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { straight: 1 } });
   }
+  const ta = navValid() && S.navOn ? turnArrow() : null;
+  if (ta) rf.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: ta }, properties: { turn: 1 } });
   const st = S.me;
   if (st) rf.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [st.lng, st.lat] }, properties: {} });
   return rf;
+}
+// the piece of the route around the next maneuver, drawn as a row of arrows; long enough to be seen at any zoom (about 40 px before the turn, 85 px after)
+function turnArrow() {
+  const it = navItem(); if (!it || !it.s || (it.s.type !== 'turn' && it.s.type !== 'roundabout')) return null;
+  const leg = S.nav.legs[it.leg]; if (!leg || !leg.steps) return null;
+  const L = legGeom(leg), c = L.coords, at = L.cum[L.stepAt[it.j]]; if (at == null) return null;
+  const mpp = map ? 78271.5 * Math.cos(c[L.stepAt[it.j]][1] * Math.PI / 180) / Math.pow(2, map.getZoom()) : 1;
+  const a = Math.max(0, at - Math.min(160, Math.max(30, 40 * mpp))), b = Math.min(L.cum[c.length - 1], at + Math.min(300, Math.max(it.s.type === 'roundabout' ? 80 : 45, 85 * mpp)));
+  if (b - a < 15) return null;
+  const at_ = d => { let i = 1; while (i < c.length - 1 && L.cum[i] < d) i++; const s = L.cum[i] - L.cum[i - 1], t = s ? (d - L.cum[i - 1]) / s : 0; return [c[i - 1][0] + (c[i][0] - c[i - 1][0]) * t, c[i - 1][1] + (c[i][1] - c[i - 1][1]) * t]; };
+  const out = [at_(a)];
+  for (let i = 0; i < c.length; i++) if (L.cum[i] > a && L.cum[i] < b) out.push(c[i]);
+  out.push(at_(b));
+  return out;
 }
 
 function autoRoute(n) {
@@ -2718,14 +2772,12 @@ function routeSection() {
   // the fastest order is always computed automatically, for the chosen way of travel
   if (!ok && pending.length && !S.routing && S.autoSig !== routeSig()) { S.autoSig = routeSig(); setTimeout(() => computeRoute(true), 0); }
   const opt = (k, ic) => `<button class="state-opt${S.mode === k ? ' on' : ''}" data-act="setMode" data-v="${k}" aria-pressed="${S.mode === k}" ${S.routing ? 'disabled' : ''}><b>${ic} ${MODES[k]}</b></button>`;
-  let html = `<div class="act-seg mode-seg" role="group" aria-label="Mod de deplasare">${opt('car', '🚗')}${opt('bike', '🚲')}${opt('foot', '🚶')}</div>
+  let html = `<div class="act-seg mode-seg" role="group" aria-label="Mod de deplasare">${opt('car', '🚗')}${opt('scooter', '🛵')}</div>
   <div class="sub" id="routeMsg" style="margin-top:6px">${esc(S.routeMsg || '')}</div>`;
   if (ok) {
     const t = S.nav.total;
-    html += `<div class="stats"><div class="stat"><b class="num">${(t.dist / 1000).toFixed(1).replace('.', ',')}</b><span>km de parcurs</span></div><div class="stat"><b class="num">${fmtTime(t.time)}</b><span>${S.mode === 'car' ? 'de condus' : S.mode === 'bike' ? 'pe bicicletă' : 'de mers pe jos'}</span></div><div class="stat"><b class="num">${fmtTime(t.time + pending.length * 420)}</b><span>cu 7 min/oprire</span></div></div>
-    <button class="btn primary" style="width:100%;height:50px;font-size:16px" data-act="navStart">▶ Pornește navigarea</button>
-    <h3>Etape</h3>
-    ${S.nav.legs.map((l, k) => { const s = S.sites.get(l.to); return `<details class="legd"><summary><span class="n num">${k + 1}</span><span class="grow"><b>${esc(s ? s.name : '')}</b><span class="sub"> · ${fmtDist(l.dist)} · ${fmtTime(l.time)}</span></span></summary><ol class="steps">${l.steps.map(st => `<li>${maneuverIcon(st, 20)}<span class="grow">${esc(Router.text(st))}</span><span class="sub num">${st.dist ? fmtDist(st.dist) : ''}</span></li>`).join('')}</ol></details>`; }).join('')}`;
+    html += `<div class="stats"><div class="stat"><b class="num">${(t.dist / 1000).toFixed(1).replace('.', ',')}</b><span>km de parcurs</span></div><div class="stat"><b class="num">${fmtTime(t.time)}</b><span>${S.mode === 'car' ? 'de condus' : 'cu scuterul'}</span></div><div class="stat"><b class="num">${fmtTime(t.time + pending.length * 420)}</b><span>cu 7 min/oprire</span></div></div>
+    <button class="btn primary" style="width:100%;height:50px;font-size:16px" data-act="navStart">▶ Pornește navigarea</button>`;
   } else if (pending.length && !S.routeMsg) {
     html += `<div class="note" style="margin-top:8px">Se calculează cel mai rapid traseu…</div>`;
   }
@@ -3155,8 +3207,8 @@ function viewActiv() {
     <button class="btn amber" style="width:100%;margin-top:8px" data-act="opAdd">Adaugă</button>
     <div class="sub" style="margin-top:6px">Parola: minim 10 caractere, cu litere și cifre (ex. Operator1-4827). Operatorul deschide aplicația pe telefonul lui și scrie parola asta. Poate naviga, fotografia și adăuga șantiere noi; nu poate șterge sau edita nimic.</div></div>` : '';
   const me = window.PWA_me && window.PWA_me.name;
-  return `<div class="row sp"><h2>Activitate</h2>${admin ? '<button class="btn sm ghost" data-act="actRefresh" aria-label="Aduce datele noi" title="Aduce datele noi" style="font-size:20px;line-height:1">↻</button>' : ''}</div>
-  <div class="who-bar"><span>Conectat${me ? ' ca <b>' + esc(me) + '</b>' : ''}</span><button class="btn sm ghost" data-act="logout">Ieși din cont</button></div>
+  return `<div class="row sp"><h2>Activitate</h2>${admin ? '<button class="btn sm act" data-act="actRefresh" aria-label="Aduce datele noi" title="Aduce datele noi">↻ Actualizează</button>' : ''}</div>
+  <div class="who-bar"><span>Conectat${me ? ' ca <b>' + esc(me) + '</b>' : ''}</span><button class="btn sm act" data-act="logout">Ieși din cont</button></div>
   ${whoSeg}
   <div class="act-seg" role="group" aria-label="Perioadă">${seg('z', 'Zile')}${seg('s', 'Săptămâni')}${seg('l', 'Luni')}</div>
   <div class="act-per">${esc(title)}</div>
