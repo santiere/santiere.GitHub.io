@@ -1938,7 +1938,7 @@ async function qcLoadPanel(f) {
     if (url) { const r = await fetch(url); if (r.ok) b = await r.blob(); }
   } catch (e) {}
   // a site a colleague added: its panel is shared through the cloud
-  if (!b || b.size < 100) { b = null; try { const key = await CLOUD.k(); const r = key && await fetch(CLOUD.url + '/f/' + encodeURIComponent(s.id) + '/p.jpg', { headers: { 'x-key': key } }); if (r && r.ok) b = await r.blob(); } catch (e) {} }
+  if (!b || b.size < 100) b = await PN.get(s.id, true);
   if (QC.f !== f) return;
   if (b && b.size >= 100) { f.panou = b; f.panouUrl = URL.createObjectURL(b); f.panouR = { blob: b }; }
   else f.panouR = { blob: null, missing: true };   // no panel on this phone: the stage photo can still be saved; the original panel comes from iCloud in the evening
@@ -2128,13 +2128,30 @@ const CLOUD = {
 /* ---------- panel photos shared between phones: every user sees the same panel for every site ---------- */
 const PN = {
   tried: {}, busy: false,
-  sent() { try { return JSON.parse(localStorage.getItem('harta_pn') || '{}'); } catch (e) { return {}; } },
-  mark(id) { const m = PN.sent(); m[id] = 1; try { localStorage.setItem('harta_pn', JSON.stringify(m)); } catch (e) {} },
+  sent() { try { return JSON.parse(localStorage.getItem('harta_pn2') || '{}'); } catch (e) { return {}; } },
+  mark(id) { const m = PN.sent(); m[id] = 1; try { localStorage.setItem('harta_pn2', JSON.stringify(m)); } catch (e) {} },
   // a light copy of the panel goes to the server and stays there (the full-quality original goes to iCloud as before)
   async put(sid, blob) {
     const small = await shrink(blob, 2000, 0.85);
-    await CLOUD.req('/pn/' + encodeURIComponent(sid) + '.jpg', { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: small });
+    const r = await CLOUD.req('/pn/' + encodeURIComponent(sid) + '.jpg', { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: small });
+    if (!r || r.app) throw new Error('server vechi');   // an older server answers "ok" to anything: not stored
     PN.mark(sid);
+  },
+  // the panel of a site from the server: the permanent light copy, or the 30-day full copy (full first when asked)
+  async get(sid, fullFirst) {
+    try {
+      const key = await CLOUD.k(); if (!key) return null;
+      const id = encodeURIComponent(sid), paths = ['/pn/' + id + '.jpg', '/f/' + id + '/p.jpg'];
+      if (fullFirst) paths.reverse();
+      for (const u of paths) {
+        try {
+          const r = await fetch(CLOUD.url + u, { headers: { 'x-key': key } });
+          if (!r.ok || !/image/.test(r.headers.get('content-type') || '')) continue;
+          const b = await r.blob(); if (b.size >= 100) return b;
+        } catch (e) {}
+      }
+    } catch (e) {}
+    return null;
   },
   // bring the panels this phone is missing, send the ones only this phone has (a few at a time)
   async sync() {
@@ -2154,11 +2171,7 @@ const PN = {
         if (now - (PN.tried[s.id] || 0) < 45000) continue;
         PN.tried[s.id] = now; n++;
         try {
-          const id = encodeURIComponent(s.id);
-          let r = await fetch(CLOUD.url + '/pn/' + id + '.jpg', { headers: { 'x-key': key } });
-          if (!r.ok) r = await fetch(CLOUD.url + '/f/' + id + '/p.jpg', { headers: { 'x-key': key } });   // sites added with an older version
-          if (!r.ok) continue;
-          let b = await r.blob(); if (b.size < 100) continue;
+          let b = await PN.get(s.id); if (!b) continue;
           if (b.size > 1.2e6) b = await shrink(b, 2000, 0.85);
           const a = await assets.upload(b, { type: 'image/jpeg' });
           await db.doc('sites/' + s._sh).update({ s: { [s.id]: { panouA: a.id, panouShared: true } } });
