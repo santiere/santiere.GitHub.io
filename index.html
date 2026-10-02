@@ -797,7 +797,9 @@ function geotagJpeg(buf, g) {
 /* ============ helpers ============ */
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
-const CYCLE = 90;
+const CYCLE = 30;      // a site comes back as "De actualizat" 30 days after its last photo
+const C2_DAYS = 80;    // the second client gets a site again at least 80 days after the last photo sent to him
+const FORCED = '1970-01-01';   // "De actualizat" set by hand by the admin, whatever the dates say
 const STADII = ['Organizare de șantier', 'Săpătură / fundații', 'Structură', 'Închideri / acoperiș', 'Finisaje / instalații', 'Finalizat'];
 const pad = n => String(n).padStart(2, '0');
 const iso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
@@ -902,10 +904,12 @@ const isOp = () => window.PWA_role === 'op';
 // what an operator may not do: delete or edit sites and photos, change states by hand, export
 const OP_BLOCK = new Set(['setActive', 'setState', 'finish', 'markToday', 'delVisit', 'edit', 'editSave', 'movePin', 'delSite', 'csv']);
 /* ============ status ============ */
-function status(s) { if (s.inactiv) return 'off'; if (!s.ultima) return 'due'; return daysBetween(s.ultima, today()) >= CYCLE ? 'due' : 'wait'; }
+// the day of the site's last stage photo: the newest of the app's own record and the last photo it came with
+function lastUpd(s) { const u = s.ultima || '', e = (s.etapa && s.etapa.d) || ''; if (u === FORCED) return ''; return u > e ? u : e; }
+function status(s) { if (s.inactiv) return 'off'; const l = lastUpd(s); if (!l) return 'due'; return daysBetween(l, today()) >= CYCLE ? 'due' : 'wait'; }
 function stageBtn(s, cls) {
   const st = status(s);
-  if (st === 'wait') return `<button class="btn stage-off" disabled>Actualizat · revine ${roShort(addDays(s.ultima, CYCLE))}</button>`;
+  if (st === 'wait') return `<button class="btn stage-off" disabled>Actualizat · revine ${roShort(addDays(lastUpd(s), CYCLE))}</button>`;
   if (st === 'off' && isOp()) return `<button class="btn stage-off" disabled>Finalizat</button>`;
   if (st === 'off') return `<button class="btn" data-act="setActive" data-id="${s.id}" data-v="0">Finalizat · redeschide</button>`;
   return `<button class="btn ${cls || 'amber'}" data-act="visit" data-id="${s.id}">Actualizează șantier</button>`;
@@ -915,7 +919,7 @@ function stateSeg(s) {
   const opt = (k, label, sub) => `<button class="state-opt ${k}${st === k ? ' on' : ''}" data-act="setState" data-id="${s.id}" data-v="${k}" aria-pressed="${st === k}"><b>${label}</b><span>${sub}</span></button>`;
   return `<div class="state-seg" role="group" aria-label="Stare șantier">
     ${opt('due', 'De actualizat', 'de fotografiat')}
-    ${opt('wait', 'Actualizat', st === 'wait' ? 'revine ' + roShort(addDays(s.ultima, CYCLE)) : 'fotografiat azi')}
+    ${opt('wait', 'Actualizat', st === 'wait' ? 'revine ' + roShort(addDays(lastUpd(s), CYCLE)) : 'fotografiat azi')}
     ${opt('off', 'Finalizat', 'lucrare terminată')}
   </div>`;
 }
@@ -923,7 +927,7 @@ function finishBtn(s) { return s.inactiv || isOp() ? '' : `<button class="btn gh
 function statusLabel(s) {
   const st = status(s);
   if (st === 'off') return ['off', 'Finalizat'];
-  if (st === 'wait') return ['wait', 'Actualizat · revine ' + roShort(addDays(s.ultima, CYCLE))];
+  if (st === 'wait') return ['wait', 'Actualizat · revine ' + roShort(addDays(lastUpd(s), CYCLE))];
   return ['due', 'De actualizat'];
 }
 const deadlinePassed = s => s.finalizare && s.finalizare < today();
@@ -950,6 +954,7 @@ const cityDir = (lat, lng) => { const c = cityOf(lat, lng); return c.id === 'Buc
 /* ============ filtering ============ */
 function matches(s) {
   if (!S.show[status(s)]) return false;
+  if (S.onlyC2 && !(status(s) === 'due' && C2.due(s))) return false;
   if (S.loc) { if (S.loc[0] === '@') { if (cityOf(s.lat, s.lng).id !== S.loc.slice(1)) return false; } else if ((s.loc || '') !== S.loc) return false; }
   if (S.q) {
     const q = norm(S.q);
@@ -1214,7 +1219,11 @@ function buildChips() {
   const cnt = { due: 0, wait: 0, off: 0 };
   for (const s of S.sites.values()) cnt[status(s)]++;
   const C = [['due', 'De actualizat', 'var(--due)'], ['wait', 'Actualizate', 'var(--wait)'], ['off', 'Finalizate', 'var(--off)']];
-  $('#chips').innerHTML = C.map(([k, l, c]) => `<button class="chip" data-k="${k}" aria-pressed="${S.show[k]}"><span class="dot" style="background:${c}"></span>${l} <b class="num">${cnt[k]}</b></button>`).join('');
+  // admin only: the sites whose next photo also goes to client 2 (operators see nothing of this)
+  let c2chip = '';
+  if (!isOp() && typeof C2 !== 'undefined' && C2.on) { let n = 0; for (const s of S.sites.values()) if (status(s) === 'due' && C2.due(s)) n++; c2chip = `<button class="chip" data-k="c2" aria-pressed="${!!S.onlyC2}" title="De actualizat, trecute de ${C2_DAYS} de zile de la ultima trimitere către clientul 2"><span class="dot" style="background:#0E9F8A"></span>Client 2 <b class="num">${n}</b></button>`; }
+  else S.onlyC2 = false;
+  $('#chips').innerHTML = C.map(([k, l, c]) => `<button class="chip" data-k="${k}" aria-pressed="${S.show[k]}"><span class="dot" style="background:${c}"></span>${l} <b class="num">${cnt[k]}</b></button>`).join('') + c2chip;
 }
 function buildLocOptions() {
   const c = new Map(); for (const s of S.sites.values()) if (s.loc) c.set(s.loc, (c.get(s.loc) || 0) + 1);
@@ -1283,7 +1292,7 @@ function sitePhotos(s, visits) {
   if (s.etapa) out.push({ kind: 'p', id: s.etapa.f, d: s.etapa.d, cap: 'Șantier' });
   const inVis = id => Object.values(visits || {}).some(v => v && (v.poze || []).includes(id));   // already listed with its visit
   if (s.panouA && !inVis(s.panouA)) out.push({ kind: 'a', id: s.panouA, d: s.creat ? new Date(s.creat).toISOString().slice(0, 10) : s.ultima, cap: 'Panou' });
-  if (s.santierA && !inVis(s.santierA)) out.push({ kind: 'a', id: s.santierA, d: s.ultima, cap: 'Șantier' });
+  if (s.santierA && !inVis(s.santierA)) out.push({ kind: 'a', id: s.santierA, d: s.ultima === FORCED ? '' : s.ultima, cap: 'Șantier' });
   for (const [vid, v] of Object.entries(visits || {})) if (v) for (const a of (v.poze || [])) out.push({ kind: 'a', id: a, d: v.d, cap: 'Vizită' });
   return out.sort((a, b) => (b.d || '').localeCompare(a.d || ''));
 }
@@ -1310,7 +1319,7 @@ function viewCard() {
       ${RZ.other(s.id) && !inRoute ? `<div class="rz-note">În traseul lui ${esc(RZ.other(s.id).n || 'alt coleg')} azi</div>` : ''}
       <h2 style="margin-top:6px">${esc(s.name)}</h2>
       ${who(s) ? `<div class="sub" style="margin-top:2px">${esc(who(s))}</div>` : ''}
-      <div class="meta"><span>${esc(subtitle(s))}</span><span class="num">${s.ultima ? 'Actualizat: ' + roDate(s.ultima) : 'Neactualizat încă'}</span>${(s.viz || []).length ? `<span class="num">${s.viz.length} vizite</span>` : ''}</div>
+      <div class="meta"><span>${esc(subtitle(s))}</span><span class="num">${lastUpd(s) ? 'Actualizat: ' + roDate(lastUpd(s)) : 'Neactualizat încă'}</span>${(s.viz || []).length ? `<span class="num">${s.viz.length} vizite</span>` : ''}</div>
     </div></div>
     <div class="btns" style="margin-top:14px">
       ${stageBtn(s)}
@@ -1342,7 +1351,7 @@ function viewSite() {
   <div class="board">
     <div class="kicker"><span class="kid">Șantier ${esc(s.id.toUpperCase())}</span>${pillShort(s)}</div>
     <h2>${esc(s.name)}</h2>
-    <div class="sub num" style="margin-top:4px">${k === 'off' ? 'Lucrare finalizată' : s.ultima ? 'Actualizat ' + roDate(s.ultima) + (k === 'wait' ? ' · din nou la ' + roDate(addDays(s.ultima, CYCLE)) : '') : 'Neactualizat încă'}</div>
+    <div class="sub num" style="margin-top:4px">${k === 'off' ? 'Lucrare finalizată' : lastUpd(s) ? 'Actualizat ' + roDate(lastUpd(s)) + (k === 'wait' ? ' · din nou la ' + roDate(addDays(lastUpd(s), CYCLE)) : '') : 'Neactualizat încă'}</div>
   </div>
   <div class="btns" style="margin-top:12px">
     ${stageBtn(s)}
@@ -1368,7 +1377,7 @@ function viewList() {
   const c = map ? map.getCenter() : { lat: 44.4355, lng: 26.1025 };
   const center = { lat: c.lat, lng: c.lng };
   const rank = { due: 0, wait: 1, off: 2 };
-  if (sort === 'status') arr.sort((a, b) => rank[status(a)] - rank[status(b)] || (a.ultima || '').localeCompare(b.ultima || ''));
+  if (sort === 'status') arr.sort((a, b) => rank[status(a)] - rank[status(b)] || lastUpd(a).localeCompare(lastUpd(b)));
   else if (sort === 'near') arr.sort((a, b) => hav(center, a) - hav(center, b));
   else arr.sort((a, b) => (a.loc || '').localeCompare(b.loc || '') || a.name.localeCompare(b.name));
   const shown = arr.slice(0, S.listMax || 150);
@@ -1382,7 +1391,7 @@ function viewList() {
   <ul class="list">${shown.map(s => {
     const inR = S.route.stops.indexOf(s.id);
     const dist = sort === 'near' ? ' · ' + hav(center, s).toFixed(1) + ' km' : '';
-    return `<li class="li"><button class="main" data-act="open" data-id="${s.id}"><div class="row" style="gap:8px">${pillHTML(s)}<span class="t grow">${esc(s.name)}</span></div>${who(s) ? `<div class="m">${esc(who(s))}</div>` : ''}<div class="m">${esc(subtitle(s))}${dist} · <span class="num">${s.ultima ? roDate(s.ultima) : 'neactualizat'}</span></div></button><button class="check" data-act="toggleStop" data-id="${s.id}" aria-pressed="${inR >= 0}" aria-label="În traseu">${inR >= 0 ? inR + 1 : '+'}</button></li>`;
+    return `<li class="li"><button class="main" data-act="open" data-id="${s.id}"><div class="row" style="gap:8px">${pillHTML(s)}<span class="t grow">${esc(s.name)}</span></div>${who(s) ? `<div class="m">${esc(who(s))}</div>` : ''}<div class="m">${esc(subtitle(s))}${dist} · <span class="num">${lastUpd(s) ? roDate(lastUpd(s)) : 'neactualizat'}</span></div></button><button class="check" data-act="toggleStop" data-id="${s.id}" aria-pressed="${inR >= 0}" aria-label="În traseu">${inR >= 0 ? inR + 1 : '+'}</button></li>`;
   }).join('')}</ul>
   ${arr.length > shown.length ? `<div style="text-align:center;margin-top:12px"><button class="btn" data-act="more">Arată încă ${Math.min(150, arr.length - shown.length)}</button></div>` : ''}`;
 }
@@ -1420,9 +1429,27 @@ function viewRoute() {
     <span class="mini"><button data-act="up" data-i="${i}" aria-label="Mută în sus">↑</button><button data-act="down" data-i="${i}" aria-label="Mută în jos">↓</button><button data-act="done" data-id="${s.id}" aria-label="Vizitat" style="${done ? 'background:var(--ok);color:#fff;border-color:var(--ok)' : ''}">✓</button><button data-act="toggleStop" data-id="${s.id}" aria-label="Scoate">✕</button></span></div>`; }).join('')}
   <h3>Salvează</h3>
   <div class="row"><input class="in grow" id="routeName" placeholder="Nume traseu, ex. Sector 3 – marți" value="${esc(S.routeDraft != null ? S.routeDraft : (S.route.name || ''))}"><button class="btn" data-act="saveRoute">Salvează</button></div>
-  ${downloads && !isOp() ? '<div class="btns" style="margin-top:8px"><button class="btn ghost" data-act="csv">Descarcă lista (CSV)</button></div>' : ''}`}
+  ${downloads && !isOp() ? '<div class="btns" style="margin-top:8px"><button class="btn ghost" data-act="csv">Descarcă lista (CSV)</button></div>' : ''}
+  ${trSendBox(pending.length)}`}
+  ${trSentList()}
   ${S.routes.length ? `<h3>Trasee salvate</h3>${S.routes.map(r => `<div class="leg"><span><b>${esc(r.name || 'Fără nume')}</b> <span class="sub">· ${(r.stops || []).length} opriri</span></span><span class="row"><button class="btn sm" data-act="loadRoute" data-id="${r.id}">Încarcă</button><button class="btn sm ghost danger" data-act="delRoute" data-id="${r.id}">Șterge</button></span></div>`).join('')}` : ''}
   <div style="height:10px"></div>`;
+}
+
+// admin: hand the current route over to an operator
+function trSendBox(n) {
+  if (isOp()) return '';
+  if (!TR.ops) { TR.loadOps(); return ''; }
+  if (!TR.ops.length) return '';
+  return `<h3>Trimite unui operator</h3>
+  <div class="row"><select class="in grow" id="trTo" aria-label="Operator">${TR.ops.map(o => `<option value="${esc(o.id)}"${TR.to === o.id ? ' selected' : ''}>${esc(o.name)}</option>`).join('')}</select><button class="btn amber" data-act="trSend" ${n ? '' : 'disabled'}>${TR.cf && Date.now() - TR.cf.t < 8000 ? 'Confirmă: către ' + esc(((TR.ops || []).find(o => o.id === TR.cf.to) || {}).name || 'operator') : 'Trimite'}</button></div>
+  <div class="sub" style="margin-top:6px">Operatorul primește cele ${n} opriri nebifate în aplicația lui, iar ele ies din traseul tău. Ordinea o calculează telefonul lui, de unde se află.</div>`;
+}
+function trSentList() {
+  if (isOp()) return '';
+  const L = Object.entries(TR.list || {}).sort((a, b) => b[1].t - a[1].t).slice(0, 8); if (!L.length) return '';
+  const nm = id => ((TR.ops || []).find(o => o.id === id) || {}).name || 'operator';
+  return `<h3>Trasee trimise</h3>${L.map(([id, r]) => `<div class="leg"><span><b>${esc(nm(r.to))}</b> <span class="sub">· ${esc(r.n || 'Traseu')} · ${(r.s || []).length} opriri · ${r.ok ? 'primit ✓' : 'încă nedeschis'}</span></span>${r.ok ? '' : `<span class="row"><button class="btn sm ghost danger" data-act="trDel" data-id="${esc(id)}">Retrage</button></span>`}</div>`).join('')}`;
 }
 
 function viewAdd() {
@@ -1693,7 +1720,7 @@ document.addEventListener('click', async (e) => {
     case 'setState': {
       const s0 = S.sites.get(id); if (!s0) break; const v = t.dataset.v; if (status(s0) === v) break;
       const prev = { ultima: s0.ultima || '', ultimaApp: s0.ultimaApp || '', inactiv: !!s0.inactiv };
-      const patch = v === 'off' ? { inactiv: true } : v === 'wait' ? { inactiv: false, ultima: today(), ultimaApp: today() } : { inactiv: false, ultima: '', ultimaApp: '' };
+      const patch = v === 'off' ? { inactiv: true } : v === 'wait' ? { inactiv: false, ultima: today(), ultimaApp: today() } : { inactiv: false, ultima: FORCED, ultimaApp: '' };
       await patchSite(id, patch);
       if (v === 'off') { S.route.stops = S.route.stops.filter(x => x !== id); saveRouteSoon(); }
       toast(v === 'off' ? 'Marcat: Finalizat' : v === 'wait' ? 'Marcat: Actualizat azi' : 'Marcat: De actualizat', 6000, () => patchSite(id, prev));
@@ -1732,11 +1759,36 @@ document.addEventListener('click', async (e) => {
       await db.doc('trasee/' + rid).set({ name, stops: S.route.stops, done: S.route.done, start: S.route.start || null, creat: Date.now() });
       saveRouteSoon(); toast('Traseul „' + name + '” a fost salvat'); break;
     }
-    case 'loadRoute': { const r = S.routes.find(x => x.id === id); if (r) { S.route = { stops: (r.stops || []).filter(x => S.sites.has(x)), done: r.done || [], start: r.start || null, name: r.name || '' }; saveRouteSoon(); refresh(); toast('Traseu încărcat'); } break; }
+    case 'loadRoute': { const r = S.routes.find(x => x.id === id); if (r && r.from) { TR.use(id); break; } if (r) { S.route = { stops: (r.stops || []).filter(x => S.sites.has(x)), done: r.done || [], start: r.start || null, name: r.name || '' }; saveRouteSoon(); refresh(); toast('Traseu încărcat'); } break; }
+    case 'trSend': {
+      if (isOp()) break;
+      const to = ($('#trTo') || {}).value; const ids = S.route.stops.filter(x => !S.route.done.includes(x) && S.sites.has(x));
+      if (!to || !ids.length) { toast('Traseul nu are opriri nebifate'); break; }
+      if (S.navOn) { toast('Oprește navigarea înainte să trimiți traseul'); break; }
+      const who = ((TR.ops || []).find(o => o.id === to) || {}).name || 'operator';
+      // second tap within 8 s confirms (kept outside the page, so a redraw in between does not lose it)
+      if (!(TR.cf && TR.cf.to === to && Date.now() - TR.cf.t < 8000)) { TR.cf = { to, t: Date.now() }; t.textContent = 'Confirmă: către ' + who; break; }
+      TR.cf = null; t.disabled = true; t.textContent = 'Se trimite…'; TR.to = to;
+      try {
+        const name = (($('#routeName') || {}).value || '').trim() || S.route.name || ('Traseu ' + roDate(today()));
+        const r = await CLOUD.req('/tr', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ to, name, stops: ids }) });
+        if (!r || r.app) throw new Error('serverul nu știe încă de trasee trimise');
+        await db.doc('trasee/' + uid('r')).set({ name: '→ ' + who + ' · ' + name, stops: ids, done: [], start: null, creat: Date.now() });   // a copy stays with the admin
+        S.route = { stops: S.route.stops.filter(x => S.route.done.includes(x)), done: S.route.done.slice(), start: S.route.start, name: '' }; S.routeDraft = null; saveRouteSoon();
+        toast('Trimis lui ' + who + ' · ' + ids.length + ' șantiere', 4000); await TR.pull(true); refresh();
+      } catch (err) { toast('Nu s-a putut trimite: ' + (err.message || err), 4000); t.disabled = false; t.textContent = 'Trimite'; }
+      break;
+    }
+    case 'trDel': {
+      if (isOp()) break;
+      if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă'; break; }
+      try { await CLOUD.req('/tr', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ del: id }) }); await TR.pull(true); toast('Traseul a fost retras'); } catch (err) { toast('Nu s-a putut: ' + (err.message || err)); }
+      break;
+    }
     case 'delRoute': if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă'; break; } await db.doc('trasee/' + id).delete(); break;
     case 'csv': {
       const rows = [['nr', 'nume', 'zona', 'strada', 'lat', 'lng', 'ultima_poza', 'stare', 'google_maps']];
-      S.route.stops.forEach((sid, i) => { const s = S.sites.get(sid); if (s) rows.push([i + 1, s.name, s.loc || '', s.strada || '', s.lat, s.lng, s.ultima || '', statusLabel(s)[1], gLink(s)]); });
+      S.route.stops.forEach((sid, i) => { const s = S.sites.get(sid); if (s) rows.push([i + 1, s.name, s.loc || '', s.strada || '', s.lat, s.lng, lastUpd(s), statusLabel(s)[1], gLink(s)]); });
       const csv = '\ufeff' + rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
       try { await downloads.save({ filename: 'traseu-' + today() + '.csv', data: new Blob([csv], { type: 'text/csv' }) }); } catch (err) { if (err.code !== 'declined') toast('Descărcarea nu e disponibilă aici'); }
       break;
@@ -1779,6 +1831,7 @@ document.addEventListener('change', async (e) => {
     const pv = $('#visitPrev'); if (pv) pv.innerHTML = f.files.slice(0, 12).map(x => `<img src="${URL.createObjectURL(x)}" alt="">`).join('');
   }
   if (e.target.id === 'loc') { S.loc = e.target.value; S.listMax = 150; refresh(); if (S.loc) fitLoc(); }
+  if (e.target.id === 'trTo') TR.to = e.target.value;   // the chosen operator survives a redraw of the page
 });
 function shotBase(t) { const d = new Date(t || Date.now()); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + '_' + pad(d.getHours()) + pad(d.getMinutes()); }
 async function createSite(o, prog) {
@@ -1820,7 +1873,7 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   else if (t === 'route' && S.navOn && S.navPaused) { S.navPaused = false; closeSheet(); $('#nav').hidden = false; $('.tabs').hidden = true; navShow(false); }
   else go(t);
 }));
-$('#chips').addEventListener('click', e => { const c = e.target.closest('.chip'); if (!c) return; S.show[c.dataset.k] = !S.show[c.dataset.k]; S.listMax = 150; refresh(); });
+$('#chips').addEventListener('click', e => { const c = e.target.closest('.chip'); if (!c) return; if (c.dataset.k === 'c2') { S.onlyC2 = !S.onlyC2; if (S.onlyC2) S.show.due = true; } else S.show[c.dataset.k] = !S.show[c.dataset.k]; S.listMax = 150; refresh(); });
 let qT; $('#q').addEventListener('input', e => { clearTimeout(qT); qT = setTimeout(() => { S.q = e.target.value.trim(); S.listMax = 150; refresh(); if (S.q.length >= 3 && S.view !== 'list') { const v = visibleSites(); if (v.length && v.length < 40) fitAll(v); } }, 180); });
 
 $('#q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.target.blur(); go('list'); } });
@@ -2118,10 +2171,11 @@ const CLOUD = {
     }, 6000);
     RZ.pull(); setTimeout(RZ.send, 3000);
     setTimeout(() => PN.sync(), 5000);
-    setInterval(() => { if (document.visibilityState === 'visible') { CLOUD.pull().then(() => PN.sync()); RZ.pull(); } }, 15000);
+    C2.load(); C2.pull(true); setTimeout(() => TR.pull(true), 4000);
+    setInterval(() => { if (document.visibilityState === 'visible') { CLOUD.pull().then(() => PN.sync()); RZ.pull(); C2.pull(); if (isOp() || S.view === 'route') TR.pull(); } }, 15000);
     setInterval(() => { if (document.visibilityState === 'visible') OB.pump(); }, 30000);
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { CLOUD.pull(); RZ.pull(); OB.pump(); } });
-    window.addEventListener('online', () => { CLOUD.pull(); RZ.pull(); OB.pump(); });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { CLOUD.pull(); RZ.pull(); OB.pump(); C2.pull(); TR.pull(true); } });
+    window.addEventListener('online', () => { CLOUD.pull(); RZ.pull(); OB.pump(); C2.pull(true); TR.pull(true); });
   },
 };
 /* ---------- „De trimis”: pairs not yet in the Santiere folder ---------- */
@@ -2181,6 +2235,71 @@ const PN = {
   },
 };
 
+/* ---------- client 2: the day of the last photo of each site sent to him (decided and kept by the server) ---------- */
+const C2 = {
+  map: {}, on: false, t: 0,
+  load() { try { const j = JSON.parse(localStorage.getItem('harta_c2') || 'null'); if (j && typeof j === 'object') { C2.map = j; C2.on = !!j._on; } } catch (e) {} },
+  async pull(force) {
+    if (!force && Date.now() - C2.t < 240000) return; C2.t = Date.now();
+    try {
+      const j = await CLOUD.req('/c2'); if (!j || j.app) return;   // an older server answers with its name: nothing to use
+      const a = JSON.stringify(j); if (a === JSON.stringify(C2.map)) return;
+      C2.map = j; C2.on = !!j._on; try { localStorage.setItem('harta_c2', a); } catch (e) {}
+      if (!isOp()) refresh();
+    } catch (e) {}
+  },
+  // true when the site's next photo also goes to client 2: never sent, or at least 80 days since the last one sent
+  due(s) { if (!C2.on) return false; const v = C2.map[s.id]; return !v || daysBetween(String(v).slice(0, 10), today()) >= C2_DAYS; },
+};
+/* ---------- routes the admin sends to an operator ---------- */
+const TR = {
+  list: {}, t: 0, seen: {}, ops: null, to: '',
+  async loadOps() { if (TR.ops || TR.opsBusy) return; TR.opsBusy = 1; try { TR.ops = (await CLOUD.req('/users')).users || []; } catch (e) {} TR.opsBusy = 0; if (TR.ops && S.view === 'route') render(); },
+  async pull(force) {
+    if (!force && Date.now() - TR.t < 28000) return; TR.t = Date.now();
+    try {
+      const j = await CLOUD.req('/tr'); if (!j || j.app) return;
+      const ch = JSON.stringify(j) !== JSON.stringify(TR.list); TR.list = j;
+      if (isOp()) await TR.take(); else if (ch && S.view === 'route') render();
+    } catch (e) {}
+  },
+  // operator: a route received is first saved under "Trasee salvate" (so it cannot be lost), then offered
+  async take() {
+    if (!db || !S.loaded) return;
+    for (const [id, r] of Object.entries(TR.list)) {
+      if (TR.seen[id]) continue; TR.seen[id] = 1;
+      const stops = (r.s || []).filter(x => S.sites.has(x));
+      try {
+        const name = (r.n || 'Traseu') + ' · de la ' + (r.f || 'Ionuț');
+        await db.doc('trasee/' + id).set({ name, stops, done: [], start: null, creat: r.t || Date.now(), from: r.f || '' });
+        await CLOUD.req('/tr', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ack: id }) });
+        TR.offer(id, r.n || 'Traseu', stops.length, r.f || 'Ionuț');
+      } catch (e) { TR.seen[id] = 0; }
+    }
+  },
+  offer(id, name, n, from) {
+    if (S.navOn) { toast(from + ' ți-a trimis un traseu (' + n + ' șantiere). Îl găsești în Traseu → Trasee salvate.', 7000); return; }
+    const old = document.getElementById('trBox'); if (old) old.remove();
+    const open = S.route.stops.filter(x => !S.route.done.includes(x)).length;
+    const d = document.createElement('div'); d.id = 'trBox'; d.className = 'geohelp';
+    d.innerHTML = `<div class="geohelp-card"><div class="lock-k">Traseu primit</div>
+      <h2>${esc(from)} ți-a trimis un traseu</h2>
+      <p class="sub" style="font-size:15px;margin:0">${esc(name)} · <b style="color:var(--ink)">${n} șantiere</b>. E salvat și în Traseu → Trasee salvate.</p>
+      ${open ? `<p class="sub" style="margin:8px 0 0">Ai deja un traseu cu ${open} opriri nebifate; dacă îl folosești pe cel nou, îl înlocuiește.</p>` : ''}
+      <div class="btns" style="margin-top:14px"><button class="btn primary" id="trUse">Folosește-l acum</button><button class="btn" id="trLater">Mai târziu</button></div></div>`;
+    document.body.appendChild(d);
+    d.querySelector('#trLater').onclick = () => d.remove();
+    d.querySelector('#trUse').onclick = () => { d.remove(); TR.use(id); };
+  },
+  use(id) {
+    const r = S.routes.find(x => x.id === id); if (!r) { toast('Traseul e în Traseu → Trasee salvate'); go('route'); return; }
+    const stops = (r.stops || []).filter(x => S.sites.has(x));
+    for (const x of stops) if (RZ.other(x)) RZ.force.add(x);   // these sites were given to me
+    S.route = { stops, done: [], start: null, name: r.name || '' }; S.routeDraft = null; S.autoSig = null;
+    saveRouteSoon(); refresh(); go('route'); toast('Traseu încărcat · ' + stops.length + ' șantiere');
+  },
+};
+
 /* ---------- today's routes: a site in a colleague's route is reserved for them ---------- */
 const RZ = {
   map: {}, force: new Set(), pend: null, timer: null,
@@ -2234,7 +2353,7 @@ const OB = {
         try {
           for (const w of ['p', 's']) await CLOUD.req('/f/' + k + '/' + w + '.jpg', { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: await OB.blobOf(k, w) });
           await CLOUD.req('/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k, nou: v.nou, stamp: v.stamp, siteId: v.siteId, siteName: v.siteName, name: v.name, d: v.d, t: v.t, lat: v.lat, lng: v.lng }) });
-          v.sent = true; delete v.err; delete OB.files[k]; await OB.save();
+          v.sent = true; delete v.err; delete OB.files[k]; await OB.save(); setTimeout(() => C2.pull(true), 1500);
         } catch (e) { allOk = false; v.tries = (v.tries || 0) + 1; v.err = String((e && (e.message || e.code)) || e).slice(0, 120); if (!navigator.onLine) break; }
         OB.ui();
       }
@@ -2405,7 +2524,7 @@ function tryLocate() {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') startGeoWatch(); });
 }
 
-/* ---------- live 90-day timer: no refresh needed ---------- */
+/* ---------- live timer: sites turn red again by themselves when their days pass ---------- */
 (() => {
   let sig = '';
   const tick = () => { if (!S.sites || !S.sites.size) return; let n = 0; S.sites.forEach(s => { if (status(s) === 'due') n++; }); const k = today() + ':' + n; if (sig && k !== sig) refresh(); sig = k; };
@@ -2480,6 +2599,28 @@ function solveOrder(C, fixed) {
   return bo;
 }
 
+const PRIO_MIN = 50;   // routes with more open stops than this put the client-2 sites first
+// Same, but the stops marked in `pr` (sites due for client 2) come first: the fastest path through them,
+// picking up on the way any other stop that costs at most `slack` seconds of detour; the rest follow, fastest from there.
+function solveOrderPrio(C, fixed, pr, slack) {
+  const n = C.length, P = [], R = [];
+  for (let i = fixed ? 1 : 0; i < n; i++) (pr[i] ? P : R).push(i);
+  if (!P.length || !R.length) return solveOrder(C, fixed);
+  const sub = ix => ix.map(a => ix.map(b => C[a][b]));
+  const iP = (fixed ? [0] : []).concat(P);
+  const o = solveOrder(sub(iP), fixed).map(k => iP[k]);
+  const left = new Set(R);
+  for (;;) {
+    let br = -1, bp = -1, bd = slack;
+    for (const r of left) for (let k = 1; k < o.length; k++) { const d = C[o[k - 1]][r] + C[r][o[k]] - C[o[k - 1]][o[k]]; if (d <= bd) { bd = d; br = r; bp = k; } }
+    if (br < 0) break;
+    o.splice(bp, 0, br); left.delete(br);
+  }
+  if (!left.size) return o;
+  const iT = [o[o.length - 1], ...left];
+  return o.concat(solveOrder(sub(iT), true).slice(1).map(k => iT[k]));
+}
+
 async function computeRoute(optimize) {
   if (S.routing) return; S.routing = true; S.lastOpt = !!optimize;
   try {
@@ -2509,7 +2650,9 @@ async function computeRoute(optimize) {
       if (big) { const rs = []; rows.forEach((row, i) => row.forEach((r, j) => { if (r && r.cost < Infinity && i !== j) { const h = hav(pts[okIdx[i]], pts[okIdx[j]]) * 1000; if (h > 300) rs.push(r.cost / h); } })); rs.sort((x, y) => x - y); if (rs.length) f = rs[rs.length >> 1]; }
       rows.forEach((row, i) => C.push(row.map((r, j) => r && r.cost < Infinity ? r.cost : big ? hav(pts[okIdx[i]], pts[okIdx[j]]) * 1000 * f * 1.1 + 30 : 1e9)));
       routeMsg('Aleg ordinea cea mai rapidă…'); await tick();
-      order = solveOrder(C, !!start).map(k => okIdx[k]);
+      // long routes are rarely finished in one outing: there the sites due for client 2 come first (short routes keep the plain fastest order)
+      const pr = okIdx.map(i => !!pts[i].id && C2.due(pts[i]));
+      order = (okIdx.length - 1 > PRIO_MIN ? solveOrderPrio(C, !!start, pr, 20) : solveOrder(C, !!start)).map(k => okIdx[k]);
       const newPending = order.filter(i => !start || i > 0).map(i => pts[i].id);
       const done = S.route.stops.filter(id => S.route.done.includes(id));
       S.route.stops = done.concat(newPending, pending.filter(s => !newPending.includes(s.id)).map(s => s.id));
@@ -2674,7 +2817,7 @@ function navShow(say) {
   $('#navPrev').disabled = S.navPos === 0;
   const arr = it.s.type === 'arrive';
   $('#navArrive').hidden = !arr; $('#navMove').hidden = arr;
-  if (arr) { const vs = site; const ok = vs && status(vs) === 'due'; const vb = $('#navVisit'); vb.disabled = !ok; vb.textContent = ok ? 'Actualizează șantier' : vs && status(vs) === 'wait' ? 'Actualizat · revine ' + roShort(addDays(vs.ultima, CYCLE)) : 'Finalizat'; }
+  if (arr) { const vs = site; const ok = vs && status(vs) === 'due'; const vb = $('#navVisit'); vb.disabled = !ok; vb.textContent = ok ? 'Actualizează șantier' : vs && status(vs) === 'wait' ? 'Actualizat · revine ' + roShort(addDays(lastUpd(vs), CYCLE)) : 'Finalizat'; }
   if (arr) { $('#navNextLeg').textContent = it.leg + 1 < S.nav.legs.length ? 'Pornește spre oprirea ' + (it.leg + 2) : 'Termină traseul'; }
   updateMap();
   if (map && !S.navGpsFollow && !S.navFree) {
