@@ -39,6 +39,7 @@
   --ground:#0F1417; --surface:#182025; --surface-2:#1E272D; --ink:#E6ECEE; --muted:#9AA8AF; --line:#2B353B;
   --amber:#F5B82E; --amber-ink:#2A1E00; --due:#FF5A4E; --wait:#4C94F2; --accent:#4C94F2; --ch-u:#4C94F2; --ch-n:#BF8414; --off:#7C878D; --ok:#4DB27C; --danger:#FF6B61; --shadow:0 8px 30px rgba(0,0,0,.5);}
 [hidden]{display:none!important}
+.card-head>.thumb:empty{display:grid;place-items:center;text-align:center;font-size:11px;line-height:1.25;color:var(--muted);padding:6px}.card-head>.thumb:empty::after{content:"Panoul se încarcă…"}
 .nav-rec{display:grid;place-items:center;outline:3px solid #1A73E8;outline-offset:-3px}
 .me-arrow{display:none;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}
 .me.nav .me-arrow{display:block}.me.nav .me-dot,.me.nav .me-cone,.me.nav .me-acc{display:none!important}
@@ -1280,8 +1281,9 @@ function render(reset) {
 function sitePhotos(s, visits) {
   const out = (s.poze || []).map(p => ({ kind: 'p', id: p.f, d: p.d, cap: 'Panou' }));
   if (s.etapa) out.push({ kind: 'p', id: s.etapa.f, d: s.etapa.d, cap: 'Șantier' });
-  if (s.panouA && !visits) out.push({ kind: 'a', id: s.panouA, d: s.ultima, cap: 'Panou' });
-  if (s.santierA && !visits) out.push({ kind: 'a', id: s.santierA, d: s.ultima, cap: 'Șantier' });
+  const inVis = id => Object.values(visits || {}).some(v => v && (v.poze || []).includes(id));   // already listed with its visit
+  if (s.panouA && !inVis(s.panouA)) out.push({ kind: 'a', id: s.panouA, d: s.creat ? new Date(s.creat).toISOString().slice(0, 10) : s.ultima, cap: 'Panou' });
+  if (s.santierA && !inVis(s.santierA)) out.push({ kind: 'a', id: s.santierA, d: s.ultima, cap: 'Șantier' });
   for (const [vid, v] of Object.entries(visits || {})) if (v) for (const a of (v.poze || [])) out.push({ kind: 'a', id: a, d: v.d, cap: 'Vizită' });
   return out.sort((a, b) => (b.d || '').localeCompare(a.d || ''));
 }
@@ -2020,7 +2022,7 @@ $('#qc').addEventListener('click', async e => {
     if (QC.f === f) qcClose();
     toast('✓ Salvat' + (site ? ' · ' + site.name : ''));
     OB.pump([k]);   // photos go up in the background
-    if (!site) CLOUD.sharePanel(sid, f.panouR.blob);   // colleagues can see / use the panel of this new site
+    if (!site) { CLOUD.sharePanel(sid, f.panouR.blob); PN.put(sid, f.panouR.blob).catch(() => {}); }   // colleagues see / use the panel of this new site
   }
 });
 /* ---------- Cloud: photos go up automatically, site states are shared in real time ---------- */
@@ -2115,13 +2117,57 @@ const CLOUD = {
       try { localStorage.setItem('harta_sters_sent', JSON.stringify(sent)); } catch (e) {}
     }, 6000);
     RZ.pull(); setTimeout(RZ.send, 3000);
-    setInterval(() => { if (document.visibilityState === 'visible') { CLOUD.pull(); RZ.pull(); } }, 15000);
+    setTimeout(() => PN.sync(), 5000);
+    setInterval(() => { if (document.visibilityState === 'visible') { CLOUD.pull().then(() => PN.sync()); RZ.pull(); } }, 15000);
     setInterval(() => { if (document.visibilityState === 'visible') OB.pump(); }, 30000);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { CLOUD.pull(); RZ.pull(); OB.pump(); } });
     window.addEventListener('online', () => { CLOUD.pull(); RZ.pull(); OB.pump(); });
   },
 };
 /* ---------- „De trimis”: pairs not yet in the Santiere folder ---------- */
+/* ---------- panel photos shared between phones: every user sees the same panel for every site ---------- */
+const PN = {
+  tried: {}, busy: false,
+  sent() { try { return JSON.parse(localStorage.getItem('harta_pn') || '{}'); } catch (e) { return {}; } },
+  mark(id) { const m = PN.sent(); m[id] = 1; try { localStorage.setItem('harta_pn', JSON.stringify(m)); } catch (e) {} },
+  // a light copy of the panel goes to the server and stays there (the full-quality original goes to iCloud as before)
+  async put(sid, blob) {
+    const small = await shrink(blob, 2000, 0.85);
+    await CLOUD.req('/pn/' + encodeURIComponent(sid) + '.jpg', { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: small });
+    PN.mark(sid);
+  },
+  // bring the panels this phone is missing, send the ones only this phone has (a few at a time)
+  async sync() {
+    if (PN.busy || !db || !assets || !S.loaded || !navigator.onLine) return; PN.busy = true;
+    try {
+      const key = await CLOUD.k(); if (!key) return;
+      const sent = PN.sent(), now = Date.now(); let n = 0;
+      for (const s of [...S.sites.values()]) {
+        if (n >= 4) break;
+        if (!s.manual || (s.poze || []).length) continue;
+        if (s.panouA) {
+          if (s.panouShared || sent[s.id] || now - (PN.tried[s.id] || 0) < 120000) continue;
+          PN.tried[s.id] = now; n++;
+          try { const b = assets.get && await assets.get(s.panouA); if (b) await PN.put(s.id, b); } catch (e) {}
+          continue;
+        }
+        if (now - (PN.tried[s.id] || 0) < 45000) continue;
+        PN.tried[s.id] = now; n++;
+        try {
+          const id = encodeURIComponent(s.id);
+          let r = await fetch(CLOUD.url + '/pn/' + id + '.jpg', { headers: { 'x-key': key } });
+          if (!r.ok) r = await fetch(CLOUD.url + '/f/' + id + '/p.jpg', { headers: { 'x-key': key } });   // sites added with an older version
+          if (!r.ok) continue;
+          let b = await r.blob(); if (b.size < 100) continue;
+          if (b.size > 1.2e6) b = await shrink(b, 2000, 0.85);
+          const a = await assets.upload(b, { type: 'image/jpeg' });
+          await db.doc('sites/' + s._sh).update({ s: { [s.id]: { panouA: a.id, panouShared: true } } });
+        } catch (e) {}
+      }
+    } finally { PN.busy = false; }
+  },
+};
+
 /* ---------- today's routes: a site in a colleague's route is reserved for them ---------- */
 const RZ = {
   map: {}, force: new Set(), pend: null, timer: null,
