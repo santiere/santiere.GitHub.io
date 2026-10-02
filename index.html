@@ -1203,6 +1203,8 @@ async function patchSite(id, patch) {
   S.pend[id] = Object.assign(S.pend[id] || {}, patch);
   try { await db.doc('sites/' + s._sh).update({ s: { [id]: patch } }); }
   catch (e) { toast('Nu am putut salva: ' + (e.code || e.message)); throw e; }
+  // shown at once (pin, card, route); the stored copy comes back through the listener a moment later and says the same
+  if (!patch.sters) { const sh = S.shards[s._sh], cur = S.sites.get(id); if (sh && sh.s && sh.s[id]) Object.assign(sh.s[id], patch); if (cur) { S.sites.set(id, Object.assign({}, cur, patch)); refresh(); } }
   // every change that matters to the others goes to the shared state at once: stage, finished, deleted, edited details, moved pin
   if ('ultima' in patch || 'inactiv' in patch || ek.length || patch.sters) CLOUD.push(id, null, Object.assign({}, prev, patch));
 }
@@ -1621,7 +1623,7 @@ async function saveVisit() {
     await patchSite(s.id, patch);
     S.visitForm = null; toast('Pozele au fost salvate');
     if (S.navPaused && S.navOn) { S.navPaused = false; closeSheet(); $('#nav').hidden = false; $('.tabs').hidden = true; navArrived(); return; }
-    if (S.route.stops.includes(s.id) && !S.route.done.includes(s.id)) { S.route.done.push(s.id); saveRouteSoon(); }
+    if (routeVisited(s.id) && S.navOn) return;
     openSite(s.id, 'card');
   } catch (e) {
     btn.disabled = false; prog('Nu s-a salvat: ' + (e.code === 'quota_or_state' ? 'spațiul pentru poze e plin' : (e.code || e.message)) + '. Încearcă din nou.');
@@ -1629,6 +1631,13 @@ async function saveVisit() {
 }
 
 /* ============ route ops ============ */
+// I updated (or closed) a stop of my own route: it is ticked off and, while navigating, the guidance moves on to the next stop
+function routeVisited(sid) {
+  if (!S.route.stops.includes(sid) || S.route.done.includes(sid)) return false;
+  S.route.done.push(sid); saveRouteSoon();
+  if (S.navOn && S.nav) { if (S.view) closeSheet(); navAdvance(); } else refresh();
+  return true;
+}
 // stops already done by a colleague: ticked off, and the navigation goes straight to the next one
 function routeSkip(list) {
   for (const [sid] of list) if (!S.route.done.includes(sid)) S.route.done.push(sid);
@@ -1637,8 +1646,7 @@ function routeSkip(list) {
   toast((list.length > 1 ? list.length + ' șantiere din traseu au fost actualizate' : '„' + name + '” a fost actualizat') + ' de ' + (by || 'un coleg') + ' — trecem la următorul.', 5000);
   if (S.navOn && S.nav) {
     if (S.nav.legs.every(l => S.route.done.includes(l.to))) { toast('Traseul e gata — restul șantierelor au fost actualizate de colegi', 5000); navStop(); return; }
-    if (S.navTrack) S.navTrack.busy = false;
-    navReroute();
+    navAdvance();
   } else refresh();
 }
 function toggleStop(id) {
@@ -1758,15 +1766,16 @@ document.addEventListener('click', async (e) => {
       const prev = { ultima: s0.ultima || '', ultimaApp: s0.ultimaApp || '', inactiv: !!s0.inactiv };
       const patch = v === 'off' ? { inactiv: true } : v === 'wait' ? { inactiv: false, ultima: today(), ultimaApp: today() } : { inactiv: false, ultima: FORCED, ultimaApp: '' };
       await patchSite(id, patch);
-      if (v === 'off') { S.route.stops = S.route.stops.filter(x => x !== id); saveRouteSoon(); }
+      if (v !== 'due' && S.navOn && routeVisited(id)) { /* ticked off, the navigation moved on */ }
+      else if (v === 'off') { S.route.stops = S.route.stops.filter(x => x !== id); saveRouteSoon(); }
       toast(v === 'off' ? 'Marcat: Finalizat' : v === 'wait' ? 'Marcat: Actualizat azi' : 'Marcat: De actualizat', 6000, () => patchSite(id, prev));
       break;
     }
     case 'finish': {
       if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Apasă din nou: lucrarea e finalizată'; t.classList.add('amber'); break; }
-      await patchSite(id, { inactiv: true }); S.route.stops = S.route.stops.filter(x => x !== id); saveRouteSoon(); toast('Marcat finalizat'); break;
+      await patchSite(id, { inactiv: true }); if (!(S.navOn && routeVisited(id))) { S.route.stops = S.route.stops.filter(x => x !== id); saveRouteSoon(); } toast('Marcat finalizat'); break;
     }
-    case 'markToday': await patchSite(id, { ultima: today(), ultimaApp: today() }); toast('Marcat actualizat azi'); break;
+    case 'markToday': await patchSite(id, { ultima: today(), ultimaApp: today() }); routeVisited(id); toast('Marcat actualizat azi'); break;
     case 'delVisit': {
       if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă'; break; }
       const vid = t.dataset.vid; await db.doc('vizite/' + id).update({ v: { [vid]: null } });
@@ -2026,6 +2035,9 @@ function qcRender() {
     <div class="qc-gps ${g ? 'ok' : 'wait'}">${g ? `● GPS activ (±${Math.round(g.acc || 0)} m) · locația se scrie în fiecare poză` : '● Aștept semnalul GPS… Pozele se salvează doar cu locație.'}</div>
     <div class="sub" id="qcProg" style="margin-top:4px;color:var(--ink)"></div>
     <div class="btns" style="margin-top:10px"><button class="btn primary qc-big" id="qcSave" ${ready ? '' : 'disabled'}>Salvează</button><button class="btn ghost" id="qcCancel">Renunță</button></div>`;
+  // the camera fields outlive every redraw: a photo taken while the dialog was being redrawn (the panel had just loaded, the GPS came back) is not lost
+  f.inp = f.inp || {};
+  box.querySelectorAll('input[data-qc]').forEach(i => { const k = i.dataset.qc, o = f.inp[k]; if (o) i.replaceWith(o); else { f.inp[k] = i; i.addEventListener('change', qcPicked); } });
 }
 async function qcLoadPanel(f) {
   const s = S.sites.get(f.siteId); if (!s) return;
@@ -2053,7 +2065,7 @@ function qcOpen(o) {
     if (!!gpsFresh() !== !!$('.qc-gps.ok')) qcRender();
   }, 2000);
 }
-function qcClose() { const f0 = QC.f; if (f0) for (const k of ['panouUrl', 'santierUrl']) if (f0[k]) setTimeout(() => URL.revokeObjectURL(f0[k]), 1000); $('#qc').hidden = true; QC.f = null; clearInterval(QC.timer); if (S.navOn) navShow(false); else refresh(); }
+function qcClose() { const f0 = QC.f; if (f0) for (const k of ['panouUrl', 'santierUrl']) if (f0[k]) setTimeout(() => URL.revokeObjectURL(f0[k]), 1000); $('#qc').hidden = true; QC.f = null; clearInterval(QC.timer); if (S.navOn) { navShow(false); if (S.view === 'card' || S.view === 'site') render(); } else refresh(); }
 $('#navNew').addEventListener('click', () => qcOpen({ isNew: true }));
 async function toJpeg(file) {
   if (file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name || '')) return file;
@@ -2076,12 +2088,13 @@ async function qcPrepare(f, k, g) {
   catch (e) { toast('Poza nu a putut fi pregătită'); }
   f[k + 'Busy'] = false; if (QC.f === f) qcRender();
 }
-$('#qc').addEventListener('change', async e => {
+function qcPicked(e) {
   const k = e.target.dataset && e.target.dataset.qc; if (!k) return;
   const file = e.target.files[0]; if (!file) return;
-  const f = QC.f; f[k] = file; f[k + 'Url'] = URL.createObjectURL(file); f[k + 'R'] = null; f[k + 'G'] = gpsNow();
+  const f = QC.f; if (!f || !f.inp || f.inp[k] !== e.target) return;   // a field of a dialog already closed
+  f[k] = file; f[k + 'Url'] = URL.createObjectURL(file); f[k + 'R'] = null; f[k + 'G'] = gpsNow();
   qcRender(); qcPrepare(f, k, f[k + 'G']);
-});
+}
 $('#qc').addEventListener('click', async e => {
   const id = e.target.id; const f = QC.f; if (!f) return;
   if (id === 'qcCancel' || id === 'qcBack') { qcClose(); return; }
@@ -2118,6 +2131,7 @@ $('#qc').addEventListener('click', async e => {
     if (!saved) return;
     if (QC.f === f) qcClose();
     toast('✓ Salvat' + (site ? ' · ' + site.name : ''));
+    if (site && routeVisited(site.id) && S.navOn) { const nx = S.sites.get(S.nav.legs[navItem().leg].to); toast('✓ Salvat · ' + site.name + ' — urmează oprirea ' + navNo(navItem().leg) + (nx ? ': ' + nx.name : ''), 5000); }
     OB.pump([k]);   // photos go up in the background
     if (!site) { CLOUD.sharePanel(sid, f.panouR.blob); PN.put(sid, f.panouR.blob).catch(() => {}); }   // colleagues see / use the panel of this new site
   }
@@ -2799,6 +2813,9 @@ function navItems() {
   return S.navList;
 }
 function navItem() { return navItems()[S.navPos || 0] || { leg: 0, s: {} }; }
+// the number of a stop = its place in the route list, the same number as on its pin; it does not start again from 1 after a recalculation
+function navNo(leg) { const L = S.nav && S.nav.legs[leg]; const i = L ? S.route.stops.indexOf(L.to) : -1; return i >= 0 ? i + 1 : leg + 1; }
+function navCount() { return Math.max(S.route.stops.length, S.nav ? S.nav.legs.length : 0); }
 function bearingTo(a, b) { const r = Math.PI / 180; const y = Math.sin((b[0] - a[0]) * r) * Math.cos(b[1] * r); const x = Math.cos(a[1] * r) * Math.sin(b[1] * r) - Math.sin(a[1] * r) * Math.cos(b[1] * r) * Math.cos((b[0] - a[0]) * r); return (Math.atan2(y, x) / r + 360) % 360; }
 function approachBearing(it) {
   const c = S.nav.legs[it.leg].coords; const loc = [it.s.loc[1], it.s.loc[0]];
@@ -2847,7 +2864,7 @@ function navSign(it, d) {
   const key = S.navPos + '|' + it.leg + '|' + it.j;
   if (el.dataset.k !== key) {
     el.dataset.k = key; $('#nsIc').innerHTML = maneuverIcon(it.s, 58);
-    $('#nsTxt').textContent = it.s.type === 'arrive' ? 'Oprirea ' + (it.leg + 1) + (site ? ' · ' + site.name : '') + (it.s.side ? ' (pe ' + it.s.side + ')' : '') : Router.text(it.s);
+    $('#nsTxt').textContent = it.s.type === 'arrive' ? 'Oprirea ' + navNo(it.leg) + (site ? ' · ' + site.name : '') + (it.s.side ? ' (pe ' + it.s.side + ')' : '') : Router.text(it.s);
   }
   $('#nsDist').textContent = it.s.type === 'depart' ? 'Start' : fmtDist(Math.max(0, d || 0));
 }
@@ -2870,12 +2887,12 @@ function navShow(say) {
   const eta = new Date(Date.now() + remT * 1000);
   $('#navEta').textContent = 'Sosire ' + pad(eta.getHours()) + ':' + pad(eta.getMinutes()) + ' · ' + fmtDist(remD) + ' · ' + fmtTime(remT);
   navProg(it.leg, remD);
-  $('#navSub').textContent = 'Oprirea ' + (it.leg + 1) + ' din ' + S.nav.legs.length + (site ? ' · ' + site.name : '');
+  $('#navSub').textContent = 'Oprirea ' + navNo(it.leg) + ' din ' + navCount() + (site ? ' · ' + site.name : '');
   $('#navPrev').disabled = S.navPos === 0;
   const arr = it.s.type === 'arrive';
   $('#navArrive').hidden = !arr; $('#navMove').hidden = arr;
   if (arr) { const vs = site; const ok = vs && status(vs) === 'due'; const vb = $('#navVisit'); vb.disabled = !ok; vb.textContent = ok ? 'Actualizează șantier' : vs && status(vs) === 'wait' ? 'Actualizat · revine ' + roShort(addDays(lastUpd(vs), CYCLE)) : 'Finalizat'; }
-  if (arr) { $('#navNextLeg').textContent = it.leg + 1 < S.nav.legs.length ? 'Pornește spre oprirea ' + (it.leg + 2) : 'Termină traseul'; }
+  if (arr) { $('#navNextLeg').textContent = it.leg + 1 < S.nav.legs.length ? 'Pornește spre oprirea ' + navNo(it.leg + 1) : 'Termină traseul'; }
   updateMap();
   if (map && !S.navGpsFollow && !S.navFree) {
     const b = approachBearing(it);
@@ -2892,6 +2909,23 @@ function navArrived() {
   if (sid && !S.route.done.includes(sid)) { S.route.done.push(sid); saveRouteSoon(); S.nav.sig = routeSig(); }
   if (it.leg + 1 >= S.nav.legs.length) { toast('Traseul e gata'); navStop(); return; }
   S.navPos++; navShow(true);
+}
+// a stop was ticked off while navigating (I photographed it — from the arrival panel or from its pin — or a colleague did):
+// the guidance goes on to the first stop still open, with the road drawn from where I am now
+function navAdvance() {
+  if (!S.navOn || !S.nav) return;
+  const legs = S.nav.legs, open = l => !S.route.done.includes(l.to);
+  if (!legs.some(open)) { toast('Traseul e gata', 5000); navStop(); return; }
+  const cur = navItem().leg;
+  if (!open(legs[cur])) {   // it was the stop I was heading to: show the next one at once (the recalculation below refines the road)
+    let nx = legs.findIndex((l, k) => k > cur && open(l)); if (nx < 0) nx = legs.findIndex(open);
+    S.navPos = Math.max(0, navItems().findIndex(x => x.leg === nx)); S.navAnn = {}; S.navProj = null;
+    if (S.navTrack) { S.navTrack.off = 0; S.navTrack.away = 0; S.navTrack.lastD = null; }
+    navShow(false);
+  }
+  S.nav.sig = routeSig();
+  if (S.navTrack) S.navTrack.busy = false;
+  navReroute(true);
 }
 /* ---------- live GPS guidance: follow the route, advance the steps, reroute when off it ---------- */
 function legGeom(L) {
@@ -2918,7 +2952,7 @@ function projectOnLeg(L, lat, lng) {
   }
   return best;
 }
-async function navReroute() {
+async function navReroute(next) {
   const tr = S.navTrack; if (!tr || tr.busy || !S.me) return;
   tr.busy = true; tr.lastReroute = Date.now();
   try {
@@ -2931,8 +2965,11 @@ async function navReroute() {
     const pts = [{ lat: S.me.lat, lng: S.me.lng, label: 'Locația mea' }].concat(rest);
     const snaps = pts.map(p => Router.snap(p.lat, p.lng)); if (!snaps[0]) return;
     const legs = []; let prev = 0;
+    const old = new Map(S.nav.legs.map(l => [(l.from || '') + '>' + l.to, l]));   // roads between two stops stay as they were; only the one from my position is searched again
     for (let k = 1; k < pts.length; k++) {
       if (!snaps[k]) continue;
+      const keep = prev > 0 && old.get(pts[prev].id + '>' + pts[k].id);
+      if (keep) { legs.push(keep); prev = k; continue; }
       const [r] = Router.search(snaps[prev], [snaps[k]]); if (!r) continue;
       legs.push(Object.assign(Router.describe(r, pts[prev], pts[k], pts[k].name), { to: pts[k].id, from: pts[prev].id || null }));
       prev = k;
@@ -2942,8 +2979,8 @@ async function navReroute() {
     S.nav = { legs, total, sig: routeSig(), start: pts[0], first: null };
     S.navTot = Math.max(S.navTot || 0, total.dist);
     S.navList = null; S.navPos = 0; S.navAnn = {}; tr.off = 0; S.navProj = null;
-    speak('Recalculez traseul');
-    navShow(false); navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }, true);
+    if (!next) speak('Recalculez traseul');
+    navShow(!!next); navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }, true);
   } catch (e) { } finally { tr.busy = false; }
 }
 // one GPS fix → the arrow and the camera glide to it in the time until the next fix (no stop-and-go)
@@ -3063,13 +3100,13 @@ window.addEventListener('resize', () => { if (S.navOn && S.me) setTimeout(() => 
 /* progress along the whole route: stops reached + share of the distance already driven */
 function navProg(leg, remD) {
   const box = $('#navProg'); if (!box || !S.nav) return;
-  const n = S.nav.legs.length, tot = Math.max(S.navTot || 0, 1);
-  leg = Math.max(leg, S.nav.legs.filter(l => S.route.done.includes(l.to)).length);
+  const tot = Math.max(S.navTot || 0, 1);
   const pct = Math.max(0, Math.min(100, Math.round(100 * (1 - remD / tot))));
   $('#npFill').style.setProperty('--p', pct + '%');
-  $('#npStops').textContent = Math.min(leg, n) + '/' + n;
+  const z = navCount(), a = Math.min(z, S.route.stops.filter(id => S.route.done.includes(id)).length);   // stops ticked off / stops of the route
+  $('#npStops').textContent = a + '/' + z;
   $('#npPct').textContent = pct + '%';
-  box.setAttribute('aria-label', 'Progres traseu: ' + Math.min(leg, n) + ' din ' + n + ' șantiere, ' + pct + '%');
+  box.setAttribute('aria-label', 'Progres traseu: ' + a + ' din ' + z + ' șantiere, ' + pct + '%');
 }
 
 /* ---------- if iOS reloaded the app while navigating (it does that after a while in the background), pick up where we were ---------- */
