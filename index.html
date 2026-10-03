@@ -285,7 +285,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .qc-panel{background:#101418;padding:0;cursor:zoom-in;border-color:#13202A}
 .qc-panel img{object-fit:contain}
 .qc-tile.qc-panel .qc-l{position:absolute;left:8px;top:8px;font-size:12.5px;padding:2px 7px}
-.qc-tile.qc-panel img + .qc-l + .qc-s{position:absolute;left:50%;transform:translateX(-50%);bottom:8px;white-space:nowrap;font-size:11.5px;line-height:1.25;padding:3px 8px}
+.qc-tile.qc-panel img + .qc-l + .qc-s{position:absolute;left:50%;transform:translateX(-50%);bottom:8px;white-space:nowrap;max-width:calc(100% - 12px);overflow:hidden;text-overflow:ellipsis;font-size:11.5px;line-height:1.25;padding:3px 8px}
 .qc-tiles.upd.tall{grid-template-columns:1.75fr 1fr;align-items:stretch}
 .qc-tiles.upd.tall .qc-panel{aspect-ratio:9/16;max-height:52vh}
 .qc-tiles.upd.tall .qc-tile:not(.qc-panel){aspect-ratio:auto;height:auto}
@@ -293,6 +293,16 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .qc-tiles.upd.wide .qc-panel{aspect-ratio:4/3;max-height:40vh}
 .qc-tiles.upd.wide .qc-tile:not(.qc-panel){aspect-ratio:auto;height:104px}
 .qc-tiles.upd.wide .qc-tile:not(.qc-panel) .qc-n{width:40px;height:40px;font-size:17px}
+/* a photo already taken: whole and centred in its frame, labels on the edges */
+.qc-tile.pic{background:#101418}
+.qc-tile.pic img{object-fit:contain;object-position:center}
+.qc-tile.pic .qc-l{position:absolute;left:8px;top:8px;z-index:1;font-size:12.5px;padding:2px 7px;background:rgba(255,255,255,.9);color:#13202A;border-radius:6px}
+.qc-tile.pic .qc-s{position:absolute;left:50%;transform:translateX(-50%);bottom:8px;z-index:1;white-space:nowrap;max-width:calc(100% - 12px);overflow:hidden;text-overflow:ellipsis;font-size:11.5px;line-height:1.25;padding:3px 8px;background:rgba(255,255,255,.9);color:#3A444C;border-radius:6px}
+/* updating a site, once the stage photo is taken: it gets the room (sideways photo: the wide column; upright: equal columns) */
+.qc-tiles.upd.tall.swide{grid-template-columns:1fr 1.6fr}
+.qc-tiles.upd.tall.stall{grid-template-columns:1fr 1fr}
+.qc-tiles.upd.wide.swide .qc-panel,.qc-tiles.upd.wide.stall .qc-panel{max-height:26vh}
+.qc-tiles.upd.wide.swide .qc-tile:not(.qc-panel),.qc-tiles.upd.wide.stall .qc-tile:not(.qc-panel){height:26vh}
 @media (max-height: 800px) and (orientation: portrait) { .qc-tiles.upd + .qc-src + .qc-srcnote{display:none} }
 @media (orientation: landscape) and (max-height: 600px) {
   .qc-tiles.upd.tall,.qc-tiles.upd.wide{grid-template-columns:1fr 1fr}
@@ -2421,13 +2431,15 @@ function qcRender() {
   const tile = (k, n, label) => {
     const r = f[k + 'R'];
     const sub = f[k] && !r ? 'pregătesc poza…' : f[k] ? 'atinge pentru altă poză' : QC.src() === 'lib' ? 'atinge și alege din Poze' : 'atinge pentru cameră';
-    return `<label class="qc-tile ${r ? 'done' : ''}">${f[k] ? `<img src="${f[k + 'Url']}" alt="">` : `<span class="qc-n">${n}</span>`}<span class="qc-l">${r ? '✓ ' + label : label}</span><span class="qc-s">${sub}</span><input type="file" accept="image/*" ${QC.src() === 'lib' ? '' : 'capture="environment"'} data-qc="${k}"></label>`;
+    // a photo already taken is shown whole and centred in its frame (never cut), with the labels on its edges
+    const short = label.split(' ')[0];
+    return `<label class="qc-tile ${r ? 'done' : ''}${f[k] ? ' pic' : ''}">${f[k] ? `<img src="${f[k + 'Url']}" alt="">` : `<span class="qc-n">${n}</span>`}<span class="qc-l">${f[k] ? (r ? '✓ ' : '') + short : label}</span><span class="qc-s">${sub}</span><input type="file" accept="image/*" ${QC.src() === 'lib' ? '' : 'capture="environment"'} data-qc="${k}"></label>`;
   };
   // updating an existing site: its panel is shown as large as the screen allows, so I can tell at a glance whether I am at the right site; a tap opens it full screen
-  const panelTile = site ? `<div class="qc-tile done qc-fixed qc-panel" id="qcPanelView" ${f.panouUrl ? 'role="button" tabindex="0" aria-label="Panoul șantierului, atinge pentru mărire"' : ''}>${f.panouUrl ? `<img src="${f.panouUrl}" alt="Panoul șantierului">` : `<span class="qc-s">${f.panouR && f.panouR.missing ? 'Panoul original se ia seara din iCloud' : 'Se încarcă panoul…'}</span>`}<span class="qc-l">N · Panou</span>${f.panouUrl ? '<span class="qc-s">🔍 atinge pentru mărire</span>' : ''}</div>` : tile('panou', 'N', 'Panou șantier');
+  const panelTile = site ? `<div class="qc-tile done qc-fixed qc-panel" id="qcPanelView" ${f.panouUrl ? 'role="button" tabindex="0" aria-label="Panoul șantierului, atinge pentru mărire"' : ''}>${f.panouUrl ? `<img src="${f.panouUrl}" alt="Panoul șantierului">` : `<span class="qc-s">${f.panouR && f.panouR.missing ? 'Panoul original se ia seara din iCloud' : 'Se încarcă panoul…'}</span>`}<span class="qc-l">N · Panou</span>${f.panouUrl ? '<span class="qc-s">🔍 mărește</span>' : ''}</div>` : tile('panou', 'N', 'Panou șantier');
   const ready = (site ? f.panouR : f.panouR) && f.santierR;
   box.innerHTML = `<div class="qc-site">${site ? `<b>${esc(site.name)}</b>` : '<b>Șantier nou</b>'}</div>
-    <div class="qc-tiles${site ? ' upd ' + (f.panouWide ? 'wide' : 'tall') : ''}">${panelTile}${tile('santier', 'Na', 'Stadiu șantier')}</div>
+    <div class="qc-tiles${site ? ' upd ' + (f.panouWide ? 'wide' : 'tall') + (f.santier ? (f.santierWide ? ' swide' : ' stall') : '') : ''}">${panelTile}${tile('santier', 'Na', 'Stadiu șantier')}</div>
     <div class="qc-src" role="group" aria-label="De unde vine poza"><button class="state-opt${QC.src() === 'quick' ? ' on' : ''}" data-src="quick" aria-pressed="${QC.src() === 'quick'}"><b>📷 Cameră rapidă</b></button><button class="state-opt${QC.src() === 'lib' ? ' on' : ''}" data-src="lib" aria-pressed="${QC.src() === 'lib'}"><b>🖼 Din Poze</b></button></div>
     <div class="sub qc-srcnote">${QC.src() === 'lib' ? 'Fotografiezi cu aplicația Cameră a iPhone-ului (rezoluția și setările tale), apoi alegi poza aici, din Fototecă. Ajunge neschimbată.' : 'Camera din aplicație: iOS dă aici 12 MP (4032×3024). Pentru rezoluția setată de tine în iPhone alege „Din Poze”.'}</div>
     <div class="qc-gps ${g ? 'ok' : 'wait'}">${g ? `● GPS activ (±${Math.round(g.acc || 0)} m) · locația se scrie în fiecare poză` : '● Aștept semnalul GPS… Pozele se salvează doar cu locație.'}</div>
@@ -2496,7 +2508,9 @@ function qcPicked(e) {
   const k = e.target.dataset && e.target.dataset.qc; if (!k) return;
   const file = e.target.files[0]; if (!file) return;
   const f = QC.f; if (!f || !f.inp || f.inp[k] !== e.target) return;   // a field of a dialog already closed
-  f[k] = file; f[k + 'Url'] = URL.createObjectURL(file); f[k + 'R'] = null; f[k + 'G'] = gpsNow();
+  f[k] = file; f[k + 'Url'] = URL.createObjectURL(file); f[k + 'R'] = null; f[k + 'G'] = gpsNow(); f[k + 'Wide'] = true;
+  // sideways or upright: the frame takes the shape of the photo
+  { const u = f[k + 'Url'], im = new Image(); im.onload = () => { const w = im.naturalWidth > im.naturalHeight * 1.1; if (QC.f === f && f[k + 'Url'] === u && w !== f[k + 'Wide']) { f[k + 'Wide'] = w; qcRender(); } }; im.src = u; }
   qcRender(); qcPrepare(f, k, f[k + 'G']);
 }
 $('#qc').addEventListener('click', async e => {
