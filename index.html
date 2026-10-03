@@ -3,7 +3,7 @@
 <head>
 <title>Harta Șantierelor</title>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' data: blob: https://santiere-api.i-spridon.workers.dev; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' data: blob: https://santiere-api.i-spridon.workers.dev https://nominatim.openstreetmap.org; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#172026">
@@ -281,6 +281,26 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .qc-n{width:52px;height:52px;border-radius:50%;background:#13202A;color:#fff;font-size:21px;font-weight:700;display:grid;place-items:center}
 .qc-l{font-weight:700;font-size:16px}.qc-s{font-size:12px;color:#5B6570}
 .qc-big{width:100%;height:52px;font-size:16px;margin-top:10px}
+/* updating a site: the panel as large as possible (upright photo: tall, beside a narrow stage tile; sideways photo: full width, stage tile below) */
+.qc-panel{background:#101418;padding:0;cursor:zoom-in;border-color:#13202A}
+.qc-panel img{object-fit:contain}
+.qc-tile.qc-panel .qc-l{position:absolute;left:8px;top:8px;font-size:12.5px;padding:2px 7px}
+.qc-tile.qc-panel img + .qc-l + .qc-s{position:absolute;left:50%;transform:translateX(-50%);bottom:8px;white-space:nowrap;font-size:11.5px;line-height:1.25;padding:3px 8px}
+.qc-tiles.upd.tall{grid-template-columns:1.75fr 1fr;align-items:stretch}
+.qc-tiles.upd.tall .qc-panel{aspect-ratio:9/16;max-height:52vh}
+.qc-tiles.upd.tall .qc-tile:not(.qc-panel){aspect-ratio:auto;height:auto}
+.qc-tiles.upd.wide{grid-template-columns:1fr}
+.qc-tiles.upd.wide .qc-panel{aspect-ratio:4/3;max-height:40vh}
+.qc-tiles.upd.wide .qc-tile:not(.qc-panel){aspect-ratio:auto;height:104px}
+.qc-tiles.upd.wide .qc-tile:not(.qc-panel) .qc-n{width:40px;height:40px;font-size:17px}
+@media (max-height: 800px) and (orientation: portrait) { .qc-tiles.upd + .qc-src + .qc-srcnote{display:none} }
+@media (orientation: landscape) and (max-height: 600px) {
+  .qc-tiles.upd.tall,.qc-tiles.upd.wide{grid-template-columns:1fr 1fr}
+  .qc-tiles.upd .qc-panel,.qc-tiles.upd .qc-tile:not(.qc-panel){aspect-ratio:auto;max-height:none;height:30vh}
+}
+.qc-src{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}.qc-src .state-opt{min-height:38px;padding:6px 4px}.qc-src .state-opt b{font-size:13.5px}
+.qc-srcnote{margin-top:6px;font-size:12.5px;line-height:1.3}.qc-src .state-opt.on b::before{content:none}
+.qc-src .state-opt.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface))}
 .areabar{position:absolute;left:12px;right:12px;bottom:calc(var(--sab,0px) + 76px);z-index:6;background:var(--surface,#fff);color:var(--ink);border-radius:16px;padding:12px;box-shadow:0 8px 30px rgba(0,0,0,.28);display:flex;flex-direction:column;gap:10px}
 .areabar b{display:block;font-size:16px}.areabar span{display:block;font-size:22px;font-weight:700;margin-top:2px}.areabar small{display:block;color:#5B6570;font-size:12.5px;margin-top:2px}
 .areabar ~ .selfab{display:none}.areabar:not([hidden]) ~ .selfab{display:none}
@@ -365,6 +385,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
   .qc-tile{height:30vh}
   .qc-n{width:38px;height:38px;font-size:16px}.qc-l{font-size:14px}.qc-s{font-size:11px}
   .qc-gps{margin-top:6px;font-size:12.5px}
+  .qc-src{margin-top:6px}.qc-src .state-opt{min-height:34px;padding:3px 4px}.qc-srcnote{display:none}
   .qc-big{height:40px;font-size:15px;margin-top:6px}
   #qcCancel{height:36px;min-height:0;padding:0 12px;font-size:14px}
   .qc-card .btns{margin-top:6px!important;gap:6px}
@@ -418,11 +439,18 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .obbtn b{color:var(--ink)}.obbtn.busy span{animation:obp 1.4s ease-in-out infinite}@keyframes obp{50%{opacity:.45}}
 .obbtn.stuck{background:var(--amber);color:var(--amber-ink)}.obbtn.stuck b{color:var(--amber-ink)}
 .qc-status{margin:6px 0 4px;font-weight:600;font-size:15px}.qc-status.ok{color:#1E8E3E}.qc-status.wait{color:#B3261E}
+/* "Drum cu șantiere": my two addresses, how many sites, the flag of the destination */
+.cm-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+.cm-t{display:flex;flex-direction:column;min-width:0;color:var(--ink)}.cm-t .sub{white-space:normal;overflow-wrap:anywhere}
+.cm-step{gap:10px;flex:none}.cm-step b{min-width:26px;text-align:center;font-size:18px;color:var(--ink)}
+.cm-res{display:block;width:100%;text-align:left;margin-top:6px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font-size:14.5px;line-height:1.3}
+.cm-err{color:var(--due)}
+.dest-mk{font-size:34px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.45));pointer-events:none}
 /* crosshair for placing a new site */
 .cross{position:absolute;left:50%;top:50%;width:36px;height:36px;margin:-36px 0 0 -18px;z-index:3;pointer-events:none}
 
 /* lightbox */
-.lb{position:fixed;inset:0;z-index:50;background:rgba(8,10,12,.94);display:flex;flex-direction:column}
+.lb{position:fixed;inset:0;z-index:70;background:rgba(8,10,12,.94);display:flex;flex-direction:column}
 .lb-top{display:flex;justify-content:space-between;align-items:center;padding:calc(var(--sat) + 8px) 12px 8px;color:#fff;font-size:14px;gap:8px}
 .lb-top button{border:0;background:rgba(255,255,255,.14);color:#fff;border-radius:10px;height:38px;padding:0 12px;font-weight:600}
 .lb-img{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding-bottom:var(--sab)}
@@ -1246,6 +1274,7 @@ function updateMap() {
   if (!map || !map.getSource('sites')) return;
   map.getSource('sites').setData({ type: 'FeatureCollection', features: siteFeatures() });
   map.getSource('route').setData({ type: 'FeatureCollection', features: routeFeatures() });
+  DEST.mark();
   const fs = S.openId && S.sites.get(S.openId);
   map.getSource('focus').setData({ type: 'FeatureCollection', features: fs ? [{ type: 'Feature', geometry: { type: 'Point', coordinates: [fs.lng, fs.lat] }, properties: {} }] : [] });
 }
@@ -1378,13 +1407,13 @@ function go(view, opts = {}) {
   if (S.view && !$('#sheet').hidden) scrollMem[S.view] = $('#body').scrollTop;
   if (opts.back !== undefined) S.back = opts.back;
   S.view = view;
-  $('#cross').toggleAttribute('hidden', !!(view !== 'add'));
+  $('#cross').toggleAttribute('hidden', !!(view !== 'add' && view !== 'place'));
   const full = ['site', 'list', 'route', 'visit', 'edit', 'activ'].includes(view);
   showSheet(full ? 'full' : 'peek');
   setTab(['list', 'route', 'activ'].includes(view) ? view : 'map');
   render(true);
   if (opts.restore && scrollMem[view]) $('#body').scrollTop = scrollMem[view];
-  if (view === 'add') { requestAnimationFrame(() => { map && map.setPadding({ top: 110, bottom: sheetPad(), left: 0, right: 0 }); placeCross(); }); }
+  if (view === 'add' || view === 'place') { requestAnimationFrame(() => { map && map.setPadding({ top: 110, bottom: sheetPad(), left: 0, right: 0 }); placeCross(); }); }
   else if (map) map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
 }
 function openCard(id) { S.openId = id; go('card', { back: null }); updateMap(); const s = S.sites.get(id); if (s) setTimeout(() => flyToSite(s), 30); }
@@ -1406,6 +1435,7 @@ function render(reset) {
   else if (S.view === 'visit') html = viewVisit();
   else if (S.view === 'edit') html = viewEdit();
   else if (S.view === 'activ') html = viewActiv();
+  else if (S.view === 'place') html = viewPlace();
   body.innerHTML = html; body.scrollTop = keep;
   hydrate(body);
   if (S.view === 'site') loadVisits(S.openId);
@@ -1548,11 +1578,12 @@ function viewRoute() {
   return `<div class="row sp"><h2>${S.route.name ? esc(S.route.name) : 'Traseul curent'}</h2>${stops.length ? '<button class="btn sm ghost danger" data-act="clearRoute">Șterge traseul</button>' : ''}</div>
   <div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · ia toate șantierele de actualizat din zona de pe ecran sau din zona pe care o desenezi cu degetul, în ordinea cea mai rapidă
     <div class="btns" style="margin-top:8px"><button class="btn amber" data-act="areaMode">Zona de pe ecran</button><button class="btn amber" data-act="areaDraw">✏️ Desenează zona</button></div></div>
+  ${commuteBox()}
   <button class="btn" style="width:100%;margin-top:10px" data-act="scout">🧭 Explorare · fără traseu</button>
   ${!stops.length ? `<div class="note" style="margin-top:10px">Sau alege tu oricâte șantiere (minim 2), în orice ordine: butonul de traseu de pe hartă, „+ Active din zonă”, sau bifează-le din Listă. Ordinea o stabilesc eu.</div>
     <div class="btns" style="margin-top:10px"><button class="btn" data-act="selMode">Alege pe hartă</button><button class="btn" data-act="tab" data-v="list">Din listă</button></div>` : `
   <div class="sub" style="margin:4px 0 10px">${stops.length} opriri${S.route.done.length ? ' · ' + S.route.done.length + ' vizitate' : ''}</div>
-  <div class="note">Plecare: <b style="color:var(--ink)">locația ta (GPS)</b>${S.me ? '' : ' · <span class="sub">aștept semnalul GPS…</span>'}</div>
+  <div class="note">Plecare: <b style="color:var(--ink)">locația ta (GPS)</b>${S.me ? '' : ' · <span class="sub">aștept semnalul GPS…</span>'}${DEST.get() ? `<div class="row sp" style="margin-top:6px"><span>Sosire: <b style="color:var(--ink)">🏁 ${esc(DEST.get().label)}</b>${DEST.get().addr ? ' <span class="sub">· ' + esc(DEST.get().addr) + '</span>' : ''}</span><button class="btn sm ghost" data-act="destClear" aria-label="Scoate destinația">✕</button></div>` : ''}</div>
   ${routeSection()}
   ${trSendBox(pending.length)}
   <h3>Opriri</h3>
@@ -1656,7 +1687,7 @@ async function shrink(file, max = 1600, q = 0.82) {
   let img;
   try { img = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
   catch (e) { img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(file); }); }
-  const w = img.width, h = img.height, k = Math.min(1, max / Math.max(w, h));
+  const w = img.width, h = img.height, k = Math.min(1, max / Math.max(w, h), Math.sqrt(16e6 / (w * h)));   // (a phone cannot draw more than ~16 MP at once; only photos that are not JPEG pass through here)
   const c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   return await new Promise(r => c.toBlob(r, 'image/jpeg', q));
@@ -1696,7 +1727,7 @@ async function uploadFiles(files, prog, full) {
   for (let i = 0; i < files.length; i++) {
     prog && prog(`Încarc poza ${i + 1} din ${files.length}…`);
     const fl = files[i];
-    const blob = full ? ((fl.type === 'image/jpeg' && fl.size <= 20e6) ? fl : await shrink(fl, 4032, 0.95)) : await shrink(fl);
+    const blob = full ? ((fl.type === 'image/jpeg' && fl.size <= 45e6) ? fl : await shrink(fl, 4032, 0.95)) : await shrink(fl);
     let r;
     try { r = await assets.upload(blob, { type: 'image/jpeg' }); }
     catch (e) { if (e.code === 'store_unavailable') { await new Promise(res => setTimeout(res, 1200)); r = await assets.upload(blob, { type: 'image/jpeg' }); } else throw e; }
@@ -1759,12 +1790,145 @@ const RS = {
     const close = () => { clearInterval(tm); d.remove(); };
     d.querySelector('#rsOk').onclick = () => {
       close(); RS.set(null);
-      if (!left) { S.route = { stops: [], done: [], start: null, name: '' }; S.nav = null; saveRouteSoon(); }
+      if (!left) { S.route = { stops: [], done: [], start: null, name: '' }; S.nav = null; DEST.clear(); saveRouteSoon(); }
       closeSheet(); refresh();
     };
     const bk = d.querySelector('#rsBack'); if (bk) bk.onclick = close;
   },
 };
+/* ============ "Drum cu șantiere": from where I am to home / to work, with a detour through at least N sites to update ============ */
+const PLACE_NAMES = { work: ['🏢', 'Serviciu', 'Spre serviciu'], home: ['🏠', 'Acasă', 'Spre casă'] };
+const PLACES = {   // my two addresses, kept on this phone only
+  get() { if (!this.v) { try { this.v = JSON.parse(localStorage.getItem('harta_places') || '{}') || {}; } catch (e) { this.v = {}; } } return this.v; },
+  save() { try { localStorage.setItem('harta_places', JSON.stringify(this.get())); } catch (e) {} },
+  n() { const n = +this.get().n; return n >= 2 && n <= 30 ? n : 10; },
+};
+const DEST = {     // where the current route ends (null: at its last stop)
+  get() {
+    if (this.v === undefined) { try { this.v = JSON.parse(localStorage.getItem('harta_dest') || 'null'); } catch (e) { this.v = null; } }
+    if (this.v && Date.now() - (this.v.t || 0) > 12 * 3600e3) this.set(null);   // this morning's destination is not tonight's
+    return this.v;
+  },
+  set(d) {
+    this.v = d ? { lat: d.lat, lng: d.lng, label: d.label, addr: d.addr || '', k: d.k || '', t: Date.now() } : null;
+    try { if (d) localStorage.setItem('harta_dest', JSON.stringify(this.v)); else localStorage.removeItem('harta_dest'); } catch (e) {}
+    S.autoSig = null; this.mark();
+  },
+  clear() { if (this.get()) this.set(null); },
+  mark() {   // the flag on the map
+    const d = this.get(); if (typeof map === 'undefined' || !map || typeof maplibregl === 'undefined') return;
+    if (!d) { if (this.mk) { this.mk.remove(); this.mk = null; } return; }
+    if (!this.mk) { const el = document.createElement('div'); el.className = 'dest-mk'; el.textContent = '🏁'; this.mk = new maplibregl.Marker({ element: el, anchor: 'bottom' }); }
+    this.mk.setLngLat([d.lng, d.lat]).addTo(map);
+  },
+};
+// address → place (OpenStreetMap search; only what is typed in the box is sent, when "Caută" is pressed)
+async function geocode(q) {
+  const c = map ? map.getCenter() : { lat: 44.43, lng: 26.1 };
+  const box = [c.lng - 0.6, c.lat + 0.4, c.lng + 0.6, c.lat - 0.4].map(x => x.toFixed(3)).join(',');
+  const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&addressdetails=1&accept-language=ro&countrycodes=ro&viewbox=' + box + '&q=' + encodeURIComponent(q), { headers: { accept: 'application/json' } });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return (await r.json()).map(x => {
+    const a = x.address || {};
+    const street = [a.road || a.pedestrian || a.square || x.name || '', a.house_number || ''].filter(Boolean).join(' ');
+    const label = [street, a.suburb || a.city_district || a.neighbourhood || '', a.city || a.town || a.village || a.municipality || a.county || ''].filter((v, i, L) => v && L.indexOf(v) === i).join(', ');
+    return { lat: +x.lat, lng: +x.lon, label: label || String(x.display_name || '').split(',').slice(0, 3).join(',') };
+  }).filter(x => isFinite(x.lat) && isFinite(x.lng));
+}
+function placeEditor() {
+  const k = S.placeEdit, [ic, nm] = PLACE_NAMES[k], E = S.placeForm || (S.placeForm = { q: '', res: null });
+  return `<div class="cm-edit"><div class="sub" style="margin:10px 0 6px"><b style="color:var(--ink)">${ic} ${nm}</b> · scrie adresa și alege din listă</div>
+    <div class="row"><input class="in grow" id="plQ" placeholder="ex. Str. Lipscani 20, București" value="${esc(E.q)}" enterkeyhint="search" autocomplete="off"><button class="btn" data-act="plFind">Caută</button></div>
+    ${E.busy ? '<div class="sub" style="margin-top:6px">Caut adresa…</div>' : ''}${E.err ? `<div class="sub cm-err" style="margin-top:6px">${esc(E.err)}</div>` : ''}
+    ${(E.res || []).map((r, i) => `<button class="cm-res" data-act="plPick" data-i="${i}">${esc(r.label)}</button>`).join('')}
+    <div class="btns" style="margin-top:8px"><button class="btn sm" data-act="plHere">📍 Sunt aici acum</button><button class="btn sm" data-act="plMap">Aleg pe hartă</button>${PLACES.get()[k] ? '<button class="btn sm ghost danger" data-act="plDel">Șterge</button>' : ''}<button class="btn sm ghost" data-act="plCancel">Renunță</button></div></div>`;
+}
+function commuteBox() {
+  const P = PLACES.get(), n = PLACES.n();
+  const row = k => { const [ic, nm] = PLACE_NAMES[k], v = P[k]; return `<div class="cm-row"><span class="cm-t"><b>${ic} ${nm}</b><span class="sub">${v ? esc(v.label) : 'adresă nesetată'}</span></span><button class="btn sm" data-act="plEdit" data-v="${k}">${v ? 'Schimbă' : 'Setează'}</button></div>`; };
+  let h = `<div class="note cm-box" style="margin-top:10px"><b style="color:var(--ink)">Drum cu șantiere</b> · de unde ești până la serviciu sau acasă, cu ocol pe la șantierele de actualizat cele mai la îndemână${row('work')}${row('home')}`;
+  if (S.placeEdit) h += placeEditor();
+  else h += `<div class="cm-row"><span class="cm-t"><b>Șantiere pe drum</b><span class="sub">cel puțin atâtea; cele chiar de pe drum se adaugă singure</span></span><span class="row cm-step"><button class="btn sm" data-act="cmN" data-v="-1" aria-label="Mai puține">−</button><b class="num" id="cmNv">${n}</b><button class="btn sm" data-act="cmN" data-v="1" aria-label="Mai multe">+</button></span></div>
+    <div class="btns" style="margin-top:8px"><button class="btn amber" data-act="cmGo" data-v="work" ${P.work && !S.cmBusy ? '' : 'disabled'}>🏢 Spre serviciu</button><button class="btn amber" data-act="cmGo" data-v="home" ${P.home && !S.cmBusy ? '' : 'disabled'}>🏠 Spre casă</button></div>`;
+  return h + `<div class="sub" id="cmMsg" style="margin-top:6px"${S.cmMsg ? '' : ' hidden'}>${esc(S.cmMsg || '')}</div></div>`;
+}
+function viewPlace() {
+  const [ic, nm] = PLACE_NAMES[S.placePick] || ['', ''];
+  return `<h2>${ic} ${nm}</h2><div class="sub" style="margin-top:4px">Mută harta până când pinul roșu e exact pe loc.</div><div class="btns" style="margin-top:14px"><button class="btn primary" data-act="plMapSave">Salvează locul</button><button class="btn ghost" data-act="plMapCancel">Renunță</button></div>`;
+}
+async function placeFind() {
+  const E = S.placeForm || (S.placeForm = { q: '', res: null }); const el = $('#plQ'); if (el) E.q = el.value.trim();
+  if (E.q.length < 3) { E.err = 'Scrie strada și numărul.'; render(true); return; }
+  if (E.busy) return; E.busy = true; E.err = ''; E.res = null; render(true);
+  try { E.res = await geocode(E.q); if (!E.res.length) E.err = 'Nu am găsit adresa. Scrie strada, numărul și orașul, sau alege locul pe hartă.'; }
+  catch (e) { E.err = 'Căutarea de adrese nu merge acum (fără internet?). Poți alege locul pe hartă.'; }
+  E.busy = false; if (S.placeForm === E && S.view === 'route') render(true);
+}
+function placeSet(k, v) { const P = PLACES.get(); if (v) P[k] = v; else delete P[k]; PLACES.save(); S.placeEdit = null; S.placeForm = null; S.cmMsg = ''; }
+/* The sites for the way: the N whose detour is the smallest, on real street times.
+   Candidates are the due sites nearest to the straight way (not the ones a colleague has in his route today); they are put one by one
+   where they cost the least, then the choice is improved by re-ordering and by swapping a chosen site for a cheaper one. */
+async function commuteGo(k) {
+  const d = PLACES.get()[k]; if (!d || S.cmBusy) return;
+  const msg = t => { S.cmMsg = t; const el = $('#cmMsg'); if (el) { el.hidden = !t; el.textContent = t; } };
+  if (S.navOn) { msg('Ieși întâi din navigare (✕ Ieși), apoi alege drumul.'); return; }
+  if (!S.me) { msg('Aștept locația ta (GPS) ca punct de plecare…'); if (typeof locateNow === 'function') locateNow(); return; }
+  const openN = S.route.stops.filter(id => !S.route.done.includes(id)).length;
+  if (openN && !(S.cfCm && S.cfCm.k === k && Date.now() - S.cfCm.t < 8000)) { S.cfCm = { k, t: Date.now() }; msg('Traseul curent are ' + openN + (openN === 1 ? ' oprire nefăcută' : ' opriri nefăcute') + '. Apasă încă o dată ca să-l înlocuiești.'); return; }
+  S.cfCm = null; S.cmBusy = true; render(true);
+  try {
+    msg('Se încarcă harta rutieră…'); await loadGraph();
+    const A = { lat: S.me.lat, lng: S.me.lng }, N = PLACES.n(), base = hav(A, d);
+    const pool = [...S.sites.values()].filter(s => status(s) === 'due' && !RZ.other(s.id))
+      .map(s => ({ s, ex: hav(A, s) + hav(s, d) - base })).sort((a, b) => a.ex - b.ex).slice(0, Math.max(40, N * 3 + 10)).map(x => x.s);
+    const pts = [A].concat(pool, [d]); const sn = pts.map(p => Router.snap(p.lat, p.lng));
+    if (!sn[0]) throw new Error('ești în afara hărții rutiere');
+    if (!sn[pts.length - 1]) throw new Error('adresa e în afara hărții rutiere (alege alt loc)');
+    const ix = pts.map((p, i) => i).filter(i => sn[i]), tg = ix.map(i => sn[i]), n = ix.length, E = n - 1, C = [];
+    for (let a = 0; a < n; a++) {
+      if (a % 6 === 0) { msg('Calculez drumurile pe străzi: ' + (a + 1) + ' din ' + n + '…'); await tick(); }
+      C.push(a === E ? ix.map(() => 1e9) : Router.search(sn[ix[a]], tg).map(r => r && r.cost < Infinity ? r.cost : 1e9));
+    }
+    const pick = commutePick(C, N);
+    const ids = pick.path.slice(1, -1).map(q => pts[ix[q]].id);
+    if (!ids.length) throw new Error('nu am găsit șantiere de actualizat pe acest drum');
+    if (S.areaOn) areaMode(false);
+    S.route = { stops: ids, done: [], start: null, name: '' }; S.routeDraft = null; RS.set(null);
+    DEST.set({ lat: d.lat, lng: d.lng, label: PLACE_NAMES[k][1], addr: d.label, k });
+    S.nav = null; saveRouteSoon();
+    const more = pick.total - pick.direct;
+    msg(ids.length + ' șantiere pe drumul ' + PLACE_NAMES[k][2].toLowerCase() + (pick.extra ? ' (' + pick.extra + ' chiar pe drum, în plus)' : '') + ' · ocol de ' + fmtTime(Math.max(0, more)) + ' față de drumul direct (' + fmtTime(pick.direct) + ')' + (ids.length < N ? ' · atâtea sunt de actualizat în zonă' : ''));
+    S.cmBusy = false; refresh(); computeRoute(true);
+  } catch (e) { msg('Nu s-a putut: ' + (e.message || e)); }
+  finally { S.cmBusy = false; if (S.view === 'route') render(true); }
+}
+// C: street times between [me, candidates…, destination]. Returns the path me → chosen sites → destination.
+function commutePick(C, N) {
+  const E = C.length - 1; let path = [0, E]; const left = new Set(); for (let i = 1; i < E; i++) left.add(i);
+  const total = o => { let t = 0; for (let i = 1; i < o.length; i++) t += C[o[i - 1]][o[i]]; return t; };
+  const ins = (o, r) => { let bp = -1, bd = Infinity; for (let p = 1; p < o.length; p++) { const x = C[o[p - 1]][r] + C[r][o[p]] - C[o[p - 1]][o[p]]; if (x < bd) { bd = x; bp = p; } } return [bd, bp]; };
+  const want = Math.min(N, left.size);
+  while (path.length - 2 < want) {
+    let br = -1, bp = -1, bd = Infinity; for (const r of left) { const [x, p] = ins(path, r); if (x < bd) { bd = x; br = r; bp = p; } }
+    if (br < 0 || bd >= 1e8) break; path.splice(bp, 0, br); left.delete(br);
+  }
+  const reorder = o => { if (o.length < 4) return o; const o2 = solveOrder(o.map(a => o.map(b => C[a][b])), true, true).map(q => o[q]); return total(o2) + 1e-6 < total(o) ? o2 : o; };
+  for (let round = 0; round < 40; round++) {
+    path = reorder(path);
+    const cur = total(path); let best = null;
+    for (let p = 1; p < path.length - 1; p++) {
+      const w = path.slice(0, p).concat(path.slice(p + 1)), tw = total(w);
+      for (const r of left) { const [x, q] = ins(w, r); if (tw + x < cur - 1 && (!best || tw + x < best.t)) best = { t: tw + x, p, r, q }; }
+    }
+    if (!best) break;
+    const out = path[best.p], w = path.slice(0, best.p).concat(path.slice(best.p + 1)); w.splice(best.q, 0, best.r); path = w; left.delete(best.r); left.add(out);
+  }
+  // sites that are on the way anyway (up to 20 s of detour each) come along too
+  let extra = 0;
+  while (extra < 5) { let br = -1, bp = -1, bd = 20; for (const r of left) { const [x, p] = ins(path, r); if (x <= bd) { bd = x; br = r; bp = p; } } if (br < 0) break; path.splice(bp, 0, br); left.delete(br); extra++; }
+  return { path, total: total(path), direct: C[0][E], extra };
+}
+
 // the route has no open stop left
 function routeEnd(msg) {
   if (S.navOn) navStop();
@@ -1973,7 +2137,7 @@ document.addEventListener('click', async (e) => {
       const s = S.sites.get(id); const vis = Object.assign({}, S.visits); delete vis[vid];
       { const u = recomputeUltima(s, vis); await patchSite(id, { ultima: u, ultimaApp: u }); } toast('Vizita a fost ștearsă'); break;
     }
-    case 'clearRoute': if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă ștergerea'; break; } S.route = { stops: [], done: [], start: S.route.start, name: '' }; RS.set(null); saveRouteSoon(); refresh(); break;
+    case 'clearRoute': if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă ștergerea'; break; } S.route = { stops: [], done: [], start: S.route.start, name: '' }; RS.set(null); DEST.clear(); saveRouteSoon(); refresh(); break;
     case 'optimize': optimizeRoute(); break;
     case 'roadOpt': computeRoute(true); break;
     case 'setMode': setMode(t.dataset.v); break;
@@ -1984,6 +2148,18 @@ document.addEventListener('click', async (e) => {
     case 'navStart': navStart(); break;
     case 'rsEnd': RS.show(); break;
     case 'scout': scoutStart(); break;
+    case 'cmGo': commuteGo(t.dataset.v); break;
+    case 'cmN': { const P = PLACES.get(); P.n = Math.max(2, Math.min(30, PLACES.n() + (+t.dataset.v))); PLACES.save(); const el = $('#cmNv'); if (el) el.textContent = P.n; break; }
+    case 'destClear': DEST.clear(); S.nav = null; refresh(); break;
+    case 'plEdit': { const k = t.dataset.v; S.placeEdit = S.placeEdit === k ? null : k; S.placeForm = { q: '', res: null }; render(true); const q = $('#plQ'); if (q) q.focus(); break; }
+    case 'plCancel': S.placeEdit = null; S.placeForm = null; render(true); break;
+    case 'plFind': placeFind(); break;
+    case 'plPick': { const r = S.placeForm && S.placeForm.res && S.placeForm.res[+t.dataset.i]; if (!r || !S.placeEdit) break; const k = S.placeEdit; placeSet(k, { lat: r.lat, lng: r.lng, label: r.label }); render(true); toast(PLACE_NAMES[k][1] + ': ' + r.label, 3500); break; }
+    case 'plHere': { if (!S.placeEdit) break; if (!S.me) { toast('Aștept locația GPS…'); if (typeof locateNow === 'function') locateNow(); break; } const k = S.placeEdit; placeSet(k, { lat: +S.me.lat.toFixed(6), lng: +S.me.lng.toFixed(6), label: 'locul unde eram când am salvat (GPS)' }); render(true); toast(PLACE_NAMES[k][1] + ' = locul unde ești acum'); break; }
+    case 'plDel': { if (!S.placeEdit) break; if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă'; break; } placeSet(S.placeEdit, null); render(true); break; }
+    case 'plMap': { if (!S.placeEdit) break; S.placePick = S.placeEdit; const v = PLACES.get()[S.placePick]; S.placeEdit = null; go('place'); if (v && map) map.jumpTo({ center: [v.lng, v.lat], zoom: Math.max(map.getZoom(), 16) }); else if (map && map.getZoom() < 15 && S.me) map.jumpTo({ center: [S.me.lng, S.me.lat], zoom: 16 }); placeCross(); break; }
+    case 'plMapSave': { if (!S.placePick || !map) break; const c = map.getCenter(), k = S.placePick; S.placePick = null; placeSet(k, { lat: +c.lat.toFixed(6), lng: +c.lng.toFixed(6), label: 'loc ales pe hartă' }); go('route'); toast(PLACE_NAMES[k][1] + ' salvat'); break; }
+    case 'plMapCancel': S.placePick = null; go('route'); break;
     case 'showRoute': { const pts = S.route.stops.map(x => S.sites.get(x)).filter(Boolean); closeSheet(); fitAll(pts.concat(S.route.start ? [S.route.start] : [])); break; }
     case 'startHere': { const c = map.getCenter(); S.route.start = { lat: +c.lat.toFixed(6), lng: +c.lng.toFixed(6), label: 'punct ales pe hartă (' + c.lat.toFixed(4) + ', ' + c.lng.toFixed(4) + ')' }; saveRouteSoon(); refresh(); break; }
     case 'startClear': S.route.start = null; saveRouteSoon(); refresh(); break;
@@ -1997,7 +2173,7 @@ document.addEventListener('click', async (e) => {
       await db.doc('trasee/' + rid).set({ name, stops: S.route.stops, done: S.route.done, start: S.route.start || null, creat: Date.now() });
       saveRouteSoon(); toast('Traseul „' + name + '” a fost salvat'); break;
     }
-    case 'loadRoute': { const r = S.routes.find(x => x.id === id); if (r && r.from) { TR.use(id); break; } if (r) { S.route = { stops: (r.stops || []).filter(x => S.sites.has(x)), done: r.done || [], start: r.start || null, name: r.name || '' }; RS.set(null); saveRouteSoon(); refresh(); toast('Traseu încărcat'); } break; }
+    case 'loadRoute': { const r = S.routes.find(x => x.id === id); if (r && r.from) { TR.use(id); break; } if (r) { S.route = { stops: (r.stops || []).filter(x => S.sites.has(x)), done: r.done || [], start: r.start || null, name: r.name || '' }; RS.set(null); DEST.clear(); saveRouteSoon(); refresh(); toast('Traseu încărcat'); } break; }
     case 'trSend': {
       if (isOp()) break;
       const to = ($('#trTo') || {}).value; const ids = S.route.stops.filter(x => !S.route.done.includes(x) && S.sites.has(x));
@@ -2135,6 +2311,7 @@ $('#chips').addEventListener('click', e => { const c = e.target.closest('.chip')
 let qT; $('#q').addEventListener('input', e => { clearTimeout(qT); qT = setTimeout(() => { S.q = e.target.value.trim(); S.listMax = 150; refresh(); if (S.q.length >= 3 && S.view !== 'list') { const v = visibleSites(); if (v.length && v.length < 40) fitAll(v); } }, 180); });
 
 $('#q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.target.blur(); go('list'); } });
+$('#body').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target && e.target.id === 'plQ') { e.preventDefault(); e.target.blur(); placeFind(); } });
 $('#grab').addEventListener('click', () => { if (S.view === 'visit' || S.view === 'edit') return; S.moveId = null; closeSheet(); });
 // pull the panel down to close it (from the handle, or from the top of the content); sideways to the left in landscape
 (() => {
@@ -2211,7 +2388,9 @@ function navZoom(dz) { S.navZoom = Math.max(12, Math.min(19.5, (S.navZoom || 17)
 $('#navRecenter').addEventListener('click', () => navRecenter());
 $('#navZin').addEventListener('click', () => navZoom(1));
 $('#navZout').addEventListener('click', () => navZoom(-1));
-const QC = { f: null, timer: null };
+const QC = { f: null, timer: null, _src: null,
+  // 'quick' = the camera inside the app (fast; iOS makes 12 MP photos there) · 'lib' = photos taken with the iPhone Camera app, picked from the library (my own resolution)
+  src() { if (!this._src) { try { this._src = localStorage.getItem('harta_cam') === 'lib' ? 'lib' : 'quick'; } catch (e) { this._src = 'quick'; } } return this._src; } };
 const gpsFresh = () => S.me && Date.now() - (S.me.t || 0) < 90000 ? S.me : null;
 const gpsNow = () => { const g = gpsFresh(); return g ? { lat: g.lat, lng: g.lng, acc: g.acc, heading: g.heading, t: Date.now() } : null; };
 // timestamp of the site's original panel photo (as in Photos), used by the Șantier shortcut to find the original
@@ -2241,19 +2420,23 @@ function qcRender() {
   const g = gpsFresh();
   const tile = (k, n, label) => {
     const r = f[k + 'R'];
-    const sub = f[k] && !r ? 'pregătesc poza…' : f[k] ? 'atinge pentru altă poză' : 'atinge pentru cameră';
-    return `<label class="qc-tile ${r ? 'done' : ''}">${f[k] ? `<img src="${f[k + 'Url']}" alt="">` : `<span class="qc-n">${n}</span>`}<span class="qc-l">${r ? '✓ ' + label : label}</span><span class="qc-s">${sub}</span><input type="file" accept="image/*" capture="environment" data-qc="${k}"></label>`;
+    const sub = f[k] && !r ? 'pregătesc poza…' : f[k] ? 'atinge pentru altă poză' : QC.src() === 'lib' ? 'atinge și alege din Poze' : 'atinge pentru cameră';
+    return `<label class="qc-tile ${r ? 'done' : ''}">${f[k] ? `<img src="${f[k + 'Url']}" alt="">` : `<span class="qc-n">${n}</span>`}<span class="qc-l">${r ? '✓ ' + label : label}</span><span class="qc-s">${sub}</span><input type="file" accept="image/*" ${QC.src() === 'lib' ? '' : 'capture="environment"'} data-qc="${k}"></label>`;
   };
-  const panelTile = site ? `<div class="qc-tile done qc-fixed" id="qcPanelView">${f.panouUrl ? `<img src="${f.panouUrl}" alt="">` : `<span class="qc-s">${f.panouR && f.panouR.missing ? 'Panoul original se ia seara din iCloud' : 'Se încarcă panoul…'}</span>`}<span class="qc-l">N · Panou șantier</span><span class="qc-s">din fotografiile tale</span></div>` : tile('panou', 'N', 'Panou șantier');
+  // updating an existing site: its panel is shown as large as the screen allows, so I can tell at a glance whether I am at the right site; a tap opens it full screen
+  const panelTile = site ? `<div class="qc-tile done qc-fixed qc-panel" id="qcPanelView" ${f.panouUrl ? 'role="button" tabindex="0" aria-label="Panoul șantierului, atinge pentru mărire"' : ''}>${f.panouUrl ? `<img src="${f.panouUrl}" alt="Panoul șantierului">` : `<span class="qc-s">${f.panouR && f.panouR.missing ? 'Panoul original se ia seara din iCloud' : 'Se încarcă panoul…'}</span>`}<span class="qc-l">N · Panou</span>${f.panouUrl ? '<span class="qc-s">🔍 atinge pentru mărire</span>' : ''}</div>` : tile('panou', 'N', 'Panou șantier');
   const ready = (site ? f.panouR : f.panouR) && f.santierR;
   box.innerHTML = `<div class="qc-site">${site ? `<b>${esc(site.name)}</b>` : '<b>Șantier nou</b>'}</div>
-    <div class="qc-tiles">${panelTile}${tile('santier', 'Na', 'Stadiu șantier')}</div>
+    <div class="qc-tiles${site ? ' upd ' + (f.panouWide ? 'wide' : 'tall') : ''}">${panelTile}${tile('santier', 'Na', 'Stadiu șantier')}</div>
+    <div class="qc-src" role="group" aria-label="De unde vine poza"><button class="state-opt${QC.src() === 'quick' ? ' on' : ''}" data-src="quick" aria-pressed="${QC.src() === 'quick'}"><b>📷 Cameră rapidă</b></button><button class="state-opt${QC.src() === 'lib' ? ' on' : ''}" data-src="lib" aria-pressed="${QC.src() === 'lib'}"><b>🖼 Din Poze</b></button></div>
+    <div class="sub qc-srcnote">${QC.src() === 'lib' ? 'Fotografiezi cu aplicația Cameră a iPhone-ului (rezoluția și setările tale), apoi alegi poza aici, din Fototecă. Ajunge neschimbată.' : 'Camera din aplicație: iOS dă aici 12 MP (4032×3024). Pentru rezoluția setată de tine în iPhone alege „Din Poze”.'}</div>
     <div class="qc-gps ${g ? 'ok' : 'wait'}">${g ? `● GPS activ (±${Math.round(g.acc || 0)} m) · locația se scrie în fiecare poză` : '● Aștept semnalul GPS… Pozele se salvează doar cu locație.'}</div>
     <div class="sub" id="qcProg" style="margin-top:4px;color:var(--ink)"></div>
     <div class="btns" style="margin-top:10px"><button class="btn primary qc-big" id="qcSave" ${ready ? '' : 'disabled'}>Salvează</button><button class="btn ghost" id="qcCancel">Renunță</button></div>`;
   // the camera fields outlive every redraw: a photo taken while the dialog was being redrawn (the panel had just loaded, the GPS came back) is not lost
   f.inp = f.inp || {};
   box.querySelectorAll('input[data-qc]').forEach(i => { const k = i.dataset.qc, o = f.inp[k]; if (o) i.replaceWith(o); else { f.inp[k] = i; i.addEventListener('change', qcPicked); } });
+  for (const i of Object.values(f.inp)) { if (QC.src() === 'lib') i.removeAttribute('capture'); else i.setAttribute('capture', 'environment'); }
 }
 async function qcLoadPanel(f) {
   const s = S.sites.get(f.siteId); if (!s) return;
@@ -2265,7 +2448,11 @@ async function qcLoadPanel(f) {
   // a site a colleague added: its panel is shared through the cloud
   if (!b || b.size < 100) b = await PN.get(s.id, true);
   if (QC.f !== f) return;
-  if (b && b.size >= 100) { f.panou = b; f.panouUrl = URL.createObjectURL(b); f.panouR = { blob: b }; }
+  if (b && b.size >= 100) {
+    f.panou = b; f.panouUrl = URL.createObjectURL(b); f.panouR = { blob: b };
+    // a panel photographed with the phone held sideways gets the full width; an upright one gets the height
+    const im = new Image(); im.onload = () => { const w = im.naturalWidth > im.naturalHeight * 1.1; if (QC.f === f && w !== !!f.panouWide) { f.panouWide = w; qcRender(); } }; im.src = f.panouUrl;
+  }
   else f.panouR = { blob: null, missing: true };   // no panel on this phone: the stage photo can still be saved; the original panel comes from iCloud in the evening
   qcRender();
 }
@@ -2315,6 +2502,8 @@ function qcPicked(e) {
 $('#qc').addEventListener('click', async e => {
   const id = e.target.id; const f = QC.f; if (!f) return;
   if (id === 'qcCancel' || id === 'qcBack') { qcClose(); return; }
+  if (e.target.closest('#qcPanelView') && f.panouUrl) { const s0 = S.sites.get(f.siteId); $('#lbImg').classList.remove('zoom'); $('#lbZoom').textContent = 'Mărește'; $('#lbCap').textContent = 'Panou · ' + (s0 ? s0.name : '') + ' · previzualizare (seara primești originalul)'; $('#lbImg img').src = f.panouUrl; $('#lb').hidden = false; return; }
+  const sb = e.target.closest('[data-src]'); if (sb) { try { localStorage.setItem('harta_cam', sb.dataset.src === 'lib' ? 'lib' : 'quick'); } catch (x) {} QC._src = null; qcRender(); return; }
   if (id === 'qcSave') {
     const site = f.siteId ? S.sites.get(f.siteId) : null;
     if (!f.panouR || !f.santierR) return;
@@ -2348,7 +2537,7 @@ $('#qc').addEventListener('click', async e => {
     if (!saved) return;
     if (QC.f === f) qcClose();
     toast('✓ Salvat' + (site ? ' · ' + site.name : ''));
-    if (site && routeVisited(site.id) && S.navOn && !S.scout) { const nx = S.sites.get(S.nav.legs[navItem().leg].to); toast('✓ Salvat · ' + site.name + ' — urmează oprirea ' + navNo(navItem().leg) + (nx ? ': ' + nx.name : ''), 5000); }
+    if (site && routeVisited(site.id) && S.navOn && !S.scout) { const nx = S.sites.get(S.nav.legs[navItem().leg].to); toast('✓ Salvat · ' + site.name + (navIsDest(navItem().leg) ? ' — urmează drumul spre ' + destName() : ' — urmează oprirea ' + navNo(navItem().leg) + (nx ? ': ' + nx.name : '')), 5000); }
     OB.pump([k]);   // photos go up in the background
     if (!site) { CLOUD.sharePanel(sid, f.panouR.blob); PN.put(sid, f.panouR.blob).catch(() => {}); }   // colleagues see / use the panel of this new site
   }
@@ -2608,7 +2797,7 @@ const TR = {
     const stops = (r.stops || []).filter(x => S.sites.has(x));
     for (const x of stops) if (RZ.other(x)) RZ.force.add(x);   // these sites were given to me
     const done = stops.filter(x => status(S.sites.get(x)) !== 'due');   // already updated since it was sent: not open any more
-    S.route = { stops, done, start: null, name: r.name || '' }; S.routeDraft = null; S.autoSig = null; RS.set(null);
+    S.route = { stops, done, start: null, name: r.name || '' }; S.routeDraft = null; S.autoSig = null; RS.set(null); DEST.clear();
     saveRouteSoon(); refresh(); go('route'); toast('Traseu încărcat · ' + (stops.length - done.length) + ' șantiere de actualizat' + (done.length ? ' (' + done.length + ' deja făcute)' : ''));
   },
 };
@@ -2757,7 +2946,7 @@ $('#areaGo').addEventListener('click', () => {
   const cand = areaSites(); if (cand.length < 2) return;
   for (const c of cand) if (RZ.other(c.id)) RZ.force.add(c.id);   // admin chose to take the colleagues' sites too
   areaMode(false);
-  S.route = { stops: cand.map(s => s.id), done: [], start: S.route.start, name: '' }; RS.set(null); saveRouteSoon(); go('route');
+  S.route = { stops: cand.map(s => s.id), done: [], start: S.route.start, name: '' }; RS.set(null); DEST.clear(); saveRouteSoon(); go('route');
   computeRoute(true);
 });
 $('#areaCancel').addEventListener('click', () => areaMode(false));
@@ -2877,24 +3066,25 @@ function setMode(m) {
   S.autoSig = null; refresh();
 }
 const tick = () => new Promise(r => setTimeout(r, 0));
-const routeSig = () => S.mode + '|' + (S.me ? 'me' : '-') + '|' + S.route.stops.filter(id => !S.route.done.includes(id)).join(',');
+const DEST_ID = '@dest';   // the last leg of a "drum cu șantiere": from the last stop to home / work
+const routeSig = () => S.mode + '|' + (S.me ? 'me' : '-') + '|' + S.route.stops.filter(id => !S.route.done.includes(id)).join(',') + (typeof DEST !== 'undefined' && DEST.get() ? '|>' + DEST.get().lat.toFixed(5) + ',' + DEST.get().lng.toFixed(5) : '');
 function fmtDist(m) { return m < 950 ? Math.max(10, Math.round(m / 10) * 10) + ' m' : (m / 1000).toFixed(m < 9500 ? 1 : 0).replace('.', ',') + ' km'; }
 function fmtTime(s) { const m = Math.round(s / 60); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min'; }
 function routeMsg(t) { S.routeMsg = t; const el = $('#routeMsg'); if (el) el.textContent = t || ''; }
 
-// open-path TSP on a travel-time matrix (index 0 fixed as start when fixed=true)
-function solveOrder(C, fixed) {
+// open-path TSP on a travel-time matrix (index 0 fixed as start when fixed=true; the last index fixed as the end when endFixed=true)
+function solveOrder(C, fixed, endFixed) {
   const n = C.length;
   const cost = o => { let s = 0; for (let i = 1; i < o.length; i++) s += C[o[i - 1]][o[i]]; return s; };
-  const nn = s => { const left = new Set([...Array(n).keys()]); left.delete(s); const o = [s]; let c = s; while (left.size) { let b = -1, bd = Infinity; for (const j of left) if (C[c][j] < bd) { bd = C[c][j]; b = j; } if (b < 0) b = left.values().next().value; o.push(b); left.delete(b); c = b; } return o; };
+  const nn = s => { const left = new Set([...Array(n).keys()]); left.delete(s); if (endFixed) left.delete(n - 1); const o = [s]; let c = s; while (left.size) { let b = -1, bd = Infinity; for (const j of left) if (C[c][j] < bd) { bd = C[c][j]; b = j; } if (b < 0) b = left.values().next().value; o.push(b); left.delete(b); c = b; } if (endFixed && s !== n - 1) o.push(n - 1); return o; };
   function improve(o) {
-    const m = o.length; let improved = true, guard = 0;
+    const m = o.length, mm = endFixed ? m - 1 : m; let improved = true, guard = 0;   // positions 1..mm-1 may move
     const F = new Float64Array(m), B = new Float64Array(m);
     while (improved && guard++ < 20 * m) {
       improved = false;
       for (let t = 1; t < m; t++) { F[t] = F[t - 1] + C[o[t - 1]][o[t]]; B[t] = B[t - 1] + C[o[t]][o[t - 1]]; }
       // 2-opt: reverse o[i..j] (costs are asymmetric, so the reversed part is re-priced)
-      outer: for (let i = 1; i < m - 1; i++) for (let j = i + 1; j < m; j++) {
+      outer: for (let i = 1; i < mm - 1; i++) for (let j = i + 1; j < mm; j++) {
         const nx = j + 1 < m ? o[j + 1] : -1;
         const before = C[o[i - 1]][o[i]] + (F[j] - F[i]) + (nx >= 0 ? C[o[j]][nx] : 0);
         const after = C[o[i - 1]][o[j]] + (B[j] - B[i]) + (nx >= 0 ? C[o[i]][nx] : 0);
@@ -2902,10 +3092,10 @@ function solveOrder(C, fixed) {
       }
       if (improved) continue;
       // or-opt: move a run of 1-3 stops elsewhere, keeping its direction
-      outer2: for (let k = 1; k <= 3; k++) for (let i = 1; i + k <= m; i++) {
+      outer2: for (let k = 1; k <= 3; k++) for (let i = 1; i + k <= mm; i++) {
         const a = o[i - 1], s0 = o[i], s1 = o[i + k - 1], b = i + k < m ? o[i + k] : -1;
         const remove = C[a][s0] + (b >= 0 ? C[s1][b] - C[a][b] : 0);
-        for (let p = 1; p <= m; p++) {
+        for (let p = 1; p <= mm; p++) {
           if (p >= i && p <= i + k) continue;
           const x = o[p - 1], y = p < m ? o[p] : -1;
           const add = C[x][s0] + (y >= 0 ? C[s1][y] - C[x][y] : 0);
@@ -2916,13 +3106,14 @@ function solveOrder(C, fixed) {
     return o;
   }
   if (fixed) return improve(nn(0));
-  const starts = [...Array(n).keys()].map(s => [s, cost(nn(s))]).sort((a, b) => a[1] - b[1]).slice(0, n > 40 ? 3 : 8);
+  const starts = [...Array(endFixed ? n - 1 : n).keys()].map(s => [s, cost(nn(s))]).sort((a, b) => a[1] - b[1]).slice(0, n > 40 ? 3 : 8);
   let bo = null, bc = Infinity;
   for (const [s] of starts) { const o = improve(nn(s)); const c = cost(o); if (c < bc) { bc = c; bo = o; } }
   return bo;
 }
 
 const PRIO_MIN = 50;   // routes with more open stops than this put the client-2 sites first
+const PRIO_SLACK = 60;  // …but any other stop that costs at most this many seconds of detour is done on the way (never driven past)
 // Same, but the stops marked in `pr` (sites due for client 2) come first: the fastest path through them,
 // picking up on the way any other stop that costs at most `slack` seconds of detour; the rest follow, fastest from there.
 function solveOrderPrio(C, fixed, pr, slack) {
@@ -2965,13 +3156,16 @@ async function computeRoute(optimize, opts) {
     // the route always starts from where you are
     if (!S.me) { routeMsg('Aștept locația ta (GPS) ca punct de plecare…'); if (typeof locateNow === 'function') locateNow(); render(); return; }
     const start = { lat: S.me.lat, lng: S.me.lng, label: 'Locația mea' };
-    const pts = (start ? [start] : []).concat(pending);
+    const dest = typeof DEST !== 'undefined' ? DEST.get() : null;   // "drum cu șantiere": the route ends at home / at work
+    const pts = (start ? [start] : []).concat(pending, dest ? [{ lat: dest.lat, lng: dest.lng, name: dest.label, id: DEST_ID }] : []);
     const snaps = pts.map(p => Router.snap(p.lat, p.lng));
+    const endOk = !!dest && !!snaps[pts.length - 1];
     const bad = pending.filter((s, i) => !snaps[i + (start ? 1 : 0)]);
+    if (dest && !endOk) toast('Destinația e în afara hărții rutiere: traseul se oprește la ultimul șantier');
     if (bad.length) toast(bad.length + ' șantiere sunt în afara hărții rutiere și au fost sărite');
     const okIdx = pts.map((p, i) => i).filter(i => snaps[i]);
     let order = okIdx;
-    if (optimize && okIdx.length >= 2) {
+    if (optimize && okIdx.length >= (endOk ? 3 : 2)) {
       const C = [];
       const big = okIdx.length > 60;   // many stops: real street times to the 30 nearest, calibrated estimate for the rest
       const tg = okIdx.map(i => snaps[i]); const rows = [];
@@ -2984,9 +3178,9 @@ async function computeRoute(optimize, opts) {
       rows.forEach((row, i) => C.push(row.map((r, j) => r && r.cost < Infinity ? r.cost : big ? hav(pts[okIdx[i]], pts[okIdx[j]]) * 1000 * f * 1.1 + 30 : 1e9)));
       routeMsg('Aleg ordinea cea mai rapidă…'); await tick();
       // long routes are rarely finished in one outing: there the sites due for client 2 come first (short routes keep the plain fastest order)
-      const pr = okIdx.map(i => !!pts[i].id && C2.due(pts[i]));
-      order = (okIdx.length - 1 > PRIO_MIN ? solveOrderPrio(C, !!start, pr, 20) : solveOrder(C, !!start)).map(k => okIdx[k]);
-      const newPending = order.filter(i => !start || i > 0).map(i => pts[i].id);
+      const pr = okIdx.map(i => !!pts[i].id && pts[i].id !== DEST_ID && C2.due(pts[i]));
+      order = (endOk ? solveOrder(C, !!start, true) : okIdx.length - 1 > PRIO_MIN ? solveOrderPrio(C, !!start, pr, PRIO_SLACK) : solveOrder(C, !!start)).map(k => okIdx[k]);
+      const newPending = order.filter(i => !start || i > 0).map(i => pts[i].id).filter(id => id && id !== DEST_ID);
       // stops added or removed while this was being computed are respected: nothing the user did in the meantime is lost
       const open = S.route.stops.filter(id => !S.route.done.includes(id));
       const done = S.route.stops.filter(id => S.route.done.includes(id));
@@ -3006,7 +3200,7 @@ async function computeRoute(optimize, opts) {
     if (!start && order.length) S.navFirst = pts[order[0]].id;
     const total = legs.reduce((x, l) => ({ time: x.time + l.time, dist: x.dist + l.dist }), { time: 0, dist: 0 });
     const open2 = S.route.stops.filter(id => !S.route.done.includes(id) && S.sites.has(id));
-    const same = open2.length === ids0.length && ids0.every(id => open2.includes(id));
+    const same = open2.length === ids0.length && ids0.every(id => open2.includes(id)) && !!dest === !!(typeof DEST !== 'undefined' && DEST.get());
     // the route was edited during the calculation: this result is not the route any more, so it is not marked as valid and it is computed again
     S.nav = { legs, total, sig: same ? routeSig() : 'stale', start: start || null, first: start ? null : pts[order[0]].id };
     if (!same && typeof routeAutoSoon === 'function') setTimeout(routeAutoSoon, 0);
@@ -3052,7 +3246,7 @@ function autoRoute(n) {
   const c = map.getCenter(); const ctr = { lat: c.lat, lng: c.lng };
   const cand = visibleSites().filter(s => status(s) === 'due').sort((a, b) => hav(ctr, a) - hav(ctr, b)).slice(0, n);
   if (cand.length < 2) { toast('Prea puține șantiere de actualizat în filtrul curent'); return; }
-  S.route = { stops: cand.map(s => s.id), done: [], start: S.route.start, name: '' }; saveRouteSoon(); refresh();
+  S.route = { stops: cand.map(s => s.id), done: [], start: S.route.start, name: '' }; DEST.clear(); saveRouteSoon(); refresh();
   computeRoute(true);
 }
 function routeSection() {
@@ -3101,7 +3295,9 @@ function navItems() {
 function navItem() { return navItems()[S.navPos || 0] || { leg: 0, s: {} }; }
 // the number of a stop = its place in the route list, the same number as on its pin; it does not start again from 1 after a recalculation
 function navNo(leg) { const L = S.nav && S.nav.legs[leg]; const i = L ? S.route.stops.indexOf(L.to) : -1; return i >= 0 ? i + 1 : leg + 1; }
-function navCount() { return Math.max(S.route.stops.length, S.nav ? S.nav.legs.length : 0); }
+function navCount() { return Math.max(S.route.stops.length, S.nav ? S.nav.legs.filter(l => l.to !== DEST_ID).length : 0); }
+const navIsDest = leg => !!(S.nav && S.nav.legs[leg] && S.nav.legs[leg].to === DEST_ID);
+const destName = () => { const d = typeof DEST !== 'undefined' && DEST.get(); return d ? d.label : 'destinație'; };
 function bearingTo(a, b) { const r = Math.PI / 180; const y = Math.sin((b[0] - a[0]) * r) * Math.cos(b[1] * r); const x = Math.cos(a[1] * r) * Math.sin(b[1] * r) - Math.sin(a[1] * r) * Math.cos(b[1] * r) * Math.cos((b[0] - a[0]) * r); return (Math.atan2(y, x) / r + 360) % 360; }
 function approachBearing(it) {
   const c = S.nav.legs[it.leg].coords; const loc = [it.s.loc[1], it.s.loc[0]];
@@ -3142,7 +3338,7 @@ function navStart() {
   try { localStorage.setItem('harta_nav', String(Date.now())); } catch (e) {}
   try { map.setLayoutProperty('route-start', 'visibility', 'none'); } catch (e) {}
   if (S.voice && 'speechSynthesis' in window) { try { speechSynthesis.getVoices(); } catch (e) {} }
-  S.navTrack = { off: 0, lastReroute: 0 }; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null;
+  S.navTrack = { off: 0, lastReroute: 0 }; S.nearSeen = {}; S.nearT = 0; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null;
   navShow(true);
   if (S.me && Date.now() - (S.me.t || 0) < 30000) navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc });
   else if (typeof locateNow === 'function' && S.geoErr != null) locateNow();
@@ -3166,7 +3362,7 @@ function navSign(it, d) {
   const key = S.navPos + '|' + it.leg + '|' + it.j;
   if (el.dataset.k !== key) {
     el.dataset.k = key; $('#nsIc').innerHTML = maneuverIcon(it.s, 58);
-    $('#nsTxt').textContent = it.s.type === 'arrive' ? 'Oprirea ' + navNo(it.leg) + (site ? ' · ' + site.name : '') + (it.s.side ? ' (pe ' + it.s.side + ')' : '') : Router.text(it.s);
+    $('#nsTxt').textContent = it.s.type !== 'arrive' ? Router.text(it.s) : navIsDest(it.leg) ? 'Destinație · ' + destName() : 'Oprirea ' + navNo(it.leg) + (site ? ' · ' + site.name : '') + (it.s.side ? ' (pe ' + it.s.side + ')' : '');
   }
   $('#nsDist').textContent = it.s.type === 'depart' ? 'Start' : fmtDist(Math.max(0, d || 0));
 }
@@ -3179,7 +3375,8 @@ function navShow(say) {
   $('#navIc').innerHTML = maneuverIcon(it.s, 52);
   $('#navDist').textContent = it.s.type === 'depart' ? 'Start' : fmtDist(dist);
   navSign(it, dist);
-  $('#navTxt').textContent = it.s.type === 'arrive' ? 'Ai ajuns: ' + (site ? site.name : '') + (it.s.side ? ' (pe ' + it.s.side + ')' : '') : Router.text(it.s);
+  const isDest = navIsDest(it.leg);
+  $('#navTxt').textContent = it.s.type === 'arrive' ? 'Ai ajuns: ' + (isDest ? destName() : site ? site.name : '') + (it.s.side ? ' (pe ' + it.s.side + ')' : '') : Router.text(it.s);
   const nx = items[S.navPos + 1];
   $('#navThen').hidden = !nx || it.s.type === 'arrive';
   if (nx) $('#navThen').innerHTML = 'Apoi ' + maneuverIcon(nx.s, 18) + ' ' + esc(nx.s.type === 'arrive' ? 'ajungi la destinație' : Router.text(nx.s).charAt(0).toLowerCase() + Router.text(nx.s).slice(1)) + ' <span class="num">· ' + fmtDist(it.s.dist) + '</span>';
@@ -3190,12 +3387,13 @@ function navShow(say) {
   const eta = new Date(Date.now() + remT * 1000);
   $('#navEta').textContent = 'Sosire ' + pad(eta.getHours()) + ':' + pad(eta.getMinutes()) + ' · ' + fmtDist(remD) + ' · ' + fmtTime(remT);
   navProg(it.leg, remD);
-  $('#navSub').textContent = 'Oprirea ' + navNo(it.leg) + ' din ' + navCount() + (site ? ' · ' + site.name : '');
+  $('#navSub').textContent = isDest ? 'Destinație · ' + destName() : 'Oprirea ' + navNo(it.leg) + ' din ' + navCount() + (site ? ' · ' + site.name : '');
   $('#navPrev').disabled = S.navPos === 0;
   const arr = it.s.type === 'arrive';
   $('#navArrive').hidden = !arr; $('#navMove').hidden = arr;
+  $('#navVisit').hidden = isDest;
   if (arr) { const vs = site; const ok = vs && status(vs) === 'due'; const vb = $('#navVisit'); vb.disabled = !ok; vb.textContent = ok ? 'Actualizează șantier' : vs && status(vs) === 'wait' ? 'Actualizat · revine ' + roShort(addDays(lastUpd(vs), CYCLE)) : 'Finalizat'; }
-  if (arr) { $('#navNextLeg').textContent = it.leg + 1 < S.nav.legs.length ? 'Pornește spre oprirea ' + navNo(it.leg + 1) : 'Termină traseul'; }
+  if (arr) { $('#navNextLeg').textContent = isDest ? 'Am ajuns · încheie traseul' : it.leg + 1 >= S.nav.legs.length ? 'Termină traseul' : navIsDest(it.leg + 1) ? 'Pornește spre ' + destName() : 'Pornește spre oprirea ' + navNo(it.leg + 1); }
   navTopVar();
   updateMap();
   if (map && !S.navGpsFollow && !S.navFree) {
@@ -3210,6 +3408,7 @@ function navNext() {
 }
 function navArrived() {
   const it = navItem(); const sid = S.nav.legs[it.leg].to;
+  if (sid === DEST_ID) { const nm = destName(); routeEnd('Ai ajuns · ' + nm); DEST.clear(); return; }
   if (sid && !S.route.done.includes(sid)) { S.route.done.push(sid); saveRouteSoon(); S.nav.sig = routeSig(); }
   if (it.leg + 1 >= S.nav.legs.length) { routeEnd(); return; }
   S.navPos++; navShow(true);
@@ -3219,7 +3418,7 @@ function navArrived() {
 const REOPT_MAX = 60;   // up to this many open stops the order is optimised again after every stop (above it, a full recalculation takes too long on a phone)
 function navAdvance() {
   if (!S.navOn || S.scout || !S.nav) return;
-  const legs = S.nav.legs, open = l => !S.route.done.includes(l.to);
+  const legs = S.nav.legs, open = l => l.to === DEST_ID || !S.route.done.includes(l.to);   // the road home / to work stays open until I get there
   if (!legs.some(open)) { routeEnd(); return; }
   const cur = navItem().leg;
   if (!open(legs[cur])) {   // it was the stop I was heading to: show the next one at once (the recalculation below refines the road)
@@ -3271,15 +3470,17 @@ async function navReopt(silent) {
 }
 // where the top bar of the navigation ends: an open panel starts below it
 function navTopVar() { const a = $('#app'); if (!a) return; a.classList.toggle('navon', !!S.navOn); if (S.navOn) a.style.setProperty('--navtop', Math.round($('#navBot').getBoundingClientRect().bottom) + 'px'); }
-async function navReroute(next) {
+async function navReroute(next, firstId) {
   const tr = S.navTrack; if (S.scout || !tr || tr.busy || !S.me) return;
   tr.busy = true; tr.lastReroute = Date.now();
   try {
     await loadGraph();
     const cur = navItem().leg;
     const pend = S.route.stops.filter(id => !S.route.done.includes(id));
-    const curTo = S.nav.legs[cur] && S.nav.legs[cur].to;
+    const curTo = firstId || (S.nav.legs[cur] && S.nav.legs[cur].to);   // firstId: a stop that must come first now (it is right next to me)
     const rest = (curTo && pend.includes(curTo) ? [curTo, ...pend.filter(x => x !== curTo)] : pend).map(id => S.sites.get(id)).filter(Boolean);
+    const dest = typeof DEST !== 'undefined' ? DEST.get() : null;
+    if (dest) rest.push({ lat: dest.lat, lng: dest.lng, name: dest.label, id: DEST_ID });
     if (!rest.length) { routeEnd(); return; }
     const pts = [{ lat: S.me.lat, lng: S.me.lng, label: 'Locația mea' }].concat(rest);
     const snaps = pts.map(p => Router.snap(p.lat, p.lng)); if (!snaps[0]) return;
@@ -3376,6 +3577,7 @@ function navGpsInner(c, quiet) {
   const eta = new Date(Date.now() + remT * 1000);
   $('#navEta').textContent = 'Sosire ' + pad(eta.getHours()) + ':' + pad(eta.getMinutes()) + ' · ' + fmtDist(remD) + ' · ' + fmtTime(remT);
   navProg(cur.leg, remD);
+  if (!quiet) navNearCheck(c, cur, legLeft);
   // camera: follow me, pointing the way I drive
   S.navGpsFollow = true;
   let brg = map ? map.getBearing() : 0;
@@ -3390,6 +3592,36 @@ function navGpsInner(c, quiet) {
     map.easeTo({ center: [c.longitude, c.latitude], bearing: brg, zoom: navSpeedZoom(c, navTurnNear(cur, toMan)), pitch: 50, padding: navPad(top, bot, 120), duration: quiet ? 400 : dur, easing: t => t });
   }
 }
+/* ---------- dynamic order: a stop of my route that is not the next one, but is right next to me, is done now ----------
+   (so I never drive past stops 15-16-17 on the way to 14). Close means close by road too: a site across a boulevard
+   that needs a long way round does not count. */
+const NEAR_M = 150, NEAR_S = 45, NEAR_EVERY = 3000;
+async function navNearCheck(c, cur, legLeft) {
+  const now = Date.now(), tr = S.navTrack;
+  if (now - (S.nearT || 0) < NEAR_EVERY || S.routing || !tr || tr.busy || !S.nav) return;
+  S.nearT = now;
+  const leg = S.nav.legs[cur.leg], tgt = leg && leg.to;
+  if (tgt !== DEST_ID && legLeft < 250) return;   // the stop I am heading to is itself just ahead: that one first
+  const seen = S.nearSeen || (S.nearSeen = {});
+  let best = null, bd = NEAR_M;
+  for (const id of S.route.stops) {
+    if (id === tgt || S.route.done.includes(id) || (seen[id] && now - seen[id] < 90000)) continue;
+    const s = S.sites.get(id); if (!s || status(Object.assign({}, s, S.pend[s.id] || {})) !== 'due') continue;
+    const d = Router.hav([c.latitude, c.longitude], [s.lat, s.lng]); if (d < bd) { bd = d; best = s; }
+  }
+  if (!best) return;
+  seen[best.id] = now;
+  const a = Router.snap(c.latitude, c.longitude), b = Router.snap(best.lat, best.lng); if (!a || !b) return;
+  const [r] = Router.search(a, [b]); if (!r || !(r.cost <= NEAR_S)) return;
+  seen[best.id] = now + 864e5;   // taken once; if I drive on anyway it is not forced on me again
+  const done = S.route.stops.filter(id => S.route.done.includes(id)), open = S.route.stops.filter(id => !S.route.done.includes(id) && id !== best.id);
+  S.route.stops = done.concat([best.id], open);
+  await navReroute(true, best.id);
+  saveRouteSoon();
+  toast('Șantier chiar lângă tine: „' + best.name + '” — îl facem acum (' + fmtDist(bd) + ')', 5000);
+  speak('Șantier lângă tine. Îl facem acum.');
+}
+
 /* a change of direction is coming: from TURN_FAR m before it the map comes slowly back to the standstill zoom, whatever the speed.
    It is fully there 90 m before at town speeds and later when driving fast, so the change always takes about 4 s instead of a jump.
    1 = far from any turn (speed zoom as usual), 0 = standstill zoom. */
@@ -3431,7 +3663,7 @@ function navRecenter() {
 /* ---------- navigate straight to one site ---------- */
 async function navTo(id) {
   if (!gpsFresh()) { toast('Aștept locația GPS…'); if (typeof locateNow === 'function') locateNow(); return; }
-  S.route = { stops: [id], done: [], start: null, name: '' }; RS.set(null); saveRouteSoon();
+  S.route = { stops: [id], done: [], start: null, name: '' }; RS.set(null); DEST.clear(); saveRouteSoon();
   closeSheet(); await computeRoute(false);
   if (navValid()) navStart(); else toast('Nu am putut calcula drumul');
 }
