@@ -55,7 +55,7 @@
 html,body{height:100%}
 body{background:var(--ground);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.4;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
 #app{position:fixed;inset:0;overflow:hidden}
-#map{position:absolute;inset:0;background:var(--ground)}
+#map{position:absolute;inset:0;z-index:0;isolation:isolate;background:var(--ground)}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--amber);outline-offset:2px}
@@ -96,6 +96,16 @@ html,body,button,a,input,label,.sheet,.tabs,.nav,.qc{touch-action:manipulation}
 .sheet{position:absolute;left:0;right:0;bottom:calc(56px + var(--sab));z-index:10;background:var(--surface);border-radius:18px 18px 0 0;box-shadow:0 -6px 30px rgba(0,0,0,.18);display:flex;flex-direction:column;max-height:calc(100% - 56px - var(--sab) - var(--sat) - 16px);transition:transform .22s ease}
 .sheet.peek{max-height:min(52%,460px)}
 .sheet.full{height:calc(100% - 56px - var(--sab) - var(--sat) - 104px)}
+/* a panel opened during navigation: above the map controls, between the top bar and the progress bar */
+#app.navon .sheet{z-index:35;bottom:calc(var(--sab) + 76px);max-height:none;-webkit-transform:translateZ(0)}
+#app.navon .sheet.peek{max-height:calc(100% - var(--navtop,160px) - var(--sab) - 84px)}
+#app.navon .sheet.full{height:auto;top:calc(var(--navtop,160px) + 8px)}
+#app.navon.sheet-open .nav-side,#app.navon.sheet-full #navSign{display:none}
+@media (orientation: landscape) and (max-height: 600px) {
+  #app.navon .sheet,#app.navon .sheet.full{top:calc(var(--navtop,90px) + 8px);bottom:8px;height:auto;max-height:none}
+  #app.navon .sheet.peek{max-height:none}
+  #app.navon.sheet-open #navSign,#app.navon.sheet-open #navProg{display:none}
+}
 .grab{flex:none;height:22px;display:grid;place-items:center;border:0;background:none;width:100%}
 .grab::before{content:"";width:40px;height:5px;border-radius:3px;background:var(--line)}
 .sheet-body{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 16px 20px;flex:1}
@@ -188,6 +198,16 @@ h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
 .stat b{display:block;font-family:var(--f-display);font-size:22px;font-weight:700;line-height:1.1}
 .stat span{font-size:12px;color:var(--muted)}
 .leg{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 0}
+.lnk{border:0;background:none;padding:0;text-align:left;color:inherit;font:inherit}
+.geohelp.rs{align-items:center;background:rgba(15,20,25,.62)}
+.rs-card{text-align:center;padding:28px 20px 22px;max-width:420px;border-radius:22px}
+.rs-ok{width:72px;height:72px;border-radius:50%;margin:0 auto 12px;background:#1E8E3E;color:#fff;font-size:40px;font-weight:700;display:grid;place-items:center}
+.geohelp-card.rs-card h2{font-size:30px;margin:0 0 18px;letter-spacing:-.3px}
+.rs-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.rs-stats div{background:var(--surface-2,#F3F4F2);border-radius:14px;padding:14px 6px 12px}
+.rs-stats b{display:block;font-size:26px;line-height:1.1}.rs-stats span{display:block;font-size:12.5px;color:var(--muted);margin-top:4px}
+.rs-btn{width:100%;height:56px;font-size:18px;margin-top:18px}.rs-btn2{width:100%;margin-top:8px}
+.op-pw{font-size:13px;color:var(--muted);margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.op-pw b{color:var(--ink);font-size:14px;word-break:break-all}
 .leg.tr-sent{flex-wrap:wrap}.leg.tr-sent>span:first-child{flex:1 1 180px;min-width:0}.leg.tr-sent .row{flex:none;gap:6px}
 #areaAll{width:100%}
 
@@ -960,7 +980,13 @@ function stateSeg(s) {
     ${opt('off', 'Finalizat', 'lucrare terminată')}
   </div>`;
 }
-function finishBtn(s) { return s.inactiv || isOp() ? '' : `<button class="btn ghost" data-act="setState" data-id="${s.id}" data-v="off">✓ Finalizat</button>`; }
+// operators report a finished site too (two taps); the admin sees who did it and can reopen it
+function finishBtn(s) {
+  if (s.inactiv) return '';
+  if (isOp()) { const cf = S.cfFin && S.cfFin.id === s.id && Date.now() - S.cfFin.t < 8000; return `<button class="btn ${cf ? 'amber' : 'ghost'}" data-act="opFinish" data-id="${s.id}">${cf ? 'Confirmă: lucrarea e încheiată' : '✓ Finalizat'}</button>`; }
+  return `<button class="btn ghost" data-act="setState" data-id="${s.id}" data-v="off">✓ Finalizat</button>`;
+}
+const finNote = s => s.inactiv && s.finBy ? `<div class="sub" style="margin-top:4px">Finalizat de ${esc(s.finBy)}${s.finT ? ' · ' + roDate(iso(new Date(s.finT))) : ''}</div>` : '';
 function statusLabel(s) {
   const st = status(s);
   if (st === 'off') return ['off', 'Finalizat'];
@@ -1220,7 +1246,7 @@ function pickShard() {
 let routeTimer = null, routeDirty = false;
 function saveRouteSoon() {
   if (typeof RZ !== 'undefined') RZ.sendSoon();
-  if (S.navOn && S.nav && !navValid()) { clearTimeout(S.navEditT); S.navEditT = setTimeout(() => { if (S.navOn && !navValid()) { if (S.navTrack) S.navTrack.busy = false; navReroute(); } }, 400); }
+  if (S.navOn && S.nav && !navValid()) { clearTimeout(S.navEditT); S.navEditT = setTimeout(() => { if (S.navOn && !navValid() && !S.routing && !S.addedStop) { if (S.navTrack) S.navTrack.busy = false; navReroute(); } }, 400); }
   routeDirty = true; S.routeUpd = Date.now(); clearTimeout(routeTimer);
   routeTimer = setTimeout(async () => {
     try { await db.doc('trasee/curent').set({ stops: S.route.stops, done: S.route.done, start: S.route.start || null, name: S.route.name || '', upd: S.routeUpd }); }
@@ -1285,9 +1311,9 @@ function refresh() {
 /* ============ sheet ============ */
 function setTab(t) { $$('.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === t ? 'page' : 'false')); }
 // opening a panel always starts from its normal place (a pull left unfinished must never keep it pushed down)
-function showSheet(mode) { const sh = $('#sheet'); if (typeof sheetDragCancel === 'function') sheetDragCancel(); sh.hidden = false; sh.className = 'sheet ' + mode; }
+function showSheet(mode) { const sh = $('#sheet'); if (typeof sheetDragCancel === 'function') sheetDragCancel(); sh.hidden = false; sh.className = 'sheet ' + mode; const a = $('#app'); a.classList.add('sheet-open'); a.classList.toggle('sheet-full', mode === 'full'); if (typeof navTopVar === 'function') navTopVar(); }
 function closeSheet() {
-  S.view = null; S.openId = null; $('#sheet').hidden = true; if (typeof sheetDragCancel === 'function') sheetDragCancel(); $('#cross').toggleAttribute('hidden', !!(true)); setTab('map'); updateMap();
+  S.view = null; S.openId = null; $('#sheet').hidden = true; $('#app').classList.remove('sheet-open', 'sheet-full'); if (typeof sheetDragCancel === 'function') sheetDragCancel(); $('#cross').toggleAttribute('hidden', !!(true)); setTab('map'); updateMap();
 }
 const scrollMem = {};
 function go(view, opts = {}) {
@@ -1356,7 +1382,7 @@ function viewCard() {
   return `<div class="card-head">
     ${ph ? `<button class="thumb" style="padding:0;overflow:hidden" data-act="photo" data-kind="${ph.kind}" data-id="${esc(ph.id)}" data-d="${ph.d}" aria-label="Vezi poza">${photoEl(ph, 'fill')}</button>` : '<span class="thumb"></span>'}
     <div class="grow">
-      <div class="row sp wrap">${pillHTML(s)}</div>
+      <div class="row sp wrap">${pillHTML(s)}</div>${finNote(s)}
       ${RZ.other(s.id) && !inRoute ? `<div class="rz-note">În traseul lui ${esc(RZ.other(s.id).n || 'alt coleg')} azi</div>` : ''}
       <h2 style="margin-top:6px">${esc(s.name)}</h2>
       ${who(s) ? `<div class="sub" style="margin-top:2px">${esc(who(s))}</div>` : ''}
@@ -1367,7 +1393,7 @@ function viewCard() {
     </div>
     <div class="btns" style="margin-top:8px">
       <button class="btn primary" data-act="navTo" data-id="${s.id}">▶ Navighează</button>
-      <button class="btn ${inRoute ? 'amber' : ''}" data-act="toggleStop" data-id="${s.id}">${inRoute ? '✓ În traseu' : '+ Traseu'}</button>
+      <button class="btn ${inRoute ? 'amber' : ''}" data-act="toggleStop" data-id="${s.id}">${inRoute ? '✓ În traseu' : 'Adaugă la traseu'}</button>
     </div>
     <div class="btns" style="margin-top:8px">
       ${finishBtn(s)}
@@ -1399,7 +1425,7 @@ function viewSite() {
   </div>
   <div class="btns" style="margin-top:8px">
     <button class="btn primary" data-act="navTo" data-id="${s.id}">▶ Navighează</button>
-    <button class="btn ${inRoute ? 'amber' : ''}" data-act="toggleStop" data-id="${s.id}">${inRoute ? '✓ În traseu' : '+ Traseu'}</button>
+    <button class="btn ${inRoute ? 'amber' : ''}" data-act="toggleStop" data-id="${s.id}">${inRoute ? '✓ În traseu' : 'Adaugă la traseu'}</button>
   </div>
   <h3>Poze (${photos.length})</h3>
   ${photos.length ? (() => {
@@ -1642,12 +1668,56 @@ async function saveVisit() {
   }
 }
 
+/* ---------- one outing on a route: from the first "Pornește navigarea" until the route is finished or ended by hand ---------- */
+const RS = {
+  get() { try { return JSON.parse(localStorage.getItem('harta_rs') || 'null'); } catch (e) { return null; } },
+  set(v) { try { if (v) localStorage.setItem('harta_rs', JSON.stringify(v)); else localStorage.removeItem('harta_rs'); } catch (e) {} },
+  // metres and seconds recorded by the phone (Activitate) since the day the outing started
+  tot(d0) { let m = 0, s = 0; for (const [d, z] of Object.entries((typeof ACT !== 'undefined' && ACT.z) || {})) if (d >= d0) { m += z.m || 0; s += z.s || 0; } return { m, s }; },
+  start() {
+    if (S.route.stops.length < 2) return;   // "Navighează" to a single site is not an outing
+    const r = RS.get(); if (r && Date.now() - r.t < 18 * 3600e3) return;
+    const d = today(), t = RS.tot(d); RS.set({ t: Date.now(), d, m0: t.m, s0: t.s, ids: [] });
+  },
+  photo(sid) { const r = RS.get(); if (r && !r.ids.includes(sid)) { r.ids.push(sid); RS.set(r); } },
+  stats() { const r = RS.get(); if (!r) return null; const t = RS.tot(r.d); return { m: Math.max(0, t.m - (r.m0 || 0)), s: Math.max(0, t.s - (r.s0 || 0)), n: r.ids.length }; },
+  // the big summary; OK goes back to the map
+  show() {
+    const st = RS.stats(); if (!st) return;
+    const left = S.route.stops.filter(x => !S.route.done.includes(x) && S.sites.has(x)).length;
+    const old = document.getElementById('rsBox'); if (old) old.remove();
+    const d = document.createElement('div'); d.id = 'rsBox'; d.className = 'geohelp rs';
+    d.innerHTML = `<div class="geohelp-card rs-card" role="dialog" aria-label="Rezumatul traseului"><div class="rs-ok" aria-hidden="true">✓</div>
+      <h2>${left ? 'Traseu încheiat' : 'Traseu finalizat'}</h2>
+      <div class="rs-stats"><div><b class="num">${km(st.m)}</b><span>km parcurși</span></div><div><b class="num">${hm(st.s)}</b><span>timp</span></div><div><b class="num">${st.n}</b><span>${st.n === 1 ? 'șantier fotografiat' : 'șantiere fotografiate'}</span></div></div>
+      <div class="sub" id="rsUp" style="margin-top:14px"></div>
+      ${left ? `<div class="sub" style="margin-top:6px">Au rămas ${left} ${left === 1 ? 'șantier nefotografiat' : 'șantiere nefotografiate'} în traseu.</div>` : ''}
+      <button class="btn primary rs-btn" id="rsOk">OK</button>
+      ${left ? '<button class="btn ghost rs-btn2" id="rsBack">Continuă traseul</button>' : ''}</div>`;
+    document.body.appendChild(d);
+    const up = () => { const el = d.querySelector('#rsUp'); if (!el) return; const n = Object.values(OB.items || {}).filter(v => !v.sent).length; el.textContent = n ? 'Se urcă pozele… ' + n + (n === 1 ? ' pereche rămasă' : ' perechi rămase') + ' (pleacă singure)' : 'Toate pozele au fost urcate ✓'; };
+    up(); const tm = setInterval(() => { if (!document.body.contains(d)) { clearInterval(tm); return; } up(); }, 1500);
+    const close = () => { clearInterval(tm); d.remove(); };
+    d.querySelector('#rsOk').onclick = () => {
+      close(); RS.set(null);
+      if (!left) { S.route = { stops: [], done: [], start: null, name: '' }; S.nav = null; saveRouteSoon(); }
+      closeSheet(); refresh();
+    };
+    const bk = d.querySelector('#rsBack'); if (bk) bk.onclick = close;
+  },
+};
+// the route has no open stop left
+function routeEnd(msg) {
+  if (S.navOn) navStop();
+  if (RS.get()) { if (msg) toast(msg, 5000); RS.show(); } else toast(msg || 'Traseul e gata', 5000);
+}
 /* ============ route ops ============ */
 // I updated (or closed) a stop of my own route: it is ticked off and, while navigating, the guidance moves on to the next stop
 function routeVisited(sid) {
   if (!S.route.stops.includes(sid) || S.route.done.includes(sid)) return false;
   S.route.done.push(sid); saveRouteSoon();
-  if (S.navOn && S.nav) { if (S.view) closeSheet(); navAdvance(); } else refresh();
+  if (S.navOn && S.nav) { if (S.view) closeSheet(); navAdvance(); }
+  else { refresh(); if (RS.get() && !S.route.stops.some(x => !S.route.done.includes(x))) RS.show(); }
   return true;
 }
 // stops already done by a colleague: ticked off, and the navigation goes straight to the next one
@@ -1657,9 +1727,19 @@ function routeSkip(list) {
   const [, name, by] = list[0];
   toast((list.length > 1 ? list.length + ' șantiere din traseu au fost actualizate' : '„' + name + '” a fost actualizat') + ' de ' + (by || 'un coleg') + ' — trecem la următorul.', 5000);
   if (S.navOn && S.nav) {
-    if (S.nav.legs.every(l => S.route.done.includes(l.to))) { toast('Traseul e gata — restul șantierelor au fost actualizate de colegi', 5000); navStop(); return; }
+    if (S.nav.legs.every(l => S.route.done.includes(l.to))) { routeEnd('Traseul e gata — restul șantierelor au fost actualizate de colegi'); return; }
     navAdvance();
   } else refresh();
+}
+function routeAutoSoon() {
+  clearTimeout(S.autoT);
+  S.autoT = setTimeout(async () => {
+    if (S.routing) { routeAutoSoon(); return; }
+    S.addedStop = false;
+    const open = S.route.stops.filter(x => !S.route.done.includes(x)).length;
+    if (S.navOn) { await navReopt(); return; }
+    if (open >= 1 && S.me && !(S.nav && navValid())) await computeRoute(true, { fit: false });
+  }, 1500);
 }
 function toggleStop(id) {
   const i = S.route.stops.indexOf(id);
@@ -1667,8 +1747,9 @@ function toggleStop(id) {
   if (o && RZ.pend !== id) { RZ.pend = id; setTimeout(() => { if (RZ.pend === id) RZ.pend = null; }, 6000); toast('E în traseul lui ' + (o.n || 'alt coleg') + ' azi. Apasă din nou ca să-l iei totuși.', 3500); return; }
   if (o) { RZ.pend = null; RZ.force.add(id); }
   if (i >= 0) { S.route.stops.splice(i, 1); S.route.done = S.route.done.filter(x => x !== id); }
-  else S.route.stops.push(id);
+  else { S.route.stops.push(id); S.addedStop = true; }
   saveRouteSoon(); refresh();
+  if (i < 0) routeAutoSoon();
   toast(i >= 0 ? 'Scos din traseu · ' + S.route.stops.length + ' șantiere' : 'Adăugat în traseu · ' + S.route.stops.length + ' șantiere', 1400);
 }
 function optimizeRoute() {
@@ -1748,9 +1829,22 @@ document.addEventListener('click', async (e) => {
       try {
         const K = await shaHex('santiere|' + pass); const h = await shaHex(K);
         const w = await window.PWA_makeSlot(pass);
-        await CLOUD.req('/users', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, h, slotId: w.slotId, slot: w.slot }) });
+        await CLOUD.req('/users', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, h, slotId: w.slotId, slot: w.slot, pw: await PWN.enc(pass) }) });
         toast('„' + name + '” poate intra cu parola aleasă'); ACT.remote = null; ACT.fetch();
       } catch (err) { const m = String(err.message || err); toast(/409/.test(m) ? 'Parola e deja folosită de alt operator. Alege alta.' : 'Nu s-a putut adăuga: ' + m, 4000); t.disabled = false; t.textContent = 'Adaugă'; }
+      break;
+    }
+    case 'opPwShow': if (isOp()) break; ACT.pwShow[id] = !ACT.pwShow[id]; render(); break;
+    case 'opPwNote': if (isOp()) break; ACT.pwEdit = id; render(); { const el = $('#opPwIn'); if (el) el.focus(); } break;
+    case 'opPwSave': {   // the password of an operator added before: kept only if the server confirms it really is his
+      if (isOp()) break;
+      const pass = (($('#opPwIn') || {}).value || '').trim(); if (!pass) break;
+      try {
+        const h = await shaHex(await shaHex('santiere|' + pass));
+        const r = await CLOUD.req('/users', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ setpw: id, h, pw: await PWN.enc(pass) }) });
+        if (r && r.ok === 1) { ACT.pwEdit = null; ACT.pwShow[id] = true; toast('Parola a fost notată'); await ACT.fetch(); }
+        else toast('Aceasta nu e parola acestui operator', 4000);
+      } catch (err) { toast('Nu s-a putut nota: ' + (err.message || err), 4000); }
       break;
     }
     case 'opGen': {
@@ -1772,7 +1866,17 @@ document.addEventListener('click', async (e) => {
     case 'sort': S.sort = t.dataset.v; render(true); break;
     case 'more': S.listMax = (S.listMax || 150) + 150; render(); break;
     case 'addAll': { const add = visibleSites().filter(s => !S.route.stops.includes(s.id)); if (add.length > 120) { toast('Sunt ' + add.length + ' șantiere. Filtrează mai întâi (zonă sau căutare).'); break; } S.route.stops.push(...add.map(s => s.id)); optimizeRoute(); break; }
-    case 'setActive': await patchSite(id, { inactiv: t.dataset.v === '1' }); toast(t.dataset.v === '1' ? 'Marcat finalizat' : 'Șantier redeschis'); break;
+    case 'setActive': await patchSite(id, t.dataset.v === '1' ? { inactiv: true } : { inactiv: false, finBy: '' }); toast(t.dataset.v === '1' ? 'Marcat finalizat' : 'Șantier redeschis'); if (S.view === 'activ') render(); break;
+    case 'opFinish': {
+      const s0 = S.sites.get(id); if (!s0 || s0.inactiv) break;
+      // second tap within 8 s confirms (kept outside the page, so a redraw in between does not lose it)
+      if (!(S.cfFin && S.cfFin.id === id && Date.now() - S.cfFin.t < 8000)) { S.cfFin = { id, t: Date.now() }; t.textContent = 'Confirmă: lucrarea e încheiată'; t.classList.remove('ghost'); t.classList.add('amber'); break; }
+      S.cfFin = null;
+      await patchSite(id, { inactiv: true, finBy: (window.PWA_me && window.PWA_me.name) || '', finT: Date.now() });
+      if (!(S.navOn && routeVisited(id))) { S.route.stops = S.route.stops.filter(x => x !== id); saveRouteSoon(); }
+      toast('Marcat: Finalizat', 6000, () => patchSite(id, { inactiv: false, finBy: '' }));
+      break;
+    }
     case 'setState': {
       const s0 = S.sites.get(id); if (!s0) break; const v = t.dataset.v; if (status(s0) === v) break;
       const prev = { ultima: s0.ultima || '', ultimaApp: s0.ultimaApp || '', inactiv: !!s0.inactiv };
@@ -1794,7 +1898,7 @@ document.addEventListener('click', async (e) => {
       const s = S.sites.get(id); const vis = Object.assign({}, S.visits); delete vis[vid];
       { const u = recomputeUltima(s, vis); await patchSite(id, { ultima: u, ultimaApp: u }); } toast('Vizita a fost ștearsă'); break;
     }
-    case 'clearRoute': if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă ștergerea'; break; } S.route = { stops: [], done: [], start: S.route.start, name: '' }; saveRouteSoon(); refresh(); break;
+    case 'clearRoute': if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă ștergerea'; break; } S.route = { stops: [], done: [], start: S.route.start, name: '' }; RS.set(null); saveRouteSoon(); refresh(); break;
     case 'optimize': optimizeRoute(); break;
     case 'roadOpt': computeRoute(true); break;
     case 'setMode': setMode(t.dataset.v); break;
@@ -1803,6 +1907,7 @@ document.addEventListener('click', async (e) => {
     case 'navTo': navTo(t.dataset.id); break;
     case 'roadKeep': computeRoute(false); break;
     case 'navStart': navStart(); break;
+    case 'rsEnd': RS.show(); break;
     case 'showRoute': { const pts = S.route.stops.map(x => S.sites.get(x)).filter(Boolean); closeSheet(); fitAll(pts.concat(S.route.start ? [S.route.start] : [])); break; }
     case 'startHere': { const c = map.getCenter(); S.route.start = { lat: +c.lat.toFixed(6), lng: +c.lng.toFixed(6), label: 'punct ales pe hartă (' + c.lat.toFixed(4) + ', ' + c.lng.toFixed(4) + ')' }; saveRouteSoon(); refresh(); break; }
     case 'startClear': S.route.start = null; saveRouteSoon(); refresh(); break;
@@ -1816,7 +1921,7 @@ document.addEventListener('click', async (e) => {
       await db.doc('trasee/' + rid).set({ name, stops: S.route.stops, done: S.route.done, start: S.route.start || null, creat: Date.now() });
       saveRouteSoon(); toast('Traseul „' + name + '” a fost salvat'); break;
     }
-    case 'loadRoute': { const r = S.routes.find(x => x.id === id); if (r && r.from) { TR.use(id); break; } if (r) { S.route = { stops: (r.stops || []).filter(x => S.sites.has(x)), done: r.done || [], start: r.start || null, name: r.name || '' }; saveRouteSoon(); refresh(); toast('Traseu încărcat'); } break; }
+    case 'loadRoute': { const r = S.routes.find(x => x.id === id); if (r && r.from) { TR.use(id); break; } if (r) { S.route = { stops: (r.stops || []).filter(x => S.sites.has(x)), done: r.done || [], start: r.start || null, name: r.name || '' }; RS.set(null); saveRouteSoon(); refresh(); toast('Traseu încărcat'); } break; }
     case 'trSend': {
       if (isOp()) break;
       const to = ($('#trTo') || {}).value; const ids = S.route.stops.filter(x => !S.route.done.includes(x) && S.sites.has(x));
@@ -2161,7 +2266,7 @@ $('#qc').addEventListener('click', async e => {
         const s2 = r.assets || {};
         await OB.add(k, { siteId: sid, siteName: cityDir(gp.lat, gp.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: 'Șantier nou', nou: 1, stamp: sid, t: Date.now(), p: s2.p, s: s2.s, lat: gp.lat, lng: gp.lng }, files);
       }
-      saved = true; ACT.site(sid, !site);
+      saved = true; ACT.site(sid, !site, photoDay(f.santierR.dt)); RS.photo(sid);
     } catch (err) { toast('Nu s-a salvat în aplicație: ' + (err.code || err.message)); f.saving = false; e.target.disabled = false; e.target.textContent = 'Salvează'; }
     if (!saved) return;
     if (QC.f === f) qcClose();
@@ -2207,7 +2312,13 @@ const CLOUD = {
     }
     Object.assign(v, extra || {});
     try { localStorage.setItem('harta_stateU', JSON.stringify(CLOUD.stateU)); } catch (e) {}
-    try { await CLOUD.req('/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [sid]: v }) }); }
+    try {
+      const r = await CLOUD.req('/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [sid]: v }) });
+      if (r && r.rejected && isOp() && v.inactiv) {
+        const q = S.sites.get(sid);
+        if (q && q.inactiv) { await db.doc('sites/' + q._sh).update({ s: { [sid]: { inactiv: false, finBy: '' } } }); toast('Serverul nu a primit „Finalizat” pentru acest șantier. Spune-i lui Ionuț.', 6000); }
+      }
+    }
     catch (e) { CLOUD.pendingState = Object.assign(CLOUD.pendingState || {}, { [sid]: v }); CLOUD.savePS(); }
   },
   async pull() {
@@ -2238,6 +2349,8 @@ const CLOUD = {
         if (!s) continue;
         const up = {};
         if ((s.ultima || '') !== (v.ultima || '') || !!s.inactiv !== !!v.inactiv) Object.assign(up, { ultima: v.ultima || '', ultimaApp: v.ultima || '', inactiv: !!v.inactiv });
+        // who reported it as finished (an operator), so the admin can see it and reopen it if it was a mistake
+        if (v.inactiv && v.fn && s.finBy !== v.fn) { up.finBy = v.fn; up.finT = v.u || Date.now(); } else if (!v.inactiv && s.finBy) up.finBy = '';
         if (v.e) { for (const [k, x] of Object.entries(v.e)) if (SYNC_E.includes(k) && (own(s, k) && s[k] != null ? s[k] : '') !== x) up[k] = x; if (Object.keys(up).some(k => SYNC_E.includes(k))) up.edk = [...new Set([...(s.edk || []), ...Object.keys(v.e)])]; }
         if (Object.keys(up).length) {
           await db.doc('sites/' + s._sh).update({ s: { [sid]: up } }); changed++;
@@ -2412,7 +2525,7 @@ const TR = {
     const stops = (r.stops || []).filter(x => S.sites.has(x));
     for (const x of stops) if (RZ.other(x)) RZ.force.add(x);   // these sites were given to me
     const done = stops.filter(x => status(S.sites.get(x)) !== 'due');   // already updated since it was sent: not open any more
-    S.route = { stops, done, start: null, name: r.name || '' }; S.routeDraft = null; S.autoSig = null;
+    S.route = { stops, done, start: null, name: r.name || '' }; S.routeDraft = null; S.autoSig = null; RS.set(null);
     saveRouteSoon(); refresh(); go('route'); toast('Traseu încărcat · ' + (stops.length - done.length) + ' șantiere de actualizat' + (done.length ? ' (' + done.length + ' deja făcute)' : ''));
   },
 };
@@ -2561,7 +2674,7 @@ $('#areaGo').addEventListener('click', () => {
   const cand = areaSites(); if (cand.length < 2) return;
   for (const c of cand) if (RZ.other(c.id)) RZ.force.add(c.id);   // admin chose to take the colleagues' sites too
   areaMode(false);
-  S.route = { stops: cand.map(s => s.id), done: [], start: S.route.start, name: '' }; saveRouteSoon(); go('route');
+  S.route = { stops: cand.map(s => s.id), done: [], start: S.route.start, name: '' }; RS.set(null); saveRouteSoon(); go('route');
   computeRoute(true);
 });
 $('#areaCancel').addEventListener('click', () => areaMode(false));
@@ -2756,12 +2869,13 @@ function routeTidy() {
   if (n) saveRouteSoon();
   return n;
 }
-async function computeRoute(optimize) {
+async function computeRoute(optimize, opts) {
   if (S.routing) return; S.routing = true; S.lastOpt = !!optimize;
   try {
     routeTidy();
     const pending = S.route.stops.filter(id => !S.route.done.includes(id)).map(id => S.sites.get(id)).filter(Boolean);
     if (!pending.length) { toast('Nu mai sunt opriri nebifate în traseu'); return; }
+    const ids0 = pending.map(s => s.id);   // what this calculation is for; the route may be edited while it runs
     routeMsg('Se încarcă harta rutieră (prima dată durează câteva secunde)…'); render();
     await loadGraph();
     routeMsg('Caut străzile…'); await tick();
@@ -2790,8 +2904,11 @@ async function computeRoute(optimize) {
       const pr = okIdx.map(i => !!pts[i].id && C2.due(pts[i]));
       order = (okIdx.length - 1 > PRIO_MIN ? solveOrderPrio(C, !!start, pr, 20) : solveOrder(C, !!start)).map(k => okIdx[k]);
       const newPending = order.filter(i => !start || i > 0).map(i => pts[i].id);
+      // stops added or removed while this was being computed are respected: nothing the user did in the meantime is lost
+      const open = S.route.stops.filter(id => !S.route.done.includes(id));
       const done = S.route.stops.filter(id => S.route.done.includes(id));
-      S.route.stops = done.concat(newPending, pending.filter(s => !newPending.includes(s.id)).map(s => s.id));
+      const kept = newPending.filter(id => open.includes(id));
+      S.route.stops = done.concat(kept, open.filter(id => !kept.includes(id)));
       saveRouteSoon();
     }
     const legs = [];
@@ -2805,11 +2922,16 @@ async function computeRoute(optimize) {
     }
     if (!start && order.length) S.navFirst = pts[order[0]].id;
     const total = legs.reduce((x, l) => ({ time: x.time + l.time, dist: x.dist + l.dist }), { time: 0, dist: 0 });
-    S.nav = { legs, total, sig: routeSig(), start: start || null, first: start ? null : pts[order[0]].id };
+    const open2 = S.route.stops.filter(id => !S.route.done.includes(id) && S.sites.has(id));
+    const same = open2.length === ids0.length && ids0.every(id => open2.includes(id));
+    // the route was edited during the calculation: this result is not the route any more, so it is not marked as valid and it is computed again
+    S.nav = { legs, total, sig: same ? routeSig() : 'stale', start: start || null, first: start ? null : pts[order[0]].id };
+    if (!same && typeof routeAutoSoon === 'function') setTimeout(routeAutoSoon, 0);
     if (legs.length) S.autoSig = null;   // computed: if the stops are later put back in an order tried before, it is computed again
+    if (S.navOn) { S.navList = null; S.navPos = 0; S.navAnn = {}; S.navProj = null; S.navTot = Math.max(S.navTot || 0, total.dist); if (S.navTrack) { S.navTrack.off = 0; S.navTrack.away = 0; S.navTrack.lastD = null; } }   // a new order while navigating: guidance restarts from my position
     routeMsg('');
     updateMap(); refresh();
-    const all = legs.flatMap(l => l.coords); if (all.length && map) { const bb = new maplibregl.LngLatBounds(); all.forEach(c => bb.extend(c)); map.fitBounds(bb, { padding: { top: 130, bottom: 60, left: 30, right: 60 }, duration: 600 }); }
+    const all = S.navOn || (opts && opts.fit === false) ? [] : legs.flatMap(l => l.coords); if (all.length && map) { const bb = new maplibregl.LngLatBounds(); all.forEach(c => bb.extend(c)); map.fitBounds(bb, { padding: { top: 130, bottom: 60, left: 30, right: 60 }, duration: 600 }); }
   } catch (e) {
     routeMsg('Traseul nu s-a putut calcula: ' + (e.message || e)); render();
   } finally { S.routing = false; }
@@ -2861,10 +2983,12 @@ function routeSection() {
   if (ok) {
     const t = S.nav.total;
     html += `<div class="stats"><div class="stat"><b class="num">${(t.dist / 1000).toFixed(1).replace('.', ',')}</b><span>km de parcurs</span></div><div class="stat"><b class="num">${fmtTime(t.time)}</b><span>${S.mode === 'car' ? 'de condus' : 'cu scuterul'}</span></div><div class="stat"><b class="num">${fmtTime(t.time + pending.length * STOP_S)}</b><span>cu 1 min/oprire</span></div></div>
-    <button class="btn primary" style="width:100%;height:50px;font-size:16px" data-act="navStart">▶ Pornește navigarea</button>`;
+    <button class="btn primary" style="width:100%;height:50px;font-size:16px" data-act="navStart">▶ ${RS.get() ? 'Continuă navigarea' : 'Pornește navigarea'}</button>`;
   } else if (pending.length && !S.routeMsg) {
     html += `<div class="note" style="margin-top:8px">Se calculează cel mai rapid traseu…</div>`;
   }
+  // an outing in progress can be closed by hand: the summary appears, what is left stays in the route
+  if (RS.get()) html += `<button class="btn" style="width:100%;margin-top:8px" data-act="rsEnd">Încheie traseul</button>`;
   return html;
 }
 
@@ -2913,7 +3037,7 @@ function navSay(it, prevDist) {
 }
 function navStart() {
   if (!navValid()) return;
-  S.navList = null; S.navOn = true; S.navPos = 0; S.voice = false;
+  S.navList = null; S.navOn = true; S.navPos = 0; S.voice = false; RS.start();
   S.navTot = S.nav.legs.reduce((a, l) => a + l.dist, 0);
   closeSheet(); $('#nav').hidden = false; $('.top').hidden = true; $('.fab-col').hidden = true; $('.tabs').hidden = true;
   if (S.meMarker) S.meMarker.getElement().classList.add('nav');
@@ -2928,7 +3052,7 @@ function navStart() {
 function navStop() {
   try { localStorage.removeItem('harta_nav'); } catch (e) {}
   clearTimeout(S.navFreeT); S.navFree = false; { const rb = $('#navRecenter'); if (rb) rb.hidden = true; }
-  S.navOn = false; $('#nav').hidden = true; if (S.meMarker) { S.meMarker.getElement().classList.remove('nav'); S.meMarker.setRotation(0); } try { map.setLayoutProperty('route-start', 'visibility', 'visible'); } catch (e) {} $('.top').hidden = false; $('.fab-col').hidden = false; $('.tabs').hidden = false;
+  S.navOn = false; $('#nav').hidden = true; $('#app').classList.remove('navon'); if (S.meMarker) { S.meMarker.getElement().classList.remove('nav'); S.meMarker.setRotation(0); } try { map.setLayoutProperty('route-start', 'visibility', 'visible'); } catch (e) {} $('.top').hidden = false; $('.fab-col').hidden = false; $('.tabs').hidden = false;
   if (S.navWatch != null) { try { navigator.geolocation.clearWatch(S.navWatch); } catch (e) {} S.navWatch = null; }
   try { speechSynthesis.cancel(); } catch (e) {}
   if (map) map.easeTo({ pitch: 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 500 });
@@ -2972,6 +3096,7 @@ function navShow(say) {
   $('#navArrive').hidden = !arr; $('#navMove').hidden = arr;
   if (arr) { const vs = site; const ok = vs && status(vs) === 'due'; const vb = $('#navVisit'); vb.disabled = !ok; vb.textContent = ok ? 'Actualizează șantier' : vs && status(vs) === 'wait' ? 'Actualizat · revine ' + roShort(addDays(lastUpd(vs), CYCLE)) : 'Finalizat'; }
   if (arr) { $('#navNextLeg').textContent = it.leg + 1 < S.nav.legs.length ? 'Pornește spre oprirea ' + navNo(it.leg + 1) : 'Termină traseul'; }
+  navTopVar();
   updateMap();
   if (map && !S.navGpsFollow && !S.navFree) {
     const b = approachBearing(it);
@@ -2986,7 +3111,7 @@ function navNext() {
 function navArrived() {
   const it = navItem(); const sid = S.nav.legs[it.leg].to;
   if (sid && !S.route.done.includes(sid)) { S.route.done.push(sid); saveRouteSoon(); S.nav.sig = routeSig(); }
-  if (it.leg + 1 >= S.nav.legs.length) { toast('Traseul e gata'); navStop(); return; }
+  if (it.leg + 1 >= S.nav.legs.length) { routeEnd(); return; }
   S.navPos++; navShow(true);
 }
 // a stop was ticked off while navigating (I photographed it — from the arrival panel or from its pin — or a colleague did):
@@ -2994,7 +3119,7 @@ function navArrived() {
 function navAdvance() {
   if (!S.navOn || !S.nav) return;
   const legs = S.nav.legs, open = l => !S.route.done.includes(l.to);
-  if (!legs.some(open)) { toast('Traseul e gata', 5000); navStop(); return; }
+  if (!legs.some(open)) { routeEnd(); return; }
   const cur = navItem().leg;
   if (!open(legs[cur])) {   // it was the stop I was heading to: show the next one at once (the recalculation below refines the road)
     let nx = legs.findIndex((l, k) => k > cur && open(l)); if (nx < 0) nx = legs.findIndex(open);
@@ -3031,6 +3156,18 @@ function projectOnLeg(L, lat, lng) {
   }
   return best;
 }
+// a stop was added while navigating: the best order of what is left is computed again from where I am
+async function navReopt() {
+  if (!S.navOn) return;
+  S.addedStop = false;
+  await computeRoute(true, { fit: false });
+  if (!S.navOn) return;
+  if (!navValid()) { if (S.navTrack) S.navTrack.busy = false; await navReroute(true); return; }
+  navShow(false); if (S.me) navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }, true);
+  toast('Traseu recalculat · ' + S.nav.legs.length + ' opriri rămase', 2500);
+}
+// where the top bar of the navigation ends: an open panel starts below it
+function navTopVar() { const a = $('#app'); if (!a) return; a.classList.toggle('navon', !!S.navOn); if (S.navOn) a.style.setProperty('--navtop', Math.round($('#navBot').getBoundingClientRect().bottom) + 'px'); }
 async function navReroute(next) {
   const tr = S.navTrack; if (!tr || tr.busy || !S.me) return;
   tr.busy = true; tr.lastReroute = Date.now();
@@ -3040,7 +3177,7 @@ async function navReroute(next) {
     const pend = S.route.stops.filter(id => !S.route.done.includes(id));
     const curTo = S.nav.legs[cur] && S.nav.legs[cur].to;
     const rest = (curTo && pend.includes(curTo) ? [curTo, ...pend.filter(x => x !== curTo)] : pend).map(id => S.sites.get(id)).filter(Boolean);
-    if (!rest.length) { toast('Traseul e gata'); navStop(); return; }
+    if (!rest.length) { routeEnd(); return; }
     const pts = [{ lat: S.me.lat, lng: S.me.lng, label: 'Locația mea' }].concat(rest);
     const snaps = pts.map(p => Router.snap(p.lat, p.lng)); if (!snaps[0]) return;
     const legs = []; let prev = 0;
@@ -3164,7 +3301,7 @@ function navRecenter() {
 /* ---------- navigate straight to one site ---------- */
 async function navTo(id) {
   if (!gpsFresh()) { toast('Aștept locația GPS…'); if (typeof locateNow === 'function') locateNow(); return; }
-  S.route = { stops: [id], done: [], start: null, name: '' }; saveRouteSoon();
+  S.route = { stops: [id], done: [], start: null, name: '' }; RS.set(null); saveRouteSoon();
   closeSheet(); await computeRoute(false);
   if (navValid()) navStart(); else toast('Nu am putut calcula drumul');
 }
@@ -3174,7 +3311,7 @@ function navPad(top, bot, extra) {
   if (innerWidth > innerHeight && innerHeight < 600) { const hb = $('#navBot').getBoundingClientRect().height; return { top: hb + Math.round(innerHeight * 0.15), bottom: 20, left: 70, right: 70 }; }
   const hb = $('#navBot').getBoundingClientRect().height; const hp = $('#navProg').getBoundingClientRect().height; return { top: hb + Math.round(innerHeight * 0.3), bottom: 40 + hp + extra / 2, left: 0, right: 0 };
 }
-window.addEventListener('resize', () => { if (S.navOn && S.me) setTimeout(() => navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }, true), 250); });
+window.addEventListener('resize', () => { setTimeout(navTopVar, 200); if (S.navOn && S.me) setTimeout(() => navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }, true), 250); });
 
 /* progress along the whole route: stops reached + share of the distance already driven */
 function navProg(leg, remD) {
@@ -3217,8 +3354,8 @@ const ACT = {
     try { await db.doc('activ/zile').set({ z: ACT.z }); } catch (e) { ACT.dirty = true; }
   },
   // a site updated (or created) today; counted once per site per day
-  site(sid, nou) {
-    const z = ACT.day(today()); if (!z.ids[sid] || nou) z.ids[sid] = nou ? 'n' : 'u';
+  site(sid, nou, d) {
+    const z = ACT.day(d || today()); if (!z.ids[sid] || nou) z.ids[sid] = nou ? 'n' : 'u';   // the day of the photo, the same day the server counts it in
     ACT.dirty = true; ACT.save(); if (S.view === 'activ') render();
   },
   // distance: only accurate fixes, ignoring GPS jitter and jumps
@@ -3257,9 +3394,15 @@ ACT.mergeServer = async () => {
     ACT.dirty = true; ACT.save(); if (S.view === 'activ') render();
   } catch (e) {}
 };
+const PWN = {
+  async key() { let p = ''; try { p = localStorage.getItem('harta_pass') || ''; } catch (e) {} const raw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('santiere-opw|' + p)); return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']); },
+  async enc(t) { const iv = crypto.getRandomValues(new Uint8Array(12)); const c = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await PWN.key(), new TextEncoder().encode(t))); const b = new Uint8Array(12 + c.length); b.set(iv); b.set(c, 12); return btoa(String.fromCharCode(...b)); },
+  async dec(x) { try { const b = Uint8Array.from(atob(x), c => c.charCodeAt(0)); return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b.slice(0, 12) }, await PWN.key(), b.slice(12))); } catch (e) { return null; } },
+};
+ACT.pwShow = {}; ACT.pwEdit = null;
 ACT.fetch = async () => {
   try { ACT.remote = (await CLOUD.req('/act')).users || {}; } catch (e) { ACT.remote = ACT.remote || {}; ACT.remoteErr = 1; }
-  try { ACT.ops = (await CLOUD.req('/users')).users || []; } catch (e) { ACT.ops = ACT.ops || []; }
+  try { const us = (await CLOUD.req('/users')).users || []; for (const o of us) o.pass = o.pw ? await PWN.dec(o.pw) : null; ACT.ops = us; } catch (e) { ACT.ops = ACT.ops || []; }
   if (S.view === 'activ') render();
 };
 function actTotals(zmap, key, mode) { const b = actBuckets(mode, zmap).find(x => x.k === key); return b || { u: 0, n: 0, m: 0, s: 0 }; }
@@ -3322,12 +3465,19 @@ function viewActiv() {
   <table class="act-tab"><thead><tr><th>Persoană</th><th class="num">Verificate</th><th class="num">Noi</th><th class="num">Km</th><th class="num">Timp</th></tr></thead>
   <tbody>${people.map(([id, n]) => { const t = actTotals(id === 'me' ? ACT.z : (R[id] && R[id].z) || {}, b.k, mode); return `<tr><td>${esc(n)}</td><td class="num">${t.u + t.n}</td><td class="num">${t.n}</td><td class="num">${km(t.m)}</td><td class="num">${t.s >= 60 ? hm(t.s) : '—'}</td></tr>`; }).join('')}</tbody></table>` : '';
   const opsBox = admin ? `<h3>Operatori</h3>
-  ${(ACT.ops || []).map(o => `<div class="op-row"><div class="grow"><b>${esc(o.name)}</b><div class="sub">adăugat ${o.c ? roDate(new Date(o.c).toISOString().slice(0, 10)) : ''}</div></div><button class="btn sm ghost danger" data-act="opDel" data-id="${esc(o.id)}">Scoate accesul</button></div>`).join('') || `<div class="sub">${ACT.ops ? 'Niciun operator încă.' : 'Se încarcă…'}</div>`}
+  ${(ACT.ops || []).map(o => `<div class="op-row"><div class="grow"><b>${esc(o.name)}</b><div class="sub">adăugat ${o.c ? roDate(new Date(o.c).toISOString().slice(0, 10)) : ''}</div>
+    ${o.pass ? `<div class="op-pw">Parola: <b class="num">${ACT.pwShow[o.id] ? esc(o.pass) : '••••••••'}</b> <button class="btn sm" data-act="opPwShow" data-id="${esc(o.id)}">${ACT.pwShow[o.id] ? 'Ascunde' : 'Arată'}</button></div>`
+      : ACT.pwEdit === o.id ? `<div class="row" style="gap:6px;margin-top:6px"><input class="in grow" id="opPwIn" placeholder="Parola lui ${esc(o.name)}" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"><button class="btn sm amber" data-act="opPwSave" data-id="${esc(o.id)}">Salvează</button></div>`
+      : `<div class="op-pw">Parola nu e notată <button class="btn sm" data-act="opPwNote" data-id="${esc(o.id)}">Notează parola</button></div>`}</div><button class="btn sm ghost danger" data-act="opDel" data-id="${esc(o.id)}">Scoate accesul</button></div>`).join('') || `<div class="sub">${ACT.ops ? 'Niciun operator încă.' : 'Se încarcă…'}</div>`}
   <div class="note" style="margin-top:10px"><b style="color:var(--ink)">Adaugă operator</b>
     <input class="in" id="opName" placeholder="Nume, ex. Operator 1" autocomplete="off" style="margin-top:8px">
     <div class="row" style="gap:8px;margin-top:8px"><input class="in grow" id="opPass" placeholder="Parola lui, ex. Operator1-4827" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"><button class="btn sm" data-act="opGen">Generează</button></div>
     <button class="btn amber" style="width:100%;margin-top:8px" data-act="opAdd">Adaugă</button>
-    <div class="sub" style="margin-top:6px">Parola: minim 10 caractere, cu litere și cifre (ex. Operator1-4827). Operatorul deschide aplicația pe telefonul lui și scrie parola asta. Poate naviga, fotografia și adăuga șantiere noi; nu poate șterge sau edita nimic.</div></div>` : '';
+    <div class="sub" style="margin-top:6px">Parola: minim 10 caractere, cu litere și cifre (ex. Operator1-4827). Operatorul deschide aplicația pe telefonul lui și scrie parola asta. Poate naviga, fotografia, adăuga șantiere noi și marca un șantier ca finalizat; nu poate șterge sau edita nimic. Își vede doar propria activitate.</div></div>` : '';
+  // admin: sites the operators reported as finished, newest first, each with a way back
+  const fins = admin ? [...S.sites.values()].filter(x => x.inactiv && x.finBy).sort((x, y) => (y.finT || 0) - (x.finT || 0)).slice(0, 20) : [];
+  const finBox = fins.length ? `<h3>Finalizate de operatori</h3>${fins.map(x => `<div class="leg tr-sent"><span><button class="lnk" data-act="open" data-id="${x.id}"><b>${esc(x.name)}</b></button> <span class="sub">· ${esc(x.finBy)}${x.finT ? ' · ' + roDate(iso(new Date(x.finT))) : ''}</span></span><span class="row"><button class="btn sm" data-act="setActive" data-id="${x.id}" data-v="0">Redeschide</button></span></div>`).join('')}
+  <div class="sub" style="margin-top:6px">„Redeschide” îl pune înapoi în ciclu, dacă a fost marcat din greșeală.</div>` : '';
   const me = window.PWA_me && window.PWA_me.name;
   return `<div class="row sp"><h2>Activitate</h2>${admin ? '<button class="btn sm act" data-act="actRefresh" aria-label="Aduce datele noi" title="Aduce datele noi">↻ Actualizează</button>' : ''}</div>
   <div class="who-bar"><span>Conectat${me ? ' ca <b>' + esc(me) + '</b>' : ''}</span><button class="btn sm act" data-act="logout">Ieși din cont</button></div>
@@ -3347,6 +3497,7 @@ function viewActiv() {
   <tbody>${rows.map(r => `<tr><td>${esc(r.lab)}</td><td class="num">${r.u + r.n}</td><td class="num">${r.n}</td><td class="num">${km(r.m)}</td><td class="num">${r.s >= 60 ? hm(r.s) : '—'}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">Nimic în această perioadă.</td></tr>'}</tbody></table>`
     : '<div class="note" style="margin-top:12px">Activitatea se înregistrează automat: fiecare șantier actualizat sau adăugat, kilometrii și timpul cât aplicația e deschisă cu GPS.</div>'}
   <div class="sub" style="margin-top:10px">${ACT.who === 'me' ? 'Kilometrii și timpul sunt măsurați de acest telefon.' : 'Șantierele se numără din pozele urcate; km și timpul vin de pe telefonul operatorului.'}</div>
+  ${finBox}
   ${opsBox}
   <div style="height:10px"></div>`;
 }
