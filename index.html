@@ -97,10 +97,10 @@ html,body,button,a,input,label,.sheet,.tabs,.nav,.qc{touch-action:manipulation}
 .sheet.peek{max-height:min(52%,460px)}
 .sheet.full{height:calc(100% - 56px - var(--sab) - var(--sat) - 104px)}
 /* a panel opened during navigation: above the map controls, between the top bar and the progress bar */
-#app.navon .sheet{z-index:35;bottom:calc(var(--sab) + 76px);max-height:none;-webkit-transform:translateZ(0)}
-#app.navon .sheet.peek{max-height:calc(100% - var(--navtop,160px) - var(--sab) - 84px)}
+#app.navon .sheet{z-index:35;bottom:calc(var(--sab) + 10px);max-height:none;-webkit-transform:translateZ(0)}
+#app.navon .sheet.peek{max-height:min(56%,calc(100% - var(--navtop,160px) - var(--sab) - 20px))}
 #app.navon .sheet.full{height:auto;top:calc(var(--navtop,160px) + 8px)}
-#app.navon.sheet-open .nav-side,#app.navon.sheet-full #navSign{display:none}
+#app.navon.sheet-open .nav-side,#app.navon.sheet-full #navSign,#app.navon.sheet-full #navProg{display:none}
 @media (orientation: landscape) and (max-height: 600px) {
   #app.navon .sheet,#app.navon .sheet.full{top:calc(var(--navtop,90px) + 8px);bottom:8px;height:auto;max-height:none}
   #app.navon .sheet.peek{max-height:none}
@@ -199,6 +199,12 @@ h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
 .stat span{font-size:12px;color:var(--muted)}
 .leg{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 0}
 .lnk{border:0;background:none;padding:0;text-align:left;color:inherit;font:inherit}
+.fab-scout{background:var(--surface);color:var(--ink)}
+#app.area-on #btnScout{display:none}   /* choosing a zone: the column must not reach the zone panel */
+.nav.scout #navSign,.nav.scout #navProg,.nav.scout #navArrive{display:none!important}
+/* drawing a zone: nothing but the map, so the outline can be traced anywhere */
+#app.drawing .top,#app.drawing .fab-col,#app.drawing .tabs,#app.drawing .areabar,#app.drawing .sheet,#app.drawing .selfab,#app.drawing .selbar{display:none!important}
+.dup-box{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}.dup-box .btn{width:100%;white-space:normal;height:auto;min-height:44px;padding:8px 12px}
 .geohelp.rs{align-items:center;background:rgba(15,20,25,.62)}
 .rs-card{text-align:center;padding:28px 20px 22px;max-width:420px;border-radius:22px}
 .rs-ok{width:72px;height:72px;border-radius:50%;margin:0 auto 12px;background:#1E8E3E;color:#fff;font-size:40px;font-weight:700;display:grid;place-items:center}
@@ -327,13 +333,16 @@ ol.steps .mi{flex:none;color:var(--ink)}
 #navPrev,#navNext{display:none}
 #navMove{display:none!important}
 /* route progress: bottom strip in portrait, vertical gauge on the left in landscape */
-.nav-prog{position:absolute;left:12px;right:12px;bottom:calc(var(--sab) + 12px);display:flex;align-items:center;gap:12px;background:var(--surface);color:var(--ink);border-radius:14px;padding:10px 14px;box-shadow:0 4px 18px rgba(0,0,0,.22)}
-.np-txt{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+/* portrait: a small horizontal gauge at the top right, under the top bar, next to the sign */
+.nav-prog{position:absolute;right:12px;top:calc(var(--navtop,120px) + 10px);width:122px;display:flex;flex-direction:column;align-items:stretch;gap:6px;background:var(--surface);color:var(--ink);border-radius:14px;padding:8px 12px 10px;box-shadow:0 4px 18px rgba(0,0,0,.22)}
+.np-txt{display:flex;align-items:baseline;justify-content:space-between;gap:8px;white-space:nowrap}
 .np-txt b{font-size:18px;font-weight:700}.np-txt span{font-size:14px;font-weight:600;color:var(--muted,#5B6570)}
-.np-track{flex:1;height:10px;border-radius:6px;background:color-mix(in srgb,var(--ink) 12%,transparent);overflow:hidden;position:relative}
+.np-track{flex:none;height:8px;border-radius:6px;background:color-mix(in srgb,var(--ink) 12%,transparent);overflow:hidden;position:relative}
+.nav-prog{box-sizing:border-box;width:126px}.nav-sign{box-sizing:border-box;max-width:min(300px,calc(100% - 162px))}
 .np-fill{position:absolute;left:0;top:0;bottom:0;width:var(--p,0%);background:var(--accent);border-radius:6px;transition:width .6s ease,height .6s ease}
 @media (orientation: landscape) and (max-height: 600px) {
-  .nav-prog{left:calc(var(--sal) + 12px);right:auto;top:auto;bottom:calc(var(--sab) + 12px);width:64px;height:min(52vh,230px);flex-direction:column;padding:10px 0;gap:8px}
+  .nav-prog{box-sizing:content-box;left:calc(var(--sal) + 12px);right:auto;top:auto;bottom:calc(var(--sab) + 12px);width:64px;height:min(52vh,230px);flex-direction:column;align-items:center;padding:10px 0;gap:8px}
+  .nav-sign{box-sizing:content-box;max-width:min(300px,40vw)}
   .np-txt{flex-direction:column;align-items:center;gap:2px}.np-txt b{font-size:16px}.np-txt span{font-size:12.5px}
   .np-track{flex:1;width:12px;height:auto}
   .np-fill{top:auto;right:0;width:auto;height:var(--p,0%)}
@@ -451,6 +460,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
     <button class="fab" id="btnMe" title="Locația mea" aria-label="Locația mea">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
     </button>
+    <button class="fab-new fab-scout" id="btnScout" aria-label="Explorare fără traseu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Explo-<br>rare</span></button>
     <button class="fab-new" id="btnNew" aria-label="Șantier nou"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Șantier <br>nou</span></button>
   </div>
   <div class="areabar" id="areaBar" hidden>
@@ -872,10 +882,11 @@ const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '
 const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 function hav(a, b) { const R = 6371, r = Math.PI / 180, dLa = (b.lat - a.lat) * r, dLo = (b.lng - a.lng) * r; const x = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); }
 let toastT;
+const UNDO_MS = 3000;
 function toast(msg, ms = 2600, undo) {
   const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT);
   if (undo) { const b = document.createElement('button'); b.className = 'toast-undo'; b.textContent = 'Anulează'; b.onclick = () => { t.hidden = true; undo(); }; t.appendChild(b); }
-  toastT = setTimeout(() => { t.hidden = true; }, undo ? Math.max(ms, 6000) : ms);
+  toastT = setTimeout(() => { t.hidden = true; }, undo ? UNDO_MS : ms);   // messages with „Anulează” stay 3 seconds, all of them
 }
 const ll = p => p.lat.toFixed(6) + ',' + p.lng.toFixed(6);
 const gLink = p => 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' + ll(p);
@@ -985,6 +996,52 @@ function finishBtn(s) {
   if (s.inactiv) return '';
   if (isOp()) { const cf = S.cfFin && S.cfFin.id === s.id && Date.now() - S.cfFin.t < 8000; return `<button class="btn ${cf ? 'amber' : 'ghost'}" data-act="opFinish" data-id="${s.id}">${cf ? 'Confirmă: lucrarea e încheiată' : '✓ Finalizat'}</button>`; }
   return `<button class="btn ghost" data-act="setState" data-id="${s.id}" data-v="off">✓ Finalizat</button>`;
+}
+/* ---------- duplicates: two or three pins for the same site at one place ---------- */
+const DUP_M = 25;
+// the nearest other site within 25 m of this one (the one that would stay), or null
+function dupNear(s) {
+  let best = null, bd = DUP_M / 1000;
+  for (const x of S.sites.values()) { if (x.id === s.id) continue; if (Math.abs(x.lat - s.lat) > 0.001 || Math.abs(x.lng - s.lng) > 0.0015) continue; const d = hav(s, x); if (d <= bd) { bd = d; best = x; } }
+  return best ? { s: best, m: Math.round(bd * 1000) } : null;
+}
+function dupBtn(s) {
+  const nr = dupNear(s); if (!nr) return '';
+  const cf = S.cfDup && S.cfDup.id === s.id && Date.now() - S.cfDup.t < 8000;
+  return `<div class="dup-box"><div class="sub">La ${nr.m} m mai e un șantier: <b style="color:var(--ink)">${esc(nr.s.name)}</b>. Dacă e același, șterge-l pe acesta.</div>
+    <button class="btn ${cf ? 'amber' : 'ghost danger'}" data-act="dupDel" data-id="${s.id}">${cf ? 'Confirmă: șterg „' + esc(s.name) + '”, rămâne „' + esc(nr.s.name) + '”' : 'Șterge duplicat'}</button></div>`;
+}
+const rawSite = id => { for (const [sh, d] of Object.entries(S.shards)) { const x = d && d.s && d.s[id]; if (x) return [sh, x]; } return null; };
+const stersSent = id => { try { const m = JSON.parse(localStorage.getItem('harta_sters_sent') || '{}'); m[id] = 1; localStorage.setItem('harta_sters_sent', JSON.stringify(m)); } catch (e) {} };
+// D is deleted as the duplicate of K; K inherits the newer dates so the place is not asked for (or sent to client 2) earlier than it should be
+async function dupDelete(D, K) {
+  const me = (window.PWA_me && window.PWA_me.name) || (isOp() ? '' : 'Ionuț');
+  const u = Date.now(); CLOUD.stateU[D.id] = u;
+  const v = { ultima: D.ultima || '', inactiv: !!D.inactiv, u, sters: true, dup: K.id };
+  if (D.manual) v.site = { name: D.name, lat: D.lat, lng: D.lng, loc: D.loc || '', strada: D.strada || '', creat: D.creat || u, panouT: D.panouT || '' };
+  let r = null, off = false;
+  try { r = await CLOUD.req('/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [D.id]: v }) }); }
+  catch (e) { if (/server 4/.test(String(e.message || e))) { toast('Nu s-a putut șterge: ' + (e.message || e), 5000); return; } off = true; }
+  if (r && r.rejected) { toast('Serverul nu a primit ștergerea (aplicația celorlalți e mai veche sau celălalt șantier a fost șters). Spune-i lui Ionuț.', 6000); return; }
+  if (off) { CLOUD.pendingState = Object.assign(CLOUD.pendingState || {}, { [D.id]: v }); CLOUD.savePS(); }
+  await db.doc('sites/' + D._sh).update({ s: { [D.id]: { sters: true, dupOf: K.id, delBy: me, delT: u } } });
+  stersSent(D.id);
+  { const sh = S.shards[D._sh]; if (sh && sh.s && sh.s[D.id]) Object.assign(sh.s[D.id], { sters: true, dupOf: K.id, delBy: me, delT: u }); S.sites.delete(D.id); }
+  const dd = lastUpd(D), dk = lastUpd(K);
+  if (dd && dd > dk && !K.inactiv) { try { await patchSite(K.id, { ultima: dd, ultimaApp: dd }); } catch (e) {} }
+  // the admin carries the client-2 date over himself (for an operator the server does it)
+  if (!isOp()) { try { await C2.pull(true); } catch (e) {} const cd = String(C2.map[D.id] || '').slice(0, 10), ck = String(C2.map[K.id] || '').slice(0, 10); if (cd && cd > ck) CLOUD.req('/c2', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ set: { [K.id]: cd }, force: 1 }) }).then(() => C2.pull(true)).catch(() => {}); }
+  // in my route the place stays, under the site that remains
+  { const i = S.route.stops.indexOf(D.id); if (i >= 0) { const wasDone = S.route.done.includes(D.id); S.route.done = S.route.done.filter(x => x !== D.id); if (S.route.stops.includes(K.id) || status(S.sites.get(K.id) || K) !== 'due') S.route.stops.splice(i, 1); else { S.route.stops[i] = K.id; if (wasDone) S.route.done.push(K.id); } saveRouteSoon(); } }
+  const undo = async () => {
+    try {
+      const u2 = Date.now(); CLOUD.stateU[D.id] = u2; const v2 = { ultima: D.ultima || '', inactiv: !!D.inactiv, u: u2 }; if (v.site) v2.site = v.site;
+      await CLOUD.req('/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [D.id]: v2 }) });
+      await db.doc('sites/' + D._sh).update({ s: { [D.id]: { sters: false, dupOf: '', delBy: '' } } }); toast('„' + D.name + '” a fost pus înapoi');
+    } catch (e) { toast('Nu s-a putut anula: ' + (e.message || e), 4000); }
+  };
+  if (S.navOn) { closeSheet(); refresh(); } else { refresh(); openCard(K.id); }
+  toast('Duplicat șters · rămâne „' + K.name + '”', 7000, undo);
 }
 const finNote = s => s.inactiv && s.finBy ? `<div class="sub" style="margin-top:4px">Finalizat de ${esc(s.finBy)}${s.finT ? ' · ' + roDate(iso(new Date(s.finT))) : ''}</div>` : '';
 function statusLabel(s) {
@@ -1178,6 +1235,7 @@ function siteFeatures() {
   for (const s of S.sites.values()) {
     const sel = ord.has(s.id);
     if (!vis.has(s.id) && !sel) continue;
+    if (S.navOn && !S.scout && status(s) !== 'due' && S.openId !== s.id) continue;
     feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [s.lng, s.lat] }, properties: { id: s.id, st: status(s), sel: sel ? 1 : 0, ord: ord.get(s.id) || 0, rz: RZ.other(s.id) ? 1 : 0 } });
   }
   // selected on top
@@ -1246,7 +1304,7 @@ function pickShard() {
 let routeTimer = null, routeDirty = false;
 function saveRouteSoon() {
   if (typeof RZ !== 'undefined') RZ.sendSoon();
-  if (S.navOn && S.nav && !navValid()) { clearTimeout(S.navEditT); S.navEditT = setTimeout(() => { if (S.navOn && !navValid() && !S.routing && !S.addedStop) { if (S.navTrack) S.navTrack.busy = false; navReroute(); } }, 400); }
+  if (S.navOn && !S.scout && S.nav && !navValid()) { clearTimeout(S.navEditT); S.navEditT = setTimeout(() => { if (S.navOn && !navValid() && !S.routing && !S.addedStop) { if (S.navTrack) S.navTrack.busy = false; navReroute(); } }, 400); }
   routeDirty = true; S.routeUpd = Date.now(); clearTimeout(routeTimer);
   routeTimer = setTimeout(async () => {
     try { await db.doc('trasee/curent').set({ stops: S.route.stops, done: S.route.done, start: S.route.start || null, name: S.route.name || '', upd: S.routeUpd }); }
@@ -1398,7 +1456,7 @@ function viewCard() {
     <div class="btns" style="margin-top:8px">
       ${finishBtn(s)}
       <button class="btn ghost" data-act="open" data-id="${s.id}">Detalii</button>
-    </div>`;
+    </div>${dupBtn(s)}`;
 }
 
 function viewSite() {
@@ -1490,6 +1548,7 @@ function viewRoute() {
   return `<div class="row sp"><h2>${S.route.name ? esc(S.route.name) : 'Traseul curent'}</h2>${stops.length ? '<button class="btn sm ghost danger" data-act="clearRoute">Șterge traseul</button>' : ''}</div>
   <div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · ia toate șantierele de actualizat din zona de pe ecran sau din zona pe care o desenezi cu degetul, în ordinea cea mai rapidă
     <div class="btns" style="margin-top:8px"><button class="btn amber" data-act="areaMode">Zona de pe ecran</button><button class="btn amber" data-act="areaDraw">✏️ Desenează zona</button></div></div>
+  <button class="btn" style="width:100%;margin-top:10px" data-act="scout">🧭 Explorare · fără traseu</button>
   ${!stops.length ? `<div class="note" style="margin-top:10px">Sau alege tu oricâte șantiere (minim 2), în orice ordine: butonul de traseu de pe hartă, „+ Active din zonă”, sau bifează-le din Listă. Ordinea o stabilesc eu.</div>
     <div class="btns" style="margin-top:10px"><button class="btn" data-act="selMode">Alege pe hartă</button><button class="btn" data-act="tab" data-v="list">Din listă</button></div>` : `
   <div class="sub" style="margin:4px 0 10px">${stops.length} opriri${S.route.done.length ? ' · ' + S.route.done.length + ' vizitate' : ''}</div>
@@ -1716,7 +1775,7 @@ function routeEnd(msg) {
 function routeVisited(sid) {
   if (!S.route.stops.includes(sid) || S.route.done.includes(sid)) return false;
   S.route.done.push(sid); saveRouteSoon();
-  if (S.navOn && S.nav) { if (S.view) closeSheet(); navAdvance(); }
+  if (S.navOn && !S.scout && S.nav) { if (S.view) closeSheet(); navAdvance(); }
   else { refresh(); if (RS.get() && !S.route.stops.some(x => !S.route.done.includes(x))) RS.show(); }
   return true;
 }
@@ -1726,7 +1785,7 @@ function routeSkip(list) {
   saveRouteSoon();
   const [, name, by] = list[0];
   toast((list.length > 1 ? list.length + ' șantiere din traseu au fost actualizate' : '„' + name + '” a fost actualizat') + ' de ' + (by || 'un coleg') + ' — trecem la următorul.', 5000);
-  if (S.navOn && S.nav) {
+  if (S.navOn && !S.scout && S.nav) {
     if (S.nav.legs.every(l => S.route.done.includes(l.to))) { routeEnd('Traseul e gata — restul șantierelor au fost actualizate de colegi'); return; }
     navAdvance();
   } else refresh();
@@ -1737,7 +1796,7 @@ function routeAutoSoon() {
     if (S.routing) { routeAutoSoon(); return; }
     S.addedStop = false;
     const open = S.route.stops.filter(x => !S.route.done.includes(x)).length;
-    if (S.navOn) { await navReopt(); return; }
+    if (S.navOn && !S.scout) { await navReopt(); return; }
     if (open >= 1 && S.me && !(S.nav && navValid())) await computeRoute(true, { fit: false });
   }, 1500);
 }
@@ -1867,6 +1926,22 @@ document.addEventListener('click', async (e) => {
     case 'more': S.listMax = (S.listMax || 150) + 150; render(); break;
     case 'addAll': { const add = visibleSites().filter(s => !S.route.stops.includes(s.id)); if (add.length > 120) { toast('Sunt ' + add.length + ' șantiere. Filtrează mai întâi (zonă sau căutare).'); break; } S.route.stops.push(...add.map(s => s.id)); optimizeRoute(); break; }
     case 'setActive': await patchSite(id, t.dataset.v === '1' ? { inactiv: true } : { inactiv: false, finBy: '' }); toast(t.dataset.v === '1' ? 'Marcat finalizat' : 'Șantier redeschis'); if (S.view === 'activ') render(); break;
+    case 'dupDel': {
+      const d0 = S.sites.get(id); if (!d0) break; const nr = dupNear(d0);
+      if (!nr) { toast('Nu mai e alt șantier la această locație'); render(); break; }
+      // second tap within 8 s confirms (kept outside the page, so a redraw in between does not lose it)
+      if (!(S.cfDup && S.cfDup.id === id && Date.now() - S.cfDup.t < 8000)) { S.cfDup = { id, t: Date.now() }; render(); break; }
+      S.cfDup = null; t.disabled = true; await dupDelete(d0, nr.s);
+      break;
+    }
+    case 'dupRestore': {   // admin: a site deleted as a duplicate comes back on every phone
+      if (isOp()) break; const rw = rawSite(id); if (!rw) break;
+      const [sh, x] = rw;
+      await db.doc('sites/' + sh).update({ s: { [id]: { sters: false, dupOf: '', delBy: '' } } });
+      await CLOUD.push(id, null, Object.assign({}, x, { sters: false, id }));
+      toast('„' + (x.name || 'Șantier') + '” e din nou pe hartă'); if (S.view === 'activ') setTimeout(render, 600);
+      break;
+    }
     case 'opFinish': {
       const s0 = S.sites.get(id); if (!s0 || s0.inactiv) break;
       // second tap within 8 s confirms (kept outside the page, so a redraw in between does not lose it)
@@ -1908,6 +1983,7 @@ document.addEventListener('click', async (e) => {
     case 'roadKeep': computeRoute(false); break;
     case 'navStart': navStart(); break;
     case 'rsEnd': RS.show(); break;
+    case 'scout': scoutStart(); break;
     case 'showRoute': { const pts = S.route.stops.map(x => S.sites.get(x)).filter(Boolean); closeSheet(); fitAll(pts.concat(S.route.start ? [S.route.start] : [])); break; }
     case 'startHere': { const c = map.getCenter(); S.route.start = { lat: +c.lat.toFixed(6), lng: +c.lng.toFixed(6), label: 'punct ales pe hartă (' + c.lat.toFixed(4) + ', ' + c.lng.toFixed(4) + ')' }; saveRouteSoon(); refresh(); break; }
     case 'startClear': S.route.start = null; saveRouteSoon(); refresh(); break;
@@ -2207,6 +2283,7 @@ function qcOpen(o) {
 }
 function qcClose() { const f0 = QC.f; if (f0) for (const k of ['panouUrl', 'santierUrl']) if (f0[k]) setTimeout(() => URL.revokeObjectURL(f0[k]), 1000); $('#qc').hidden = true; QC.f = null; clearInterval(QC.timer); if (S.navOn) { navShow(false); if (S.view === 'card' || S.view === 'site') render(); } else refresh(); }
 $('#navNew').addEventListener('click', () => qcOpen({ isNew: true }));
+$('#btnScout').addEventListener('click', () => scoutStart());
 async function toJpeg(file) {
   if (file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name || '')) return file;
   return await shrink(file, 8064, 0.97);
@@ -2271,7 +2348,7 @@ $('#qc').addEventListener('click', async e => {
     if (!saved) return;
     if (QC.f === f) qcClose();
     toast('✓ Salvat' + (site ? ' · ' + site.name : ''));
-    if (site && routeVisited(site.id) && S.navOn) { const nx = S.sites.get(S.nav.legs[navItem().leg].to); toast('✓ Salvat · ' + site.name + ' — urmează oprirea ' + navNo(navItem().leg) + (nx ? ': ' + nx.name : ''), 5000); }
+    if (site && routeVisited(site.id) && S.navOn && !S.scout) { const nx = S.sites.get(S.nav.legs[navItem().leg].to); toast('✓ Salvat · ' + site.name + ' — urmează oprirea ' + navNo(navItem().leg) + (nx ? ': ' + nx.name : ''), 5000); }
     OB.pump([k]);   // photos go up in the background
     if (!site) { CLOUD.sharePanel(sid, f.panouR.blob); PN.put(sid, f.panouR.blob).catch(() => {}); }   // colleagues see / use the panel of this new site
   }
@@ -2332,13 +2409,19 @@ const CLOUD = {
         CLOUD.stateU[sid] = v.u;
         const s = S.sites.get(sid);
         if (v.sters) {   // deleted on another phone: off the map, the list and the route here too
+          stersSent(sid);
+          if (!s && v.dn) { const rw = rawSite(sid); if (rw && rw[1].sters && rw[1].delBy !== v.dn) { await db.doc('sites/' + rw[0]).update({ s: { [sid]: { delBy: v.dn, delT: v.u, dupOf: v.dup || '' } } }); changed++; } }
           if (s) {
-            await db.doc('sites/' + s._sh).update({ s: { [sid]: { sters: true } } });
+            await db.doc('sites/' + s._sh).update({ s: { [sid]: Object.assign({ sters: true }, v.dn ? { delBy: v.dn, delT: v.u, dupOf: v.dup || '' } : {}) } });
             if (S.route.stops.includes(sid)) { S.route.stops = S.route.stops.filter(x => x !== sid); saveRouteSoon(); }
             if (S.openId === sid) closeSheet();
             changed++;
           }
           continue;
+        }
+        if (!s) {   // deleted here, but the deletion was taken back (by the admin, or by the operator who made it): the site returns
+          const rw = rawSite(sid);
+          if (rw && rw[1].sters) { await db.doc('sites/' + rw[0]).update({ s: { [sid]: { sters: false, delBy: '', dupOf: '', ultima: v.ultima || rw[1].ultima || '', inactiv: !!v.inactiv } } }); changed++; continue; }
         }
         if (!s && v.site) {   // a new site added by another operator
           const sh = pickShard(); const ref = db.doc('sites/' + sh); const snap = await ref.get();
@@ -2372,7 +2455,7 @@ const CLOUD = {
     // sites deleted on this phone before deletions were shared: tell the others once
     if (!isOp()) setTimeout(async () => {
       let sent = {}; try { sent = JSON.parse(localStorage.getItem('harta_sters_sent') || '{}'); } catch (e) {}
-      for (const d of Object.values(S.shards)) for (const [id, x] of Object.entries((d && d.s) || {})) if (x && x.sters && !sent[id]) { await CLOUD.push(id, null, Object.assign({}, x, { id })); sent[id] = 1; }
+      for (const d of Object.values(S.shards)) for (const [id, x] of Object.entries((d && d.s) || {})) if (x && x.sters && !sent[id] && !x.delBy) { await CLOUD.push(id, null, Object.assign({}, x, { id })); sent[id] = 1; }
       try { localStorage.setItem('harta_sters_sent', JSON.stringify(sent)); } catch (e) {}
     }, 6000);
     RZ.pull(); setTimeout(RZ.send, 3000);
@@ -2485,7 +2568,7 @@ const TR = {
     if (n) {
       const open = keep.some(i => !S.route.done.includes(i));
       S.route = { stops: keep, done: S.route.done.filter(i => keep.includes(i)), start: S.route.start, name: open ? S.route.name : '' }; S.autoSig = null;
-      if (S.navOn && !open) navStop();
+      if (S.navOn && !S.scout && !open) navStop();
       saveRouteSoon(); refresh();
     }
     { const b = document.getElementById('trBox'); if (b) b.remove(); }
@@ -2638,14 +2721,14 @@ function areaUpdate() {
   b.textContent = n > 500 ? (drawn ? 'Peste 500 · desenează mai mic' : 'Peste 500 · mărește harta') : n < 2 ? (drawn ? 'Minim 2 șantiere în zonă' : 'Minim 2 · micșorează harta') : 'Fă traseul (' + n + ')';
 }
 function areaMode(on) {
-  S.areaOn = on; $('#areaBar').hidden = !on; if (on) S.areaAll = false;
+  S.areaOn = on; $('#areaBar').hidden = !on; $('#app').classList.toggle('area-on', !!on); if (on) S.areaAll = false;
   if (on) { if (!S.areaHooked && map) { map.on('moveend', areaUpdate); S.areaHooked = true; } closeSheet(); if (S.selectMode) setSelectMode(false); areaUpdate(); }
   else { drawStop(); setAreaPoly(null); }
 }
 /* freehand drawing: one finger traces the outline, lifting it closes the zone */
 const DRAW = { pts: [], on: false };
-function drawStart() { $('#drawPad').hidden = false; DRAW.pts = []; $('#drawPath').setAttribute('d', ''); }
-function drawStop() { $('#drawPad').hidden = true; DRAW.on = false; }
+function drawStart() { $('#drawPad').hidden = false; $('#app').classList.add('drawing'); DRAW.pts = []; $('#drawPath').setAttribute('d', ''); }
+function drawStop() { $('#drawPad').hidden = true; $('#app').classList.remove('drawing'); DRAW.on = false; }
 function drawD() { return DRAW.pts.length ? 'M' + DRAW.pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') : ''; }
 (() => {
   const pad = $('#drawPad');
@@ -2941,12 +3024,12 @@ function navValid() { return S.nav && S.nav.sig === routeSig(); }
 function routeFeatures() {
   const rf = [];
   if (navValid()) {
-    let cur = S.navOn ? navItem().leg : -1; const pj = S.navProj;
+    const navR = S.navOn && !S.scout; let cur = navR ? navItem().leg : -1; const pj = S.navProj;
     // arrived and the site is already updated: the road to the next stop becomes the full-colour one at once
-    if (S.navOn) { const it = navItem(), t0 = S.sites.get(S.nav.legs[it.leg].to), to = t0 && Object.assign({}, t0, S.pend[t0.id] || {}); if (it.s && it.s.type === 'arrive' && to && status(to) !== 'due' && it.leg + 1 < S.nav.legs.length) cur = it.leg + 1; }
+    if (navR) { const it = navItem(), t0 = S.sites.get(S.nav.legs[it.leg].to), to = t0 && Object.assign({}, t0, S.pend[t0.id] || {}); if (it.s && it.s.type === 'arrive' && to && status(to) !== 'due' && it.leg + 1 < S.nav.legs.length) cur = it.leg + 1; }
     S.nav.legs.forEach((l, k) => {
       const line = (coords, props) => coords.length > 1 && rf.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: Object.assign({ leg: k }, props) });
-      if (!S.navOn) return line(l.coords, {});
+      if (!navR) return line(l.coords, {});
       if (k < cur) return line(l.coords, { pass: 1 });   // already driven: faded
       if (k > cur) return line(l.coords, { dim: 1 });    // later stops: a little lighter
       // current stop: faded behind me, full colour ahead
@@ -3035,7 +3118,22 @@ function navSay(it, prevDist) {
   const pre = prevDist && prevDist > 40 ? 'Peste ' + fmtDist(prevDist).replace('m', 'metri').replace('km', 'kilometri') + ', ' : '';
   return pre + txt.charAt(0).toLowerCase() + txt.slice(1);
 }
+/* ---------- scouting: the map follows me as in navigation, with no route (to look around and find new sites) ---------- */
+function scoutStart() {
+  if (S.navOn) return;
+  S.scout = true; S.navOn = true; S.voice = false;
+  if (S.selectMode) setSelectMode(false); if (S.areaOn) areaMode(false);
+  closeSheet(); $('#nav').classList.add('scout'); $('#nav').hidden = false; $('.top').hidden = true; $('.fab-col').hidden = true; $('.tabs').hidden = true;
+  if (S.meMarker) S.meMarker.getElement().classList.add('nav');
+  try { localStorage.setItem('harta_scout', String(Date.now())); } catch (e) {}
+  S.navTrack = null; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null; S.navFree = false;
+  navShow(false);
+  // start from the position I already have; if it is an old one, ask the phone for a fresh one quietly (no error screen while I look at the map)
+  if (S.me) { navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }); if (Date.now() - (S.me.t || 0) > 30000 && typeof startGeoWatch === 'function') startGeoWatch(); }
+  else if (typeof locateNow === 'function') locateNow();
+}
 function navStart() {
+  if (S.scout) navStop();
   if (!navValid()) return;
   S.navList = null; S.navOn = true; S.navPos = 0; S.voice = false; RS.start();
   S.navTot = S.nav.legs.reduce((a, l) => a + l.dist, 0);
@@ -3044,19 +3142,20 @@ function navStart() {
   try { localStorage.setItem('harta_nav', String(Date.now())); } catch (e) {}
   try { map.setLayoutProperty('route-start', 'visibility', 'none'); } catch (e) {}
   if (S.voice && 'speechSynthesis' in window) { try { speechSynthesis.getVoices(); } catch (e) {} }
-  S.navTrack = { off: 0, lastReroute: 0 }; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null;
+  S.navTrack = { off: 0, lastReroute: 0 }; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null;
   navShow(true);
   if (S.me && Date.now() - (S.me.t || 0) < 30000) navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc });
   else if (typeof locateNow === 'function' && S.geoErr != null) locateNow();
 }
 function navStop() {
-  try { localStorage.removeItem('harta_nav'); } catch (e) {}
+  const wasScout = !!S.scout; S.scout = false; $('#nav').classList.remove('scout');
+  try { localStorage.removeItem('harta_nav'); localStorage.removeItem('harta_scout'); } catch (e) {}
   clearTimeout(S.navFreeT); S.navFree = false; { const rb = $('#navRecenter'); if (rb) rb.hidden = true; }
   S.navOn = false; $('#nav').hidden = true; $('#app').classList.remove('navon'); if (S.meMarker) { S.meMarker.getElement().classList.remove('nav'); S.meMarker.setRotation(0); } try { map.setLayoutProperty('route-start', 'visibility', 'visible'); } catch (e) {} $('.top').hidden = false; $('.fab-col').hidden = false; $('.tabs').hidden = false;
   if (S.navWatch != null) { try { navigator.geolocation.clearWatch(S.navWatch); } catch (e) {} S.navWatch = null; }
   try { speechSynthesis.cancel(); } catch (e) {}
   if (map) map.easeTo({ pitch: 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 500 });
-  updateMap(); go('route');
+  updateMap(); if (wasScout) { closeSheet(); refresh(); } else go('route');
 }
 // the sign with the next maneuver (arrow, distance left, what to do), like the board in Waze
 function navSign(it, d) {
@@ -3072,6 +3171,7 @@ function navSign(it, d) {
   $('#nsDist').textContent = it.s.type === 'depart' ? 'Start' : fmtDist(Math.max(0, d || 0));
 }
 function navShow(say) {
+  if (S.scout) { $('#navEta').textContent = 'Explorare'; $('#navSub').textContent = 'fără traseu · harta te urmărește'; navTopVar(); updateMap(); return; }
   const items = navItems(); const it = items[S.navPos]; if (!it) return;
   const prev = items[S.navPos - 1];
   const dist = prev && prev.leg === it.leg ? prev.s.dist : 0;
@@ -3116,8 +3216,9 @@ function navArrived() {
 }
 // a stop was ticked off while navigating (I photographed it — from the arrival panel or from its pin — or a colleague did):
 // the guidance goes on to the first stop still open, with the road drawn from where I am now
+const REOPT_MAX = 60;   // up to this many open stops the order is optimised again after every stop (above it, a full recalculation takes too long on a phone)
 function navAdvance() {
-  if (!S.navOn || !S.nav) return;
+  if (!S.navOn || S.scout || !S.nav) return;
   const legs = S.nav.legs, open = l => !S.route.done.includes(l.to);
   if (!legs.some(open)) { routeEnd(); return; }
   const cur = navItem().leg;
@@ -3129,7 +3230,9 @@ function navAdvance() {
   }
   S.nav.sig = routeSig();
   if (S.navTrack) S.navTrack.busy = false;
-  navReroute(true);
+  // 2) the rest of the route is put again in the fastest order from where I am now (it matters when stops were done out of order, added, or taken by colleagues)
+  const left = legs.filter(open).length;
+  if (left >= 2 && left <= REOPT_MAX) navReopt(true); else navReroute(true);
 }
 /* ---------- live GPS guidance: follow the route, advance the steps, reroute when off it ---------- */
 function legGeom(L) {
@@ -3157,19 +3260,19 @@ function projectOnLeg(L, lat, lng) {
   return best;
 }
 // a stop was added while navigating: the best order of what is left is computed again from where I am
-async function navReopt() {
-  if (!S.navOn) return;
+async function navReopt(silent) {
+  if (!S.navOn || S.scout) return;
   S.addedStop = false;
   await computeRoute(true, { fit: false });
   if (!S.navOn) return;
   if (!navValid()) { if (S.navTrack) S.navTrack.busy = false; await navReroute(true); return; }
   navShow(false); if (S.me) navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }, true);
-  toast('Traseu recalculat · ' + S.nav.legs.length + ' opriri rămase', 2500);
+  if (!silent) toast('Traseu recalculat · ' + S.nav.legs.length + ' opriri rămase', 2500);
 }
 // where the top bar of the navigation ends: an open panel starts below it
 function navTopVar() { const a = $('#app'); if (!a) return; a.classList.toggle('navon', !!S.navOn); if (S.navOn) a.style.setProperty('--navtop', Math.round($('#navBot').getBoundingClientRect().bottom) + 'px'); }
 async function navReroute(next) {
-  const tr = S.navTrack; if (!tr || tr.busy || !S.me) return;
+  const tr = S.navTrack; if (S.scout || !tr || tr.busy || !S.me) return;
   tr.busy = true; tr.lastReroute = Date.now();
   try {
     await loadGraph();
@@ -3212,11 +3315,24 @@ function navGps(c, quiet) {
   try { navGpsInner(c, quiet); } catch (e) { try { console.error('[nav]', e); } catch (x) {} }   // one bad fix must not stop the guidance
 }
 function navGpsInner(c, quiet) {
-  if (!S.navOn || !S.nav) return;
+  if (!S.navOn || (!S.nav && !S.scout)) return;
   S.me = Object.assign(S.me || {}, { lat: c.latitude, lng: c.longitude });
   const nowT = Date.now(); const dur = Math.max(250, Math.min(1100, (nowT - (S.navLastFix || nowT - 1000)) * 0.95)); S.navLastFix = nowT;
   if (!quiet || !S.mkRaf) navGlide([c.longitude, c.latitude], quiet ? 300 : dur);
-  if (nowT - (S.navSaved || 0) > 60000) { S.navSaved = nowT; try { localStorage.setItem('harta_nav', String(nowT)); } catch (e) {} }
+  if (nowT - (S.navSaved || 0) > 60000) { S.navSaved = nowT; try { localStorage.setItem(S.scout ? 'harta_scout' : 'harta_nav', String(nowT)); } catch (e) {} }
+  if (S.scout) {   // no route: just follow me, turned the way I move, zooming out with the speed
+    let brg = map ? map.getBearing() : 0;
+    // direction: the phone's own heading when it gives one; otherwise from the way I actually moved (at least 8 m, so standing still doesn't spin the map)
+    const here = [c.longitude, c.latitude], p0 = S.scoutAt;
+    const moved = p0 ? Router.hav([p0[1], p0[0]], [c.latitude, c.longitude]) : 0;
+    if (c.heading != null && !isNaN(c.heading) && (c.speed == null || c.speed > 1.5)) brg = c.heading;
+    else if (p0 && moved >= 8 && moved < 400) brg = bearingTo(p0, here);
+    if (!p0 || moved >= 8) S.scoutAt = here;
+    if (S.navBrg != null) { const d = ((brg - S.navBrg + 540) % 360) - 180; brg = Math.abs(d) < 3 ? S.navBrg : S.navBrg + d * 0.6; }
+    brg = (brg + 360) % 360; S.navBrg = brg; if (S.meMarker) S.meMarker.setRotation(brg);
+    if (map && !S.navFree) map.easeTo({ center: here, bearing: brg, zoom: navSpeedZoom(c), pitch: 50, padding: navPad(0, 0, 120), duration: quiet ? 400 : dur, easing: t => t });
+    S.navGpsFollow = true; return;
+  }
   const tr = S.navTrack || (S.navTrack = { off: 0, lastReroute: 0 });
   const items = navItems(); const it = items[S.navPos]; if (!it) return;
   const L = legGeom(S.nav.legs[it.leg]);
@@ -3271,12 +3387,23 @@ function navGpsInner(c, quiet) {
   if (S.meMarker) S.meMarker.setRotation(brg);
   if (map && !S.navFree) {
     const top = $('#navTopBox').getBoundingClientRect().height + 20, bot = $('#navBot').getBoundingClientRect().height + 20;
-    map.easeTo({ center: [c.longitude, c.latitude], bearing: brg, zoom: navSpeedZoom(c), pitch: 50, padding: navPad(top, bot, 120), duration: quiet ? 400 : dur, easing: t => t });
+    map.easeTo({ center: [c.longitude, c.latitude], bearing: brg, zoom: navSpeedZoom(c, navTurnNear(cur, toMan)), pitch: 50, padding: navPad(top, bot, 120), duration: quiet ? 400 : dur, easing: t => t });
   }
+}
+/* a change of direction is coming: from TURN_FAR m before it the map comes slowly back to the standstill zoom, whatever the speed.
+   It is fully there 90 m before at town speeds and later when driving fast, so the change always takes about 4 s instead of a jump.
+   1 = far from any turn (speed zoom as usual), 0 = standstill zoom. */
+const TURN_FAR = 150;
+function navTurnNear(it, toMan) {
+  const s = it && it.s; if (!s) return 1;
+  const turn = s.type === 'roundabout' || s.type === 'arrive' || (s.type === 'turn' && s.mod !== 'straight');
+  if (!turn) return 1;
+  const v = S.navSpd ? S.navSpd.v : 0, near = Math.max(40, Math.min(90, TURN_FAR - v * 4.5));
+  return Math.max(0, Math.min(1, (toMan - near) / (TURN_FAR - near)));
 }
 
 /* ---------- zoom follows the speed (like Waze): farther out when driving fast, back in when slowing down ---------- */
-function navSpeedZoom(c) {
+function navSpeedZoom(c, near) {
   const now = Date.now(), sp0 = S.navSpd || { v: 0, lat: c.latitude, lng: c.longitude, t: now };
   let v = c.speed != null && !isNaN(c.speed) && c.speed >= 0 ? c.speed : null;   // m/s from the phone
   if (v == null && now - sp0.t > 500) v = Router.hav([sp0.lat, sp0.lng], [c.latitude, c.longitude]) / ((now - sp0.t) / 1000);
@@ -3286,7 +3413,10 @@ function navSpeedZoom(c) {
   // 0–20 km/h: your own zoom; then out by up to 2.2 levels around 80 km/h
   let dz = Math.max(0, Math.min(2.2, (kmh - 20) / 27));
   if (S.navDz != null && Math.abs(dz - S.navDz) < 0.3) dz = S.navDz; else S.navDz = dz;
-  return (S.navZoom || 17) - dz;
+  let out = dz * (near == null ? 1 : near);                                   // close to a turn: back towards the standstill zoom
+  if (S.navDzOut != null && out > S.navDzOut + 0.22) out = S.navDzOut + 0.22;   // and out again gently once the turn is behind
+  S.navDzOut = out;
+  return (S.navZoom || 17) - out;
 }
 
 /* ---------- looking around during navigation (like Waze): back to my position after 12 s without touching ---------- */
@@ -3309,7 +3439,7 @@ async function navTo(id) {
 // map padding so the car sits in the free part of the screen (right side in landscape)
 function navPad(top, bot, extra) {
   if (innerWidth > innerHeight && innerHeight < 600) { const hb = $('#navBot').getBoundingClientRect().height; return { top: hb + Math.round(innerHeight * 0.15), bottom: 20, left: 70, right: 70 }; }
-  const hb = $('#navBot').getBoundingClientRect().height; const hp = $('#navProg').getBoundingClientRect().height; return { top: hb + Math.round(innerHeight * 0.3), bottom: 40 + hp + extra / 2, left: 0, right: 0 };
+  const hb = $('#navBot').getBoundingClientRect().height; return { top: hb + Math.round(innerHeight * 0.3), bottom: 40 + extra / 2, left: 0, right: 0 };
 }
 window.addEventListener('resize', () => { setTimeout(navTopVar, 200); if (S.navOn && S.me) setTimeout(() => navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }, true), 250); });
 
@@ -3325,6 +3455,12 @@ function navProg(leg, remD) {
   box.setAttribute('aria-label', 'Progres traseu: ' + a + ' din ' + z + ' șantiere, ' + pct + '%');
 }
 
+(() => {
+  let t = 0; try { t = +localStorage.getItem('harta_scout') || 0; } catch (e) {}
+  if (!t || Date.now() - t > 3 * 3600e3) return;
+  let n = 0; const go2 = () => { if (S.navOn) return; if (S.loaded && S.me && S.sites.size) scoutStart(); else if (++n < 45) setTimeout(go2, 1000); };
+  setTimeout(go2, 1500);
+})();
 /* ---------- if iOS reloaded the app while navigating (it does that after a while in the background), pick up where we were ---------- */
 (() => {
   let t = 0; try { t = +localStorage.getItem('harta_nav') || 0; } catch (e) {}
@@ -3473,11 +3609,16 @@ function viewActiv() {
     <input class="in" id="opName" placeholder="Nume, ex. Operator 1" autocomplete="off" style="margin-top:8px">
     <div class="row" style="gap:8px;margin-top:8px"><input class="in grow" id="opPass" placeholder="Parola lui, ex. Operator1-4827" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"><button class="btn sm" data-act="opGen">Generează</button></div>
     <button class="btn amber" style="width:100%;margin-top:8px" data-act="opAdd">Adaugă</button>
-    <div class="sub" style="margin-top:6px">Parola: minim 10 caractere, cu litere și cifre (ex. Operator1-4827). Operatorul deschide aplicația pe telefonul lui și scrie parola asta. Poate naviga, fotografia, adăuga șantiere noi și marca un șantier ca finalizat; nu poate șterge sau edita nimic. Își vede doar propria activitate.</div></div>` : '';
+    <div class="sub" style="margin-top:6px">Parola: minim 10 caractere, cu litere și cifre (ex. Operator1-4827). Operatorul deschide aplicația pe telefonul lui și scrie parola asta. Poate naviga, fotografia, adăuga șantiere noi, marca un șantier ca finalizat și șterge un duplicat (când sunt două la aceeași locație); nu poate edita nimic. Își vede doar propria activitate.</div></div>` : '';
   // admin: sites the operators reported as finished, newest first, each with a way back
   const fins = admin ? [...S.sites.values()].filter(x => x.inactiv && x.finBy).sort((x, y) => (y.finT || 0) - (x.finT || 0)).slice(0, 20) : [];
   const finBox = fins.length ? `<h3>Finalizate de operatori</h3>${fins.map(x => `<div class="leg tr-sent"><span><button class="lnk" data-act="open" data-id="${x.id}"><b>${esc(x.name)}</b></button> <span class="sub">· ${esc(x.finBy)}${x.finT ? ' · ' + roDate(iso(new Date(x.finT))) : ''}</span></span><span class="row"><button class="btn sm" data-act="setActive" data-id="${x.id}" data-v="0">Redeschide</button></span></div>`).join('')}
   <div class="sub" style="margin-top:6px">„Redeschide” îl pune înapoi în ciclu, dacă a fost marcat din greșeală.</div>` : '';
+  // admin: sites deleted as duplicates, newest first, each with a way back
+  const dels = []; if (admin) for (const d of Object.values(S.shards)) for (const [id, x] of Object.entries((d && d.s) || {})) if (x && x.sters && x.delBy) dels.push(Object.assign({ id }, x));
+  dels.sort((x, y) => (y.delT || 0) - (x.delT || 0));
+  const delBox = dels.length ? `<h3>Duplicate șterse</h3>${dels.slice(0, 20).map(x => { const k = x.dupOf && S.sites.get(x.dupOf); return `<div class="leg tr-sent"><span><b>${esc(x.name || 'Șantier')}</b> <span class="sub">· ${esc(x.delBy)}${x.delT ? ' · ' + roDate(iso(new Date(x.delT))) : ''}${k ? ' · a rămas „' + esc(k.name) + '”' : ''}</span></span><span class="row"><button class="btn sm" data-act="dupRestore" data-id="${x.id}">Restaurează</button></span></div>`; }).join('')}
+  <div class="sub" style="margin-top:6px">„Restaurează” pune șantierul înapoi pe hartă, la toți.</div>` : '';
   const me = window.PWA_me && window.PWA_me.name;
   return `<div class="row sp"><h2>Activitate</h2>${admin ? '<button class="btn sm act" data-act="actRefresh" aria-label="Aduce datele noi" title="Aduce datele noi">↻ Actualizează</button>' : ''}</div>
   <div class="who-bar"><span>Conectat${me ? ' ca <b>' + esc(me) + '</b>' : ''}</span><button class="btn sm act" data-act="logout">Ieși din cont</button></div>
@@ -3498,6 +3639,7 @@ function viewActiv() {
     : '<div class="note" style="margin-top:12px">Activitatea se înregistrează automat: fiecare șantier actualizat sau adăugat, kilometrii și timpul cât aplicația e deschisă cu GPS.</div>'}
   <div class="sub" style="margin-top:10px">${ACT.who === 'me' ? 'Kilometrii și timpul sunt măsurați de acest telefon.' : 'Șantierele se numără din pozele urcate; km și timpul vin de pe telefonul operatorului.'}</div>
   ${finBox}
+  ${delBox}
   ${opsBox}
   <div style="height:10px"></div>`;
 }
