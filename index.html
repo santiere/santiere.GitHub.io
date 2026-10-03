@@ -281,36 +281,41 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .qc-n{width:52px;height:52px;border-radius:50%;background:#13202A;color:#fff;font-size:21px;font-weight:700;display:grid;place-items:center}
 .qc-l{font-weight:700;font-size:16px}.qc-s{font-size:12px;color:#5B6570}
 .qc-big{width:100%;height:52px;font-size:16px;margin-top:10px}
-/* updating a site: the panel as large as possible (upright photo: tall, beside a narrow stage tile; sideways photo: full width, stage tile below) */
-.qc-panel{background:#101418;padding:0;cursor:zoom-in;border-color:#13202A}
-.qc-panel img{object-fit:contain}
-.qc-tile.qc-panel .qc-l{position:absolute;left:8px;top:8px;font-size:12.5px;padding:2px 7px}
-.qc-tile.qc-panel img + .qc-l + .qc-s{position:absolute;left:50%;transform:translateX(-50%);bottom:8px;white-space:nowrap;max-width:calc(100% - 12px);overflow:hidden;text-overflow:ellipsis;font-size:11.5px;line-height:1.25;padding:3px 8px}
-.qc-tiles.upd.tall{grid-template-columns:1.75fr 1fr;align-items:stretch}
-.qc-tiles.upd.tall .qc-panel{aspect-ratio:9/16;max-height:52vh}
-.qc-tiles.upd.tall .qc-tile:not(.qc-panel){aspect-ratio:auto;height:auto}
-.qc-tiles.upd.wide{grid-template-columns:1fr}
-.qc-tiles.upd.wide .qc-panel{aspect-ratio:4/3;max-height:40vh}
-.qc-tiles.upd.wide .qc-tile:not(.qc-panel){aspect-ratio:auto;height:104px}
-.qc-tiles.upd.wide .qc-tile:not(.qc-panel) .qc-n{width:40px;height:40px;font-size:17px}
 /* a photo already taken: whole and centred in its frame, labels on the edges */
 .qc-tile.pic{background:#101418}
 .qc-tile.pic img{object-fit:contain;object-position:center}
 .qc-tile.pic .qc-l{position:absolute;left:8px;top:8px;z-index:1;font-size:12.5px;padding:2px 7px;background:rgba(255,255,255,.9);color:#13202A;border-radius:6px}
 .qc-tile.pic .qc-s{position:absolute;left:50%;transform:translateX(-50%);bottom:8px;z-index:1;white-space:nowrap;max-width:calc(100% - 12px);overflow:hidden;text-overflow:ellipsis;font-size:11.5px;line-height:1.25;padding:3px 8px;background:rgba(255,255,255,.9);color:#3A444C;border-radius:6px}
-/* updating a site, once the stage photo is taken: it gets the room (sideways photo: the wide column; upright: equal columns) */
-.qc-tiles.upd.tall.swide{grid-template-columns:1fr 1.6fr}
-.qc-tiles.upd.tall.stall{grid-template-columns:1fr 1fr}
-.qc-tiles.upd.wide.swide .qc-panel,.qc-tiles.upd.wide.stall .qc-panel{max-height:26vh}
-.qc-tiles.upd.wide.swide .qc-tile:not(.qc-panel),.qc-tiles.upd.wide.stall .qc-tile:not(.qc-panel){height:26vh}
-@media (max-height: 800px) and (orientation: portrait) { .qc-tiles.upd + .qc-src + .qc-srcnote{display:none} }
+/* updating a site: the panel takes the whole window; the stage photo is one slim row; everything else is kept small */
+.qc.upd{align-items:stretch}
+.qc.upd .qc-card{height:100%;max-width:none;border-radius:0;display:flex;flex-direction:column;padding:calc(var(--sat,0px) + 10px) 14px calc(var(--sab,0px) + 12px);box-sizing:border-box}
+.qc.upd .lock-k{display:none}
+.qc.upd #qcBody{flex:1;min-height:0}
+.qcu{display:flex;flex-direction:column;height:100%;gap:8px}
+.qcu-side{display:contents}
+.qcu .qc-site{order:-1;margin:0;font-size:16px}
+.qc-panel{background:#101418;padding:0;cursor:zoom-in;border-color:#13202A}
+.qc-panel img{object-fit:contain}
+.qcu-panel{flex:1;min-height:0;aspect-ratio:auto;border-radius:12px}
+.qc-tile.qcu-panel img + .qc-s{position:absolute;right:8px;bottom:8px;left:auto;transform:none;white-space:nowrap;font-size:11.5px;line-height:1.25;padding:3px 8px}
+.qc-tile.qcu-stage{flex:none;aspect-ratio:auto;box-sizing:border-box;height:72px;flex-direction:row;justify-content:flex-start;gap:12px;padding:8px 12px;text-align:left}
+.qcu-stage .qc-n{width:42px;height:42px;font-size:17px;flex:none}
+.qcu-stage img{position:static;width:88px;height:100%;flex:none;object-fit:contain;background:#101418;border-radius:8px}
+.qcu-t{display:flex;flex-direction:column;gap:1px;min-width:0}
+.qc-tile.qcu-stage .qc-l,.qc-tile.qcu-stage .qc-s{position:static;background:none;padding:0;border-radius:0}
+.qc.upd .qc-gps{margin-top:0;font-size:13px}
+.qc.upd .btns{flex-wrap:nowrap;margin-top:2px!important}
+.qc.upd .qc-big{width:auto;flex:2;margin-top:0}
+.qc.upd #qcCancel{height:52px;flex:1}
 @media (orientation: landscape) and (max-height: 600px) {
-  .qc-tiles.upd.tall,.qc-tiles.upd.wide{grid-template-columns:1fr 1fr}
-  .qc-tiles.upd .qc-panel,.qc-tiles.upd .qc-tile:not(.qc-panel){aspect-ratio:auto;max-height:none;height:30vh}
+  .qc.upd .qc-card{padding:8px calc(var(--sar,0px) + 12px) 8px calc(var(--sal,0px) + 12px);overflow:hidden}
+  .qcu{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px}
+  .qcu-side{display:flex;flex-direction:column;justify-content:center;gap:8px;min-width:0}
+  .qcu .qc-site{order:0}
+  .qc-tile.qcu-panel{height:100%}
+  .qc-tile.qcu-stage{height:64px}
+  .qc.upd .qc-big,.qc.upd #qcCancel{height:44px}
 }
-.qc-src{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}.qc-src .state-opt{min-height:38px;padding:6px 4px}.qc-src .state-opt b{font-size:13.5px}
-.qc-srcnote{margin-top:6px;font-size:12.5px;line-height:1.3}.qc-src .state-opt.on b::before{content:none}
-.qc-src .state-opt.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface))}
 .areabar{position:absolute;left:12px;right:12px;bottom:calc(var(--sab,0px) + 76px);z-index:6;background:var(--surface,#fff);color:var(--ink);border-radius:16px;padding:12px;box-shadow:0 8px 30px rgba(0,0,0,.28);display:flex;flex-direction:column;gap:10px}
 .areabar b{display:block;font-size:16px}.areabar span{display:block;font-size:22px;font-weight:700;margin-top:2px}.areabar small{display:block;color:#5B6570;font-size:12.5px;margin-top:2px}
 .areabar ~ .selfab{display:none}.areabar:not([hidden]) ~ .selfab{display:none}
@@ -395,7 +400,6 @@ ol.steps .mi{flex:none;color:var(--ink)}
   .qc-tile{height:30vh}
   .qc-n{width:38px;height:38px;font-size:16px}.qc-l{font-size:14px}.qc-s{font-size:11px}
   .qc-gps{margin-top:6px;font-size:12.5px}
-  .qc-src{margin-top:6px}.qc-src .state-opt{min-height:34px;padding:3px 4px}.qc-srcnote{display:none}
   .qc-big{height:40px;font-size:15px;margin-top:6px}
   #qcCancel{height:36px;min-height:0;padding:0 12px;font-size:14px}
   .qc-card .btns{margin-top:6px!important;gap:6px}
@@ -2420,6 +2424,7 @@ function panelStamp(s) {
 function qcRender() {
   const f = QC.f; if (!f || f.saving) return; const box = $('#qcBody');
   const site = f.siteId ? S.sites.get(f.siteId) : null;
+  $('#qc').classList.toggle('upd', !!site && !f.done);
   if (f.done) {
     const sent = f.done.sent;
     box.innerHTML = `<div class="qc-ok">✓ ${f.done.nou ? 'Șantier nou salvat' : 'Stadiu salvat · ' + esc(f.done.name || '')}</div>
@@ -2435,14 +2440,28 @@ function qcRender() {
     const short = label.split(' ')[0];
     return `<label class="qc-tile ${r ? 'done' : ''}${f[k] ? ' pic' : ''}">${f[k] ? `<img src="${f[k + 'Url']}" alt="">` : `<span class="qc-n">${n}</span>`}<span class="qc-l">${f[k] ? (r ? '✓ ' : '') + short : label}</span><span class="qc-s">${sub}</span><input type="file" accept="image/*" ${QC.src() === 'lib' ? '' : 'capture="environment"'} data-qc="${k}"></label>`;
   };
-  // updating an existing site: its panel is shown as large as the screen allows, so I can tell at a glance whether I am at the right site; a tap opens it full screen
-  const panelTile = site ? `<div class="qc-tile done qc-fixed qc-panel" id="qcPanelView" ${f.panouUrl ? 'role="button" tabindex="0" aria-label="Panoul șantierului, atinge pentru mărire"' : ''}>${f.panouUrl ? `<img src="${f.panouUrl}" alt="Panoul șantierului">` : `<span class="qc-s">${f.panouR && f.panouR.missing ? 'Panoul original se ia seara din iCloud' : 'Se încarcă panoul…'}</span>`}<span class="qc-l">N · Panou</span>${f.panouUrl ? '<span class="qc-s">🔍 mărește</span>' : ''}</div>` : tile('panou', 'N', 'Panou șantier');
   const ready = (site ? f.panouR : f.panouR) && f.santierR;
-  box.innerHTML = `<div class="qc-site">${site ? `<b>${esc(site.name)}</b>` : '<b>Șantier nou</b>'}</div>
-    <div class="qc-tiles${site ? ' upd ' + (f.panouWide ? 'wide' : 'tall') + (f.santier ? (f.santierWide ? ' swide' : ' stall') : '') : ''}">${panelTile}${tile('santier', 'Na', 'Stadiu șantier')}</div>
-    <div class="qc-gps ${g ? 'ok' : 'wait'}">${g ? `● GPS activ (±${Math.round(g.acc || 0)} m) · locația se scrie în fiecare poză` : '● Aștept semnalul GPS… Pozele se salvează doar cu locație.'}</div>
+  const gpsLine = short => `<div class="qc-gps ${g ? 'ok' : 'wait'}">${g ? `● GPS activ (±${Math.round(g.acc || 0)} m)` + (short ? '' : ' · locația se scrie în fiecare poză') : '● Aștept semnalul GPS… Pozele se salvează doar cu locație.'}</div>`;
+  const buttons = `<div class="btns" style="margin-top:10px"><button class="btn primary qc-big" id="qcSave" ${ready ? '' : 'disabled'}>Salvează</button><button class="btn ghost" id="qcCancel">Renunță</button></div>`;
+  if (site) {
+    // updating a site: the panel fills the screen (readable without another tap); the stage photo only needs a slim row
+    const r = f.santierR, sub = f.santier && !r ? 'pregătesc poza…' : f.santier ? 'atinge pentru altă poză' : 'atinge pentru cameră';
+    box.innerHTML = `<div class="qcu">
+      <div class="qc-tile done qc-fixed qc-panel qcu-panel" id="qcPanelView" ${f.panouUrl ? 'role="button" tabindex="0" aria-label="Panoul șantierului, atinge pentru mărire"' : ''}>${f.panouUrl ? `<img src="${f.panouUrl}" alt="Panoul șantierului">` : `<span class="qc-s">${f.panouR && f.panouR.missing ? 'Panoul original se ia seara din iCloud' : 'Se încarcă panoul…'}</span>`}${f.panouUrl ? '<span class="qc-s">🔍 mărește</span>' : ''}</div>
+      <div class="qcu-side">
+        <div class="qc-site"><b>${esc(site.name)}</b></div>
+        <label class="qc-tile qcu-stage ${r ? 'done' : ''}${f.santier ? ' has' : ''}">${f.santier ? `<img src="${f.santierUrl}" alt="">` : '<span class="qc-n">Na</span>'}<span class="qcu-t"><span class="qc-l">${r ? '✓ ' : ''}Stadiu șantier</span><span class="qc-s">${sub}</span></span><input type="file" accept="image/*" capture="environment" data-qc="santier"></label>
+        ${gpsLine(true)}
+        <div class="sub" id="qcProg" style="margin-top:4px;color:var(--ink)"></div>
+        ${buttons}
+      </div></div>`;
+  } else {
+    box.innerHTML = `<div class="qc-site"><b>Șantier nou</b></div>
+    <div class="qc-tiles">${tile('panou', 'N', 'Panou șantier')}${tile('santier', 'Na', 'Stadiu șantier')}</div>
+    ${gpsLine(false)}
     <div class="sub" id="qcProg" style="margin-top:4px;color:var(--ink)"></div>
-    <div class="btns" style="margin-top:10px"><button class="btn primary qc-big" id="qcSave" ${ready ? '' : 'disabled'}>Salvează</button><button class="btn ghost" id="qcCancel">Renunță</button></div>`;
+    ${buttons}`;
+  }
   // the camera fields outlive every redraw: a photo taken while the dialog was being redrawn (the panel had just loaded, the GPS came back) is not lost
   f.inp = f.inp || {};
   box.querySelectorAll('input[data-qc]').forEach(i => { const k = i.dataset.qc, o = f.inp[k]; if (o) i.replaceWith(o); else { f.inp[k] = i; i.addEventListener('change', qcPicked); } });
@@ -2478,7 +2497,7 @@ function qcOpen(o) {
     if (!!gpsFresh() !== !!$('.qc-gps.ok')) qcRender();
   }, 2000);
 }
-function qcClose() { const f0 = QC.f; if (f0) for (const k of ['panouUrl', 'santierUrl']) if (f0[k]) setTimeout(() => URL.revokeObjectURL(f0[k]), 1000); $('#qc').hidden = true; QC.f = null; clearInterval(QC.timer); if (S.navOn) { navShow(false); if (S.view === 'card' || S.view === 'site') render(); } else refresh(); }
+function qcClose() { const f0 = QC.f; if (f0) for (const k of ['panouUrl', 'santierUrl']) if (f0[k]) setTimeout(() => URL.revokeObjectURL(f0[k]), 1000); $('#qc').hidden = true; $('#qc').classList.remove('upd'); QC.f = null; clearInterval(QC.timer); if (S.navOn) { navShow(false); if (S.view === 'card' || S.view === 'site') render(); } else refresh(); }
 $('#navNew').addEventListener('click', () => qcOpen({ isNew: true }));
 $('#btnScout').addEventListener('click', () => scoutStart());
 async function toJpeg(file) {
