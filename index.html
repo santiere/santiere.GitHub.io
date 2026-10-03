@@ -2400,7 +2400,7 @@ $('#navZin').addEventListener('click', () => navZoom(1));
 $('#navZout').addEventListener('click', () => navZoom(-1));
 const QC = { f: null, timer: null, _src: null,
   // 'quick' = the camera inside the app (fast; iOS makes 12 MP photos there) · 'lib' = photos taken with the iPhone Camera app, picked from the library (my own resolution)
-  src() { if (!this._src) { try { this._src = localStorage.getItem('harta_cam') === 'lib' ? 'lib' : 'quick'; } catch (e) { this._src = 'quick'; } } return this._src; } };
+  src() { return 'quick'; } };   // one way only: the camera inside the app (the choice between camera and photo library was removed on request, 03.10.2026)
 const gpsFresh = () => S.me && Date.now() - (S.me.t || 0) < 90000 ? S.me : null;
 const gpsNow = () => { const g = gpsFresh(); return g ? { lat: g.lat, lng: g.lng, acc: g.acc, heading: g.heading, t: Date.now() } : null; };
 // timestamp of the site's original panel photo (as in Photos), used by the Șantier shortcut to find the original
@@ -2440,8 +2440,6 @@ function qcRender() {
   const ready = (site ? f.panouR : f.panouR) && f.santierR;
   box.innerHTML = `<div class="qc-site">${site ? `<b>${esc(site.name)}</b>` : '<b>Șantier nou</b>'}</div>
     <div class="qc-tiles${site ? ' upd ' + (f.panouWide ? 'wide' : 'tall') + (f.santier ? (f.santierWide ? ' swide' : ' stall') : '') : ''}">${panelTile}${tile('santier', 'Na', 'Stadiu șantier')}</div>
-    <div class="qc-src" role="group" aria-label="De unde vine poza"><button class="state-opt${QC.src() === 'quick' ? ' on' : ''}" data-src="quick" aria-pressed="${QC.src() === 'quick'}"><b>📷 Cameră rapidă</b></button><button class="state-opt${QC.src() === 'lib' ? ' on' : ''}" data-src="lib" aria-pressed="${QC.src() === 'lib'}"><b>🖼 Din Poze</b></button></div>
-    <div class="sub qc-srcnote">${QC.src() === 'lib' ? 'Fotografiezi cu aplicația Cameră a iPhone-ului (rezoluția și setările tale), apoi alegi poza aici, din Fototecă. Ajunge neschimbată.' : 'Camera din aplicație: iOS dă aici 12 MP (4032×3024). Pentru rezoluția setată de tine în iPhone alege „Din Poze”.'}</div>
     <div class="qc-gps ${g ? 'ok' : 'wait'}">${g ? `● GPS activ (±${Math.round(g.acc || 0)} m) · locația se scrie în fiecare poză` : '● Aștept semnalul GPS… Pozele se salvează doar cu locație.'}</div>
     <div class="sub" id="qcProg" style="margin-top:4px;color:var(--ink)"></div>
     <div class="btns" style="margin-top:10px"><button class="btn primary qc-big" id="qcSave" ${ready ? '' : 'disabled'}>Salvează</button><button class="btn ghost" id="qcCancel">Renunță</button></div>`;
@@ -2517,7 +2515,6 @@ $('#qc').addEventListener('click', async e => {
   const id = e.target.id; const f = QC.f; if (!f) return;
   if (id === 'qcCancel' || id === 'qcBack') { qcClose(); return; }
   if (e.target.closest('#qcPanelView') && f.panouUrl) { const s0 = S.sites.get(f.siteId); $('#lbImg').classList.remove('zoom'); $('#lbZoom').textContent = 'Mărește'; $('#lbCap').textContent = 'Panou · ' + (s0 ? s0.name : '') + ' · previzualizare (seara primești originalul)'; $('#lbImg img').src = f.panouUrl; $('#lb').hidden = false; return; }
-  const sb = e.target.closest('[data-src]'); if (sb) { try { localStorage.setItem('harta_cam', sb.dataset.src === 'lib' ? 'lib' : 'quick'); } catch (x) {} QC._src = null; qcRender(); return; }
   if (id === 'qcSave') {
     const site = f.siteId ? S.sites.get(f.siteId) : null;
     if (!f.panouR || !f.santierR) return;
