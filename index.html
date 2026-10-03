@@ -1284,9 +1284,10 @@ function refresh() {
 
 /* ============ sheet ============ */
 function setTab(t) { $$('.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === t ? 'page' : 'false')); }
-function showSheet(mode) { const sh = $('#sheet'); sh.hidden = false; sh.className = 'sheet ' + mode; }
+// opening a panel always starts from its normal place (a pull left unfinished must never keep it pushed down)
+function showSheet(mode) { const sh = $('#sheet'); if (typeof sheetDragCancel === 'function') sheetDragCancel(); sh.hidden = false; sh.className = 'sheet ' + mode; }
 function closeSheet() {
-  S.view = null; S.openId = null; $('#sheet').hidden = true; $('#cross').toggleAttribute('hidden', !!(true)); setTab('map'); updateMap();
+  S.view = null; S.openId = null; $('#sheet').hidden = true; if (typeof sheetDragCancel === 'function') sheetDragCancel(); $('#cross').toggleAttribute('hidden', !!(true)); setTab('map'); updateMap();
 }
 const scrollMem = {};
 function go(view, opts = {}) {
@@ -1963,6 +1964,8 @@ $('#grab').addEventListener('click', () => { if (S.view === 'visit' || S.view ==
     const t = e.touches[0]; const onGrab = e.target.closest('#grab');
     if (!onGrab && (body.scrollTop > 0 || e.target.closest('input,textarea,select,.ch,.strip'))) return;
     st = { x: t.clientX, y: t.clientY, d: 0, on: false, grab: !!onGrab, side: false };
+    // the row under the finger may be redrawn during the pull (a sync arrives): its touch events then no longer reach the panel, so listen on it too
+    const tg = e.target; if (tg && tg !== sh) { tg.addEventListener('touchend', end, { once: true }); tg.addEventListener('touchcancel', end, { once: true }); }
   }, { passive: true });
   sh.addEventListener('touchmove', e => {
     if (!st) return; const t = e.touches[0];
@@ -1977,13 +1980,14 @@ $('#grab').addEventListener('click', () => { if (S.view === 'visit' || S.view ==
     st.d = Math.max(0, st.side ? -dx : dy); sh.style.transform = st.side ? `translateX(${-st.d}px)` : `translateY(${st.d}px)`;
     if (e.cancelable) e.preventDefault();
   }, { passive: false });
-  const end = () => {
+  window.sheetDragCancel = () => { st = null; sh.style.transition = ''; sh.style.transform = ''; };
+  function end() {
     if (!st) return; const s0 = st; st = null; if (!s0.on) return;
     sh.style.transition = 'transform .2s ease';
     const close = s0.d > Math.min(s0.side ? 120 : 90, (s0.side ? sh.offsetWidth : sh.offsetHeight) * 0.25);
     sh.style.transform = close ? (s0.side ? 'translateX(-110%)' : 'translateY(110%)') : '';
-    setTimeout(() => { sh.style.transition = ''; sh.style.transform = ''; if (close) { S.moveId = null; closeSheet(); } }, 200);
-  };
+    setTimeout(() => { if (st && st.on) return; sh.style.transition = ''; sh.style.transform = ''; if (close) { S.moveId = null; closeSheet(); } }, 200);
+  }
   sh.addEventListener('touchend', end); sh.addEventListener('touchcancel', end);
 })();
 $('#selFab').addEventListener('click', () => { if (S.selectMode) { setSelectMode(false); go('route'); } else setSelectMode(true); });
