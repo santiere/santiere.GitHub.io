@@ -188,6 +188,8 @@ h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
 .stat b{display:block;font-family:var(--f-display);font-size:22px;font-weight:700;line-height:1.1}
 .stat span{font-size:12px;color:var(--muted)}
 .leg{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 0}
+.leg.tr-sent{flex-wrap:wrap}.leg.tr-sent>span:first-child{flex:1 1 180px;min-width:0}.leg.tr-sent .row{flex:none;gap:6px}
+#areaAll{width:100%}
 
 /* forms */
 label.f{display:block;margin-top:12px}
@@ -432,6 +434,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
   <div class="areabar" id="areaBar" hidden>
     <div><b>Traseu pe zonă</b><span id="areaTxt"></span><small id="areaHint"></small></div>
     <div class="row" style="gap:8px"><button id="areaDraw" class="btn sm grow">✏️ Desenează zona</button><button id="areaClear" class="btn sm ghost" hidden>Fără desen</button></div>
+    <button id="areaAll" class="btn sm" hidden></button>
     <div class="row" style="gap:8px"><button id="areaCancel" class="btn sm ghost">Renunță</button><button id="areaGo" class="btn amber grow">Fă traseul</button></div>
   </div>
   <div class="drawpad" id="drawPad" hidden><svg class="drawsvg" aria-hidden="true"><path id="drawPath"/></svg><div class="drawhint"><span>Trasează cu degetul conturul zonei</span><button id="drawCancel" class="btn sm ghost">Renunță</button></div></div>
@@ -1488,7 +1491,13 @@ function trSentList() {
   if (isOp()) return '';
   const L = Object.entries(TR.list || {}).sort((a, b) => b[1].t - a[1].t).slice(0, 8); if (!L.length) return '';
   const nm = id => ((TR.ops || []).find(o => o.id === id) || {}).name || 'operator';
-  return `<h3>Trasee trimise</h3>${L.map(([id, r]) => `<div class="leg"><span><b>${esc(nm(r.to))}</b> <span class="sub">· ${esc(r.n || 'Traseu')} · ${(r.s || []).length} opriri · ${r.ok ? 'primit ✓' : 'încă nedeschis'}</span></span>${r.ok ? '' : `<span class="row"><button class="btn sm ghost danger" data-act="trDel" data-id="${esc(id)}">Retrage</button></span>`}</div>`).join('')}`;
+  const cf = (id, v) => TR.cfd && TR.cfd.id === id && TR.cfd.v === v && Date.now() - TR.cfd.t < 8000;
+  const left = r => (r.s || []).filter(x => { const q = S.sites.get(x); return q && status(q) === 'due'; }).length;
+  return `<h3>Trasee trimise</h3>${L.map(([id, r]) => TR.xid(r)
+    ? `<div class="leg"><span><b>${esc(nm(r.to))}</b> <span class="sub">· traseu retras · ${r.ok ? 'scos de pe telefonul lui ✓' : 'iese de pe telefonul lui când deschide aplicația'}</span></span></div>`
+    : `<div class="leg tr-sent"><span><b>${esc(nm(r.to))}</b> <span class="sub">· ${esc(r.n || 'Traseu')} · ${(r.s || []).length} opriri · ${r.ok ? 'primit ✓ · ' + left(r) + ' rămase' : 'încă nedeschis'}</span></span>
+      <span class="row"><button class="btn sm" data-act="trDel" data-v="take" data-id="${esc(id)}">${cf(id, 'take') ? 'Confirmă' : 'Ia-l înapoi'}</button><button class="btn sm ghost danger" data-act="trDel" data-v="del" data-id="${esc(id)}">${cf(id, 'del') ? 'Confirmă' : 'Șterge'}</button></span></div>`).join('')}
+  <div class="sub" style="margin-top:6px">„Ia-l înapoi” scoate traseul de la operator și pune opririle rămase în traseul tău, ca să-l refaci sau să-l trimiți din nou. „Șterge” doar îl scoate; șantierele rămân libere.</div>`;
 }
 
 function viewAdd() {
@@ -1819,15 +1828,33 @@ document.addEventListener('click', async (e) => {
         const r = await CLOUD.req('/tr', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ to, name, stops: ids }) });
         if (!r || r.app) throw new Error('serverul nu știe încă de trasee trimise');
         await db.doc('trasee/' + uid('r')).set({ name: '→ ' + who + ' · ' + name, stops: ids, done: [], start: null, creat: Date.now() });   // a copy stays with the admin
-        S.route = { stops: S.route.stops.filter(x => S.route.done.includes(x)), done: S.route.done.slice(), start: S.route.start, name: '' }; S.routeDraft = null; saveRouteSoon();
+        S.route = { stops: S.route.stops.filter(x => S.route.done.includes(x)), done: S.route.done.slice(), start: S.route.start, name: '' }; S.routeDraft = null; RZ.unrelease(ids); saveRouteSoon();
         toast('Trimis lui ' + who + ' · ' + ids.length + ' șantiere', 4000); await TR.pull(true); refresh();
       } catch (err) { toast('Nu s-a putut trimite: ' + (err.message || err), 4000); t.disabled = false; t.textContent = 'Trimite'; }
       break;
     }
-    case 'trDel': {
+    case 'trDel': {   // the admin withdraws a route he sent, before or after the operator received it
       if (isOp()) break;
-      if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă'; break; }
-      try { await CLOUD.req('/tr', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ del: id }) }); await TR.pull(true); toast('Traseul a fost retras'); } catch (err) { toast('Nu s-a putut: ' + (err.message || err)); }
+      const v = t.dataset.v === 'take' ? 'take' : 'del', r = TR.list[id]; if (!r) break;
+      if (v === 'take' && S.navOn) { toast('Oprește navigarea înainte să iei traseul înapoi'); break; }
+      // second tap within 8 s confirms (kept outside the page, so a redraw in between does not lose it)
+      if (!(TR.cfd && TR.cfd.id === id && TR.cfd.v === v && Date.now() - TR.cfd.t < 8000)) { TR.cfd = { id, v, t: Date.now() }; t.textContent = 'Confirmă'; break; }
+      TR.cfd = null; t.disabled = true; t.textContent = '…';
+      const who = ((TR.ops || []).find(o => o.id === r.to) || {}).name || 'operator';
+      const post = b => CLOUD.req('/tr', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) });
+      try {
+        // already on his phone: a note travels to it and takes the route out there (the sites he has not updated leave his route)
+        if (r.ok) await post({ to: r.to, name: 'Traseu retras de ' + (r.f || 'Ionuț') + ' #' + id, stops: [] });
+        await post({ del: id });
+        const ids = (r.s || []).filter(x => { const q = S.sites.get(x); return q && status(q) === 'due'; });
+        RZ.release(r.s || []);   // free for me at once, without waiting for his phone
+        if (v === 'take') {
+          const add = ids.filter(x => !S.route.stops.includes(x));
+          S.route = { stops: S.route.stops.concat(add), done: S.route.done.slice(), start: S.route.start, name: S.route.name || '' }; S.routeDraft = null; S.autoSig = null; saveRouteSoon();
+          toast('Luat înapoi de la ' + who + ' · ' + add.length + ' opriri rămase sunt în traseul tău', 5000);
+        } else { RZ.sendSoon(); toast('Traseul lui ' + who + ' a fost șters · ' + ids.length + ' șantiere sunt din nou libere', 5000); }
+        await TR.pull(true); refresh();
+      } catch (err) { toast('Nu s-a putut: ' + (err.message || err), 4000); t.disabled = false; t.textContent = v === 'take' ? 'Ia-l înapoi' : 'Șterge'; }
       break;
     }
     case 'delRoute': if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă'; break; } await db.doc('trasee/' + id).delete(); break;
@@ -1889,6 +1916,8 @@ async function createSite(o, prog) {
   const sh = pickShard();
   const ref = db.doc('sites/' + sh); const snap = await ref.get();
   if (snap.exists) await ref.update({ s: { [id]: site } }); else await ref.set({ s: { [id]: site } });
+  // the pin is on the map at once; the stored copy comes back through the listener a moment later and says the same
+  { const shd = S.shards[sh] || (S.shards[sh] = { s: {} }); (shd.s || (shd.s = {}))[id] = Object.assign({}, site); S.sites.set(id, Object.assign({}, site, { id, _sh: sh })); refresh(); }
   await db.doc('vizite/' + id).set({ v: { [uid('v')]: { d, poze: [pid, sid], t: Date.now() } } });
   CLOUD.push(id, { ultima: d, inactiv: false, site: { name: site.name, lat: site.lat, lng: site.lng, loc: site.loc, strada: site.strada, creat: site.creat, panouT: site.panouT || '' } });
   return { id, base: shotBase(), week: weekLabel(d), panou: o.panou, santier: o.santier, assets: { p: pid, s: sid } };
@@ -2313,19 +2342,42 @@ const C2 = {
 const TR = {
   list: {}, t: 0, seen: {}, ops: null, to: '',
   async loadOps() { if (TR.ops || TR.opsBusy) return; TR.opsBusy = 1; try { TR.ops = (await CLOUD.req('/users')).users || []; } catch (e) {} TR.opsBusy = 0; if (TR.ops && S.view === 'route') render(); },
+  // a withdrawal note: "Traseu retras de … #<id of the route>" with no stops
+  xid(r) { const m = !(r.s || []).length && /^Traseu retras\b.*#(t[0-9a-z]+)$/.exec(r.n || ''); return m ? m[1] : null; },
   async pull(force) {
     if (!force && Date.now() - TR.t < 28000) return; TR.t = Date.now();
     try {
       const j = await CLOUD.req('/tr'); if (!j || j.app) return;
       const ch = JSON.stringify(j) !== JSON.stringify(TR.list); TR.list = j;
-      if (isOp()) await TR.take(); else if (ch && S.view === 'route') render();
+      if (isOp()) await TR.take();
+      else {
+        // notes that reached the operator's phone are done with
+        for (const [id, r] of Object.entries(j)) if (TR.xid(r) && r.ok && !TR.seen[id]) { TR.seen[id] = 1; CLOUD.req('/tr', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ del: id }) }).then(() => { TR.t = 0; }).catch(() => { TR.seen[id] = 0; }); }
+        if (ch && S.view === 'route') render();
+      }
     } catch (e) {}
+  },
+  // operator: the admin took a route back -> it leaves "Trasee salvate" and its sites not yet updated leave my current route
+  async drop(nid, r) {
+    const x = TR.xid(r), old = (S.routes || []).find(q => q.id === x), ids = new Set(old ? old.stops || [] : []);
+    if (old) await db.doc('trasee/' + x).delete();
+    const keep = S.route.stops.filter(i => !ids.has(i) || S.route.done.includes(i)), n = S.route.stops.length - keep.length;
+    await CLOUD.req('/tr', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ack: nid }) });
+    if (n) {
+      const open = keep.some(i => !S.route.done.includes(i));
+      S.route = { stops: keep, done: S.route.done.filter(i => keep.includes(i)), start: S.route.start, name: open ? S.route.name : '' }; S.autoSig = null;
+      if (S.navOn && !open) navStop();
+      saveRouteSoon(); refresh();
+    }
+    { const b = document.getElementById('trBox'); if (b) b.remove(); }
+    if (old || n) toast((r.f || 'Ionuț') + ' a luat înapoi traseul' + (n ? ' · ' + n + ' șantiere au ieșit din traseul tău' : ''), 7000);
   },
   // operator: a route received is first saved under "Trasee salvate" (so it cannot be lost), then offered
   async take() {
     if (!db || !S.loaded) return;
     for (const [id, r] of Object.entries(TR.list)) {
       if (TR.seen[id]) continue; TR.seen[id] = 1;
+      if (TR.xid(r)) { try { await TR.drop(id, r); } catch (e) { TR.seen[id] = 0; } continue; }
       const stops = (r.s || []).filter(x => S.sites.has(x));
       try {
         const name = (r.n || 'Traseu') + ' · de la ' + (r.f || 'Ionuț');
@@ -2353,8 +2405,9 @@ const TR = {
     const r = S.routes.find(x => x.id === id); if (!r) { toast('Traseul e în Traseu → Trasee salvate'); go('route'); return; }
     const stops = (r.stops || []).filter(x => S.sites.has(x));
     for (const x of stops) if (RZ.other(x)) RZ.force.add(x);   // these sites were given to me
-    S.route = { stops, done: [], start: null, name: r.name || '' }; S.routeDraft = null; S.autoSig = null;
-    saveRouteSoon(); refresh(); go('route'); toast('Traseu încărcat · ' + stops.length + ' șantiere');
+    const done = stops.filter(x => status(S.sites.get(x)) !== 'due');   // already updated since it was sent: not open any more
+    S.route = { stops, done, start: null, name: r.name || '' }; S.routeDraft = null; S.autoSig = null;
+    saveRouteSoon(); refresh(); go('route'); toast('Traseu încărcat · ' + (stops.length - done.length) + ' șantiere de actualizat' + (done.length ? ' (' + done.length + ' deja făcute)' : ''));
   },
 };
 
@@ -2363,9 +2416,15 @@ const RZ = {
   map: {}, force: new Set(), pend: null, timer: null,
   me() { return (window.PWA_me && window.PWA_me.id) || (isOp() ? '' : 'admin'); },
   // the colleague who has this site in today's route (not me), or null
-  other(id) { const r = RZ.map[id]; return r && r.d === today() && r.by !== RZ.me() ? r : null; },
+  other(id) { const r = RZ.map[id]; return r && r.d === today() && r.by !== RZ.me() && RZ.free[id] !== r.by ? r : null; },
+  // admin: the sites of a route taken back are his to use right away; the old holder's reservation is ignored until that phone lets go
+  free: (() => { try { const j = JSON.parse(localStorage.getItem('harta_rzfree') || 'null'); return j && j.d === new Date().toISOString().slice(0, 10) ? j.m || {} : {}; } catch (e) { return {}; } })(),
+  saveFree() { try { localStorage.setItem('harta_rzfree', JSON.stringify({ d: new Date().toISOString().slice(0, 10), m: RZ.free })); } catch (e) {} },
+  release(ids) { for (const i of ids) { const r = RZ.map[i]; if (r && r.by !== RZ.me()) RZ.free[i] = r.by; } RZ.saveFree(); },
+  unrelease(ids) { for (const i of ids) delete RZ.free[i]; RZ.saveFree(); },
   set(m) {
     const next = {}; for (const [k, v] of Object.entries(m || {})) if (v && v.d === today()) next[k] = v;
+    { let c = 0; for (const [k, by] of Object.entries(RZ.free)) if (!next[k] || next[k].by !== by) { delete RZ.free[k]; c++; } if (c) RZ.saveFree(); }
     const ch = JSON.stringify(next) !== JSON.stringify(RZ.map); RZ.map = next; return ch;
   },
   async pull() { try { if (RZ.set(await CLOUD.req('/rez'))) refresh(); } catch (e) {} },
@@ -2373,6 +2432,7 @@ const RZ = {
   sendSoon() { clearTimeout(RZ.timer); RZ.timer = setTimeout(RZ.send, 1500); },
   async send() {
     const ids = S.route.stops.filter(id => !S.route.done.includes(id));
+    for (const i of ids) if (RZ.free[i]) RZ.force.add(i);
     for (const f of [...RZ.force]) if (!ids.includes(f)) RZ.force.delete(f);
     try { const r = await CLOUD.req('/rez', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids, force: [...RZ.force], day: today() }) }); if (RZ.set(r.rez)) refresh(); } catch (e) {}
   },
@@ -2445,12 +2505,13 @@ function areaSites() {
   const P = S.areaPoly;
   const all = visibleSites().filter(s => status(s) === 'due' && (P ? inPoly(s.lng, s.lat, P) : onScreen(s)));
   const mine = all.filter(s => !RZ.other(s.id)); S.areaSkip = all.length - mine.length;
-  return mine;
+  return S.areaAll && !isOp() ? all : mine;
 }
 function areaUpdate() {
   if (!S.areaOn) return;
   const n = areaSites().length; const drawn = !!S.areaPoly;
-  $('#areaTxt').textContent = n + ' șantiere de actualizat ' + (drawn ? 'în zona desenată' : 'pe ecran') + (S.areaSkip ? ' · ' + S.areaSkip + ' sărite (în traseul colegilor)' : '');
+  $('#areaTxt').textContent = n + ' șantiere de actualizat ' + (drawn ? 'în zona desenată' : 'pe ecran') + (S.areaSkip ? ' · ' + S.areaSkip + (S.areaAll && !isOp() ? ' luate din traseul colegilor' : ' sărite (în traseul colegilor)') : '');
+  { const ab = $('#areaAll'); if (ab) { ab.hidden = isOp() || !S.areaSkip; ab.textContent = S.areaAll ? 'Lasă-le colegilor pe cele ' + S.areaSkip : 'Ia-le și pe cele ' + S.areaSkip + ' ale colegilor'; } }
   $('#areaHint').textContent = drawn ? 'Poți muta harta; zona rămâne. Redesenează dacă vrei alt contur.' : 'Mărește/micșorează harta până vezi doar zona dorită, sau desenează zona';
   $('#areaDraw').textContent = drawn ? '✏️ Redesenează' : '✏️ Desenează zona';
   $('#areaClear').hidden = !drawn;
@@ -2458,7 +2519,7 @@ function areaUpdate() {
   b.textContent = n > 500 ? (drawn ? 'Peste 500 · desenează mai mic' : 'Peste 500 · mărește harta') : n < 2 ? (drawn ? 'Minim 2 șantiere în zonă' : 'Minim 2 · micșorează harta') : 'Fă traseul (' + n + ')';
 }
 function areaMode(on) {
-  S.areaOn = on; $('#areaBar').hidden = !on;
+  S.areaOn = on; $('#areaBar').hidden = !on; if (on) S.areaAll = false;
   if (on) { if (!S.areaHooked && map) { map.on('moveend', areaUpdate); S.areaHooked = true; } closeSheet(); if (S.selectMode) setSelectMode(false); areaUpdate(); }
   else { drawStop(); setAreaPoly(null); }
 }
@@ -2492,11 +2553,13 @@ $('#areaClear').addEventListener('click', () => { setAreaPoly(null); areaUpdate(
 $('#drawCancel').addEventListener('click', () => { drawStop(); areaUpdate(); });
 $('#areaGo').addEventListener('click', () => {
   const cand = areaSites(); if (cand.length < 2) return;
+  for (const c of cand) if (RZ.other(c.id)) RZ.force.add(c.id);   // admin chose to take the colleagues' sites too
   areaMode(false);
   S.route = { stops: cand.map(s => s.id), done: [], start: S.route.start, name: '' }; saveRouteSoon(); go('route');
   computeRoute(true);
 });
 $('#areaCancel').addEventListener('click', () => areaMode(false));
+$('#areaAll').addEventListener('click', () => { S.areaAll = !S.areaAll; areaUpdate(); });
 
 $('#navNext').addEventListener('click', navNext);
 $('#navPrev').addEventListener('click', () => { if (S.navPos > 0) { S.navPos--; navShow(true); } });
@@ -2679,9 +2742,18 @@ function solveOrderPrio(C, fixed, pr, slack) {
   return o.concat(solveOrder(sub(iT), true).slice(1).map(k => iT[k]));
 }
 
+// stops whose site is no longer "De actualizat" (photographed on an older version of the app, or while this phone was closed) are not open any more
+function routeTidy() {
+  if (S.route.stops.length < 2) return 0;   // "Navighează" to a single site works for any site
+  let n = 0;
+  for (const id of S.route.stops) { if (S.route.done.includes(id)) continue; const s = S.sites.get(id); if (s && status(s) !== 'due') { S.route.done.push(id); n++; } }
+  if (n) saveRouteSoon();
+  return n;
+}
 async function computeRoute(optimize) {
   if (S.routing) return; S.routing = true; S.lastOpt = !!optimize;
   try {
+    routeTidy();
     const pending = S.route.stops.filter(id => !S.route.done.includes(id)).map(id => S.sites.get(id)).filter(Boolean);
     if (!pending.length) { toast('Nu mai sunt opriri nebifate în traseu'); return; }
     routeMsg('Se încarcă harta rutieră (prima dată durează câteva secunde)…'); render();
