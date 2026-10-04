@@ -40,6 +40,9 @@
   --amber:#F5B82E; --amber-ink:#2A1E00; --due:#FF5A4E; --wait:#4C94F2; --accent:#4C94F2; --ch-u:#4C94F2; --ch-n:#BF8414; --off:#7C878D; --ok:#4DB27C; --danger:#FF6B61; --shadow:0 8px 30px rgba(0,0,0,.5);}
 [hidden]{display:none!important}
 .card-head>.thumb:empty{display:grid;place-items:center;text-align:center;font-size:11px;line-height:1.25;color:var(--muted);padding:6px}.card-head>.thumb:empty::after{content:"Panoul se încarcă…"}
+.card-head>.thumb.ac-th{display:grid;place-items:center;text-align:center;font-size:11px;line-height:1.25;color:var(--muted);padding:6px}
+.ac-note{margin-top:12px;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--amber) 16%,transparent);font-size:13.5px;line-height:1.35}
+.ac-note .sub{font-size:12.5px}.ac-apx{margin-top:6px;font-weight:600;color:var(--danger)}
 .nav-rec{display:grid;place-items:center;outline:3px solid #1A73E8;outline-offset:-3px}
 .me-arrow{display:none;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}
 .me.nav .me-arrow{display:block}.me.nav .me-dot,.me.nav .me-cone,.me.nav .me-acc{display:none!important}
@@ -1022,7 +1025,7 @@ function stageBtn(s, cls) {
   if (st === 'wait') return `<button class="btn stage-off" disabled>Actualizat · revine ${roShort(addDays(lastUpd(s), CYCLE))}</button>`;
   if (st === 'off' && isOp()) return `<button class="btn stage-off" disabled>Finalizat</button>`;
   if (st === 'off') return `<button class="btn" data-act="setActive" data-id="${s.id}" data-v="0">Finalizat · redeschide</button>`;
-  return `<button class="btn ${cls || 'amber'}" data-act="visit" data-id="${s.id}">Actualizează șantier</button>`;
+  return `<button class="btn ${cls || 'amber'}" data-act="visit" data-id="${s.id}">${acNew(s) ? 'Fotografiază șantierul' : 'Actualizează șantier'}</button>`;
 }
 function stateSeg(s) {
   const st = status(s);
@@ -1039,12 +1042,54 @@ function finishBtn(s) {
   if (isOp()) { const cf = S.cfFin && S.cfFin.id === s.id && Date.now() - S.cfFin.t < 8000; return `<button class="btn ${cf ? 'amber' : 'ghost'}" data-act="opFinish" data-id="${s.id}">${cf ? 'Confirmă: lucrarea e încheiată' : '✓ Finalizat'}</button>`; }
   return `<button class="btn ghost" data-act="setState" data-id="${s.id}" data-v="off">✓ Finalizat</button>`;
 }
+/* ---------- sites brought in once from the public list of building permits (Craiova): a pin and the permit's details, no photo yet.
+   The first visit takes both photos (panel + stage) and turns the pin into an ordinary site, at the place of the panel photo.
+   A pin where there is no site can be deleted on the spot. ---------- */
+const acNew = s => !!(s && s.ac && !s.panouA && !(s.poze || []).length && !s.manual);
+const acApprox = s => acNew(s) && /^[snu]$/.test(String(s.ac.q || ''));
+function acNote(s) {
+  if (!acNew(s)) return '';
+  return `<div class="ac-note"><b>Din autorizația de construire</b>${s.autorizatie ? ' nr. ' + esc(s.autorizatie) : ''} · nefotografiat încă${s.denumire ? `<div class="sub" style="margin-top:3px">${esc(s.denumire)}</div>` : ''}${s.beneficiar ? `<div class="sub">${esc(s.beneficiar)}</div>` : ''}${acApprox(s) ? `<div class="ac-apx">Poziție aproximativă: caută ${s.adresa ? '„' + esc(s.adresa) + '”' : 'numărul'} pe stradă.</div>` : ''}</div>`;
+}
+function acDelBtn(s) {
+  if (!acNew(s) || s.inactiv) return '';
+  const cf = S.cfAc && S.cfAc.id === s.id && Date.now() - S.cfAc.t < 8000;
+  return `<button class="btn ${cf ? 'amber' : 'ghost danger'}" style="width:100%;margin-top:8px" data-act="acDel" data-id="${s.id}">${cf ? 'Confirmă: aici nu e șantier, șterge pinul' : 'Nu există șantier · șterge'}</button>`;
+}
+// the pin is deleted for everybody; who did it is kept, so it can be put back (by the same person, or by the admin)
+async function acDelete(D) {
+  const me = (window.PWA_me && window.PWA_me.name) || (isOp() ? '' : 'Ionuț');
+  const u = Date.now(); CLOUD.stateU[D.id] = u;
+  const v = { ultima: '', inactiv: false, u, sters: true, nx: 1 };
+  let r = null, off = false;
+  try { r = await CLOUD.req('/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [D.id]: v }) }); }
+  catch (e) { if (/server 4/.test(String(e.message || e))) { toast('Nu s-a putut șterge: ' + (e.message || e), 5000); return; } off = true; }
+  if (r && r.rejected) { toast('Serverul nu a primit ștergerea. Spune-i lui Ionuț.', 6000); return; }
+  if (off) { CLOUD.pendingState = Object.assign(CLOUD.pendingState || {}, { [D.id]: v }); CLOUD.savePS(); }
+  await db.doc('sites/' + D._sh).update({ s: { [D.id]: { sters: true, dupOf: '', delBy: me, delT: u } } });
+  stersSent(D.id);
+  { const sh = S.shards[D._sh]; if (sh && sh.s && sh.s[D.id]) Object.assign(sh.s[D.id], { sters: true, dupOf: '', delBy: me, delT: u }); S.sites.delete(D.id); }
+  if (S.route.stops.includes(D.id)) { S.route.stops = S.route.stops.filter(x => x !== D.id); S.route.done = S.route.done.filter(x => x !== D.id); saveRouteSoon(); }
+  const undo = async () => {
+    try {
+      const u2 = Date.now(); CLOUD.stateU[D.id] = u2;
+      await CLOUD.req('/state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [D.id]: { ultima: '', inactiv: false, u: u2 } }) });
+      await db.doc('sites/' + D._sh).update({ s: { [D.id]: { sters: false, dupOf: '', delBy: '' } } }); toast('„' + D.name + '” a fost pus înapoi');
+    } catch (e) { toast('Nu s-a putut anula: ' + (e.message || e), 4000); }
+  };
+  closeSheet(); refresh();
+  toast('Pin șters · „' + D.name + '”', 7000, undo);
+}
 /* ---------- duplicates: two or three pins for the same site at one place ---------- */
 const DUP_M = 25;
 // the nearest other site within 25 m of this one (the one that would stay), or null
 function dupNear(s) {
   let best = null, bd = DUP_M / 1000;
-  for (const x of S.sites.values()) { if (x.id === s.id) continue; if (Math.abs(x.lat - s.lat) > 0.001 || Math.abs(x.lng - s.lng) > 0.0015) continue; const d = hav(s, x); if (d <= bd) { bd = d; best = x; } }
+  for (const x of S.sites.values()) {
+    if (x.id === s.id) continue; if (Math.abs(x.lat - s.lat) > 0.001 || Math.abs(x.lng - s.lng) > 0.0015) continue;
+    if (s.ac && x.ac && (s.adresa || s.name) !== (x.adresa || x.name)) continue;   // two permits at different addresses next to each other are neighbours, not duplicates
+    const d = hav(s, x); if (d <= bd) { bd = d; best = x; }
+  }
   return best ? { s: best, m: Math.round(bd * 1000) } : null;
 }
 function dupBtn(s) {
@@ -1482,7 +1527,7 @@ function viewCard() {
   const phs = sitePhotos(s, S.visits && S.visitsFor === s.id ? S.visits : null); const ph = phs.find(p => p.cap === 'Panou') || phs[0];
   const inRoute = S.route.stops.includes(s.id);
   return `<div class="card-head">
-    ${ph ? `<button class="thumb" style="padding:0;overflow:hidden" data-act="photo" data-kind="${ph.kind}" data-id="${esc(ph.id)}" data-d="${ph.d}" aria-label="Vezi poza">${photoEl(ph, 'fill')}</button>` : '<span class="thumb"></span>'}
+    ${ph ? `<button class="thumb" style="padding:0;overflow:hidden" data-act="photo" data-kind="${ph.kind}" data-id="${esc(ph.id)}" data-d="${ph.d}" aria-label="Vezi poza">${photoEl(ph, 'fill')}</button>` : acNew(s) ? '<span class="thumb ac-th">Fără panou încă</span>' : '<span class="thumb"></span>'}
     <div class="grow">
       <div class="row sp wrap">${pillHTML(s)}</div>${finNote(s)}
       ${RZ.other(s.id) && !inRoute ? `<div class="rz-note">În traseul lui ${esc(RZ.other(s.id).n || 'alt coleg')} azi</div>` : ''}
@@ -1500,7 +1545,7 @@ function viewCard() {
     <div class="btns" style="margin-top:8px">
       ${finishBtn(s)}
       <button class="btn ghost" data-act="open" data-id="${s.id}">Detalii</button>
-    </div>${dupBtn(s)}`;
+    </div>${acDelBtn(s)}${acNote(s)}${dupBtn(s)}`;
 }
 
 function viewSite() {
@@ -2132,6 +2177,13 @@ document.addEventListener('click', async (e) => {
       toast('„' + (x.name || 'Șantier') + '” e din nou pe hartă'); if (S.view === 'activ') setTimeout(render, 600);
       break;
     }
+    case 'acDel': {
+      const D = S.sites.get(id); if (!D || !acNew(D)) break;
+      // second tap within 8 s confirms (kept outside the page, so a redraw in between does not lose it)
+      if (!(S.cfAc && S.cfAc.id === id && Date.now() - S.cfAc.t < 8000)) { S.cfAc = { id, t: Date.now() }; t.textContent = 'Confirmă: aici nu e șantier, șterge pinul'; t.classList.remove('ghost', 'danger'); t.classList.add('amber'); break; }
+      S.cfAc = null; t.disabled = true; await acDelete(D);
+      break;
+    }
     case 'opFinish': {
       const s0 = S.sites.get(id); if (!s0 || s0.inactiv) break;
       // second tap within 8 s confirms (kept outside the page, so a redraw in between does not lose it)
@@ -2309,6 +2361,20 @@ async function createSite(o, prog) {
   CLOUD.push(id, { ultima: d, inactiv: false, site: { name: site.name, lat: site.lat, lng: site.lng, loc: site.loc, strada: site.strada, creat: site.creat, panouT: site.panouT || '' } });
   return { id, base: shotBase(), week: weekLabel(d), panou: o.panou, santier: o.santier, assets: { p: pid, s: sid } };
 }
+// first photos of a pin imported from the permit list: it becomes an ordinary app-made site, under the same id,
+// moved to where the panel was photographed; its name and permit details stay
+async function acFirstPhoto(site, o) {
+  const d = today();
+  const [pid, sid] = await uploadFiles([o.panou, o.santier], null, true);
+  const patch = { lat: +o.lat.toFixed(6), lng: +o.lng.toFixed(6), moved: true, ultima: d, ultimaApp: d, inactiv: false, creat: Date.now(), manual: true, deScanat: true, panouA: pid, santierA: sid, panouT: o.panouT || '' };
+  S.pend[site.id] = Object.assign(S.pend[site.id] || {}, patch);
+  await db.doc('sites/' + site._sh).update({ s: { [site.id]: patch } });
+  { const sh = S.shards[site._sh], cur = S.sites.get(site.id); if (sh && sh.s && sh.s[site.id]) Object.assign(sh.s[site.id], patch); if (cur) { S.sites.set(site.id, Object.assign({}, cur, patch)); refresh(); } }
+  const ref = db.doc('vizite/' + site.id); const snap = await ref.get(); const visit = { d, poze: [pid, sid], t: Date.now() };
+  if (snap.exists) await ref.update({ v: { [uid('v')]: visit } }); else await ref.set({ v: { [uid('v')]: visit } });
+  CLOUD.push(site.id, { ultima: d, inactiv: false, site: { name: site.name, lat: patch.lat, lng: patch.lng, loc: site.loc || '', strada: site.strada || '', creat: patch.creat, panouT: patch.panouT } }, Object.assign({}, site, patch));
+  return { id: site.id, assets: { p: pid, s: sid } };
+}
 async function sharePair(a) {
   await downloads.shareFiles([new File([a.panou], a.base + '.jpg', { type: 'image/jpeg' }), new File([a.santier], a.base + 'a.jpg', { type: 'image/jpeg' })]);
 }
@@ -2469,7 +2535,8 @@ function qcRender() {
         ${buttons}
       </div></div>`;
   } else {
-    box.innerHTML = `<div class="qc-site"><b>Șantier nou</b></div>
+    const a0 = f.acId ? S.sites.get(f.acId) : null;
+    box.innerHTML = `<div class="qc-site"><b>${a0 ? esc(a0.name) : 'Șantier nou'}</b>${a0 ? '<div class="sub" style="font-weight:500">Prima fotografiere: panoul și stadiul</div>' : ''}</div>
     <div class="qc-tiles">${tile('panou', 'N', 'Panou șantier')}${tile('santier', 'Na', 'Stadiu șantier')}</div>
     ${gpsLine(false)}
     <div class="sub" id="qcProg" style="margin-top:4px;color:var(--ink)"></div>
@@ -2499,7 +2566,8 @@ async function qcLoadPanel(f) {
   qcRender();
 }
 function qcOpen(o) {
-  const f = QC.f = { siteId: o.siteId || null, id: o.siteId ? null : uid('n') };
+  const s0 = o.siteId ? S.sites.get(o.siteId) : null, first = acNew(s0);
+  const f = QC.f = first ? { siteId: null, id: o.siteId, acId: o.siteId } : { siteId: o.siteId || null, id: o.siteId ? null : uid('n') };
   if (!gpsFresh() && typeof locateNow === 'function' && S.geoErr != null) locateNow();
   if (f.siteId) qcLoadPanel(f);
   $('#qc').hidden = false; qcRender();
@@ -2571,9 +2639,11 @@ $('#qc').addEventListener('click', async e => {
         await OB.add(k, { siteId: site.id, siteName: cityDir(site.lat, site.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: site.name, nou: 0, stamp: site.id, t: Date.now(), p: pa, s: aid, lat: g && g.lat, lng: g && g.lng }, files);
       } else {
         const gp = f.panouR.gps || g;
-        const r = await createSite({ id: sid, panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt }, null);
+        const a0 = f.acId ? S.sites.get(f.acId) : null;
+        const r = a0 ? await acFirstPhoto(a0, { panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt })
+          : await createSite({ id: sid, panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt }, null);
         const s2 = r.assets || {};
-        await OB.add(k, { siteId: sid, siteName: cityDir(gp.lat, gp.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: 'Șantier nou', nou: 1, stamp: sid, t: Date.now(), p: s2.p, s: s2.s, lat: gp.lat, lng: gp.lng }, files);
+        await OB.add(k, { siteId: sid, siteName: cityDir(gp.lat, gp.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: a0 ? a0.name : 'Șantier nou', nou: 1, stamp: sid, t: Date.now(), p: s2.p, s: s2.s, lat: gp.lat, lng: gp.lng }, files);
       }
       saved = true; ACT.site(sid, !site, photoDay(f.santierR.dt)); RS.photo(sid);
     } catch (err) { toast('Nu s-a salvat în aplicație: ' + (err.code || err.message)); f.saving = false; e.target.disabled = false; e.target.textContent = 'Salvează'; }
@@ -2681,6 +2751,7 @@ const CLOUD = {
         }
         if (!s) continue;
         const up = {};
+        if (v.site && s.ac && !s.manual && !s.panouA) Object.assign(up, { manual: true, deScanat: true, creat: v.site.creat || v.u, panouT: v.site.panouT || '' }, v.site.lat && v.site.lng ? { lat: v.site.lat, lng: v.site.lng, moved: true } : {});
         if ((s.ultima || '') !== (v.ultima || '') || !!s.inactiv !== !!v.inactiv) Object.assign(up, { ultima: v.ultima || '', ultimaApp: v.ultima || '', inactiv: !!v.inactiv });
         // who reported it as finished (an operator), so the admin can see it and reopen it if it was a mistake
         if (v.inactiv && v.fn && s.finBy !== v.fn) { up.finBy = v.fn; up.finT = v.u || Date.now(); } else if (!v.inactiv && s.finBy) up.finBy = '';
@@ -3958,7 +4029,7 @@ function viewActiv() {
   // admin: sites deleted as duplicates, newest first, each with a way back
   const dels = []; if (admin) for (const d of Object.values(S.shards)) for (const [id, x] of Object.entries((d && d.s) || {})) if (x && x.sters && x.delBy) dels.push(Object.assign({ id }, x));
   dels.sort((x, y) => (y.delT || 0) - (x.delT || 0));
-  const delBox = dels.length ? `<h3>Duplicate șterse</h3>${dels.slice(0, 20).map(x => { const k = x.dupOf && S.sites.get(x.dupOf); return `<div class="leg tr-sent"><span><b>${esc(x.name || 'Șantier')}</b> <span class="sub">· ${esc(x.delBy)}${x.delT ? ' · ' + roDate(iso(new Date(x.delT))) : ''}${k ? ' · a rămas „' + esc(k.name) + '”' : ''}</span></span><span class="row"><button class="btn sm" data-act="dupRestore" data-id="${x.id}">Restaurează</button></span></div>`; }).join('')}
+  const delBox = dels.length ? `<h3>Șterse de pe teren</h3>${dels.slice(0, 20).map(x => { const k = x.dupOf && S.sites.get(x.dupOf); return `<div class="leg tr-sent"><span><b>${esc(x.name || 'Șantier')}</b> <span class="sub">· ${esc(x.delBy)}${x.delT ? ' · ' + roDate(iso(new Date(x.delT))) : ''}${k ? ' · a rămas „' + esc(k.name) + '”' : x.ac ? ' · nu era șantier' : ''}</span></span><span class="row"><button class="btn sm" data-act="dupRestore" data-id="${x.id}">Restaurează</button></span></div>`; }).join('')}
   <div class="sub" style="margin-top:6px">„Restaurează” pune șantierul înapoi pe hartă, la toți.</div>` : '';
   const me = window.PWA_me && window.PWA_me.name;
   return `<div class="row sp"><h2>Activitate</h2>${admin ? '<button class="btn sm act" data-act="actRefresh" aria-label="Aduce datele noi" title="Aduce datele noi">↻ Actualizează</button>' : ''}</div>
