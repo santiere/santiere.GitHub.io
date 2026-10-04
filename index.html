@@ -904,7 +904,8 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const CYCLE = 30;      // a site comes back as "De actualizat" 30 days after its last photo
 const C2_DAYS = 80;    // the second client gets a site again at least 80 days after the last photo sent to him
-const STOP_S = 60;       // time spent at a site: about one minute (two photos)
+const STOP_S = 30;       // time spent at a site: about half a minute (Ionuț, 04.10.2026)
+const STOP_LBL = STOP_S < 60 ? STOP_S + ' s' : Math.round(STOP_S / 60) + ' min';
 const FORCED = '1970-01-01';   // "De actualizat" set by hand by the admin, whatever the dates say
 const STADII = ['Organizare de șantier', 'Săpătură / fundații', 'Structură', 'Închideri / acoperiș', 'Finisaje / instalații', 'Finalizat'];
 const pad = n => String(n).padStart(2, '0');
@@ -3263,7 +3264,7 @@ function routeSection() {
   <div class="sub" id="routeMsg" style="margin-top:6px">${esc(S.routeMsg || '')}</div>`;
   if (ok) {
     const t = S.nav.total;
-    html += `<div class="stats"><div class="stat"><b class="num">${(t.dist / 1000).toFixed(1).replace('.', ',')}</b><span>km de parcurs</span></div><div class="stat"><b class="num">${fmtTime(t.time)}</b><span>${S.mode === 'car' ? 'de condus' : 'cu scuterul'}</span></div><div class="stat"><b class="num">${fmtTime(t.time + pending.length * STOP_S)}</b><span>cu 1 min/oprire</span></div></div>
+    html += `<div class="stats"><div class="stat"><b class="num">${(t.dist / 1000).toFixed(1).replace('.', ',')}</b><span>km de parcurs</span></div><div class="stat"><b class="num">${fmtTime(t.time)}</b><span>${S.mode === 'car' ? 'de condus' : 'cu scuterul'}</span></div><div class="stat"><b class="num">${fmtTime(t.time + pending.length * STOP_S)}</b><span>cu ${STOP_LBL}/oprire</span></div></div>
     <button class="btn primary" style="width:100%;height:50px;font-size:16px" data-act="navStart">▶ ${RS.get() ? 'Continuă navigarea' : 'Pornește navigarea'}</button>`;
   } else if (pending.length && !S.routeMsg) {
     html += `<div class="note" style="margin-top:8px">Se calculează cel mai rapid traseu…</div>`;
