@@ -1587,25 +1587,35 @@ function gLegs(stops, start) {
 function viewRoute() {
   const stops = S.route.stops.map(id => S.sites.get(id)).filter(Boolean);
   const pending = stops.filter(s => !S.route.done.includes(s.id));
-  return `<div class="row sp"><h2>${S.route.name ? esc(S.route.name) : 'Traseul curent'}</h2>${stops.length ? `<button class="btn sm ghost danger" data-act="clearRoute">${S.cfClr && Date.now() - S.cfClr < 8000 ? 'Confirmă ștergerea' : 'Șterge traseul'}</button>` : ''}</div>
-  <div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · ia toate șantierele de actualizat din zona de pe ecran sau din zona pe care o desenezi cu degetul, în ordinea cea mai rapidă
+  const head = `<div class="row sp"><h2>${S.route.name ? esc(S.route.name) : 'Traseul curent'}</h2>${stops.length ? `<button class="btn sm ghost danger" data-act="clearRoute">${S.cfClr && Date.now() - S.cfClr < 8000 ? 'Confirmă ștergerea' : 'Șterge traseul'}</button>` : ''}</div>`;
+  // the ways to build a route: a zone, the way to work or home, or just exploring
+  const build = `<div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · ia toate șantierele de actualizat din zona de pe ecran sau din zona pe care o desenezi cu degetul, în ordinea cea mai rapidă
     <div class="btns" style="margin-top:8px"><button class="btn amber" data-act="areaMode">Zona de pe ecran</button><button class="btn amber" data-act="areaDraw">✏️ Desenează zona</button></div></div>
   ${commuteBox()}
-  <button class="btn" style="width:100%;margin-top:10px" data-act="scout">🧭 Explorare · fără traseu</button>
-  ${!stops.length ? `<div class="note" style="margin-top:10px">Sau alege tu oricâte șantiere (minim 2), în orice ordine: butonul de traseu de pe hartă, „+ Active din zonă”, sau bifează-le din Listă. Ordinea o stabilesc eu.</div>
-    <div class="btns" style="margin-top:10px"><button class="btn" data-act="selMode">Alege pe hartă</button><button class="btn" data-act="tab" data-v="list">Din listă</button></div>` : `
+  <button class="btn" style="width:100%;margin-top:10px" data-act="scout">🧭 Explorare · fără traseu</button>`;
+  const saved = `${trSentList()}
+  ${S.routes.length ? `<h3>Trasee salvate</h3>${S.routes.map(r => `<div class="leg"><span><b>${esc(r.name || 'Fără nume')}</b> <span class="sub">· ${(r.stops || []).length} opriri</span></span><span class="row"><button class="btn sm" data-act="loadRoute" data-id="${r.id}">Încarcă</button><button class="btn sm ghost danger" data-act="delRoute" data-id="${r.id}">Șterge</button></span></div>`).join('')}` : ''}`;
+  if (!stops.length) return `${head}
+  ${build}
+  <div class="note" style="margin-top:10px">Sau alege tu oricâte șantiere (minim 2), în orice ordine: butonul de traseu de pe hartă, „+ Active din zonă”, sau bifează-le din Listă. Ordinea o stabilesc eu.</div>
+    <div class="btns" style="margin-top:10px"><button class="btn" data-act="selMode">Alege pe hartă</button><button class="btn" data-act="tab" data-v="list">Din listă</button></div>
+  ${saved}
+  <div style="height:10px"></div>`;
+  // a route exists: the navigation part comes first, then the other details, and the list of stops at the very bottom
+  return `${head}
   <div class="sub" style="margin:4px 0 10px">${stops.length} opriri${S.route.done.length ? ' · ' + S.route.done.length + ' vizitate' : ''}</div>
-  <div class="note">Plecare: <b style="color:var(--ink)">locația ta (GPS)</b>${S.me ? '' : ' · <span class="sub">aștept semnalul GPS…</span>'}${DEST.get() ? `<div class="row sp" style="margin-top:6px"><span>Sosire: <b style="color:var(--ink)">🏁 ${esc(DEST.get().label)}</b>${DEST.get().addr ? ' <span class="sub">· ' + esc(DEST.get().addr) + '</span>' : ''}</span><button class="btn sm ghost" data-act="destClear" aria-label="Scoate destinația">✕</button></div>` : ''}</div>
   ${routeSection()}
+  <div class="note" style="margin-top:10px">Plecare: <b style="color:var(--ink)">locația ta (GPS)</b>${S.me ? '' : ' · <span class="sub">aștept semnalul GPS…</span>'}${DEST.get() ? `<div class="row sp" style="margin-top:6px"><span>Sosire: <b style="color:var(--ink)">🏁 ${esc(DEST.get().label)}</b>${DEST.get().addr ? ' <span class="sub">· ' + esc(DEST.get().addr) + '</span>' : ''}</span><button class="btn sm ghost" data-act="destClear" aria-label="Scoate destinația">✕</button></div>` : ''}</div>
   ${trSendBox(pending.length)}
+  <h3>Salvează</h3>
+  <div class="row"><input class="in grow" id="routeName" placeholder="Nume traseu, ex. Sector 3 – marți" value="${esc(S.routeDraft != null ? S.routeDraft : (S.route.name || ''))}"><button class="btn" data-act="saveRoute">Salvează</button></div>
+  ${downloads && !isOp() ? '<div class="btns" style="margin-top:8px"><button class="btn ghost" data-act="csv">Descarcă lista (CSV)</button></div>' : ''}
+  <h3>Alt traseu</h3>
+  ${build}
+  ${saved}
   <h3>Opriri</h3>
   ${stops.map((s, i) => { const done = S.route.done.includes(s.id); return `<div class="stop ${done ? 'done' : ''}"><span class="n num">${i + 1}</span><button class="main" style="border:0;background:none;text-align:left;padding:0;min-width:0" data-act="open" data-id="${s.id}"><div class="t">${esc(s.name)}</div><div class="m">${esc(subtitle(s))} · ${pillHTML(s)}${RZ.other(s.id) && !done ? ` <span class="rz-t">· îl are și ${esc(RZ.other(s.id).n || 'un coleg')}</span>` : ''}</div></button>
     <span class="mini"><button data-act="up" data-i="${i}" aria-label="Mută în sus">↑</button><button data-act="down" data-i="${i}" aria-label="Mută în jos">↓</button><button data-act="done" data-id="${s.id}" aria-label="Vizitat" style="${done ? 'background:var(--ok);color:#fff;border-color:var(--ok)' : ''}">✓</button><button data-act="toggleStop" data-id="${s.id}" aria-label="Scoate">✕</button></span></div>`; }).join('')}
-  <h3>Salvează</h3>
-  <div class="row"><input class="in grow" id="routeName" placeholder="Nume traseu, ex. Sector 3 – marți" value="${esc(S.routeDraft != null ? S.routeDraft : (S.route.name || ''))}"><button class="btn" data-act="saveRoute">Salvează</button></div>
-  ${downloads && !isOp() ? '<div class="btns" style="margin-top:8px"><button class="btn ghost" data-act="csv">Descarcă lista (CSV)</button></div>' : ''}`}
-  ${trSentList()}
-  ${S.routes.length ? `<h3>Trasee salvate</h3>${S.routes.map(r => `<div class="leg"><span><b>${esc(r.name || 'Fără nume')}</b> <span class="sub">· ${(r.stops || []).length} opriri</span></span><span class="row"><button class="btn sm" data-act="loadRoute" data-id="${r.id}">Încarcă</button><button class="btn sm ghost danger" data-act="delRoute" data-id="${r.id}">Șterge</button></span></div>`).join('')}` : ''}
   <div style="height:10px"></div>`;
 }
 
