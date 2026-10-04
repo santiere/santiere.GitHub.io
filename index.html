@@ -427,6 +427,8 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .act-tab th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:6px 4px;border-bottom:1px solid var(--line)}
 .act-tab td{padding:8px 4px;border-bottom:1px solid var(--line)}
 .act-tab .num{text-align:right}
+.ctl-n{margin-top:8px;padding:9px 12px;border-radius:10px;background:color-mix(in srgb,var(--ink) 6%,transparent);font-size:13.5px;line-height:1.35}
+.ctl-n.bad{background:color-mix(in srgb,var(--danger) 12%,transparent)}.ctl-n.ok{background:color-mix(in srgb,var(--ok) 14%,transparent)}
 .drawpad{position:absolute;inset:0;z-index:8;touch-action:none;background:rgba(19,32,42,.06);cursor:crosshair}
 .drawsvg{position:absolute;inset:0;width:100%;height:100%}
 #drawPath{fill:color-mix(in srgb,var(--amber) 18%,transparent);stroke:var(--amber);stroke-width:4;stroke-linejoin:round;stroke-linecap:round}
@@ -2050,6 +2052,8 @@ document.addEventListener('click', async (e) => {
     case 'actMode': ACT.mode = t.dataset.v; ACT.sel = null; render(); break;
     case 'actBar': ACT.sel = +t.dataset.i; render(); break;
     case 'actWho': ACT.who = t.dataset.v; render(); break;
+    case 'ctlDay': CTL.day = t.dataset.v; render(); break;
+    case 'ctlRefresh': CTL.fetch(); break;
     case 'logout': {
       const n = OB.pending().length;
       if (n) { toast('Mai sunt ' + n + ' perechi de poze neurcate. Așteaptă să urce, apoi ieși din cont.', 4000); break; }
@@ -2064,7 +2068,7 @@ document.addEventListener('click', async (e) => {
       location.reload();
       break;
     }
-    case 'actRefresh': toast('Se reîncarcă…', 1200); ACT.push(); ACT.fetch(); break;
+    case 'actRefresh': toast('Se reîncarcă…', 1200); ACT.push(); ACT.fetch(); CTL.fetch(); break;
     case 'opAdd': {
       if (isOp()) break;
       const name = ($('#opName').value || '').trim(), pass = ($('#opPass').value || '').trim();
@@ -2326,7 +2330,7 @@ async function saveNewSite() {
 $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   const t = b.dataset.tab; if (S.selectMode) setSelectMode(false);
   if (b.getAttribute('aria-current') === 'page' && !(t === 'route' && S.navOn && S.navPaused)) { S.addForm = null; S.moveId = null; closeSheet(); }
-  else if (t === 'activ') { ACT.sel = null; go('activ'); if (!isOp()) ACT.fetch(); }
+  else if (t === 'activ') { ACT.sel = null; go('activ'); if (!isOp()) { ACT.fetch(); CTL.fetch(); } }
   else if (t === 'route' && S.navOn && S.navPaused) { S.navPaused = false; closeSheet(); $('#nav').hidden = false; $('.tabs').hidden = true; navShow(false); }
   else go(t);
 }));
@@ -2577,8 +2581,9 @@ $('#qc').addEventListener('click', async e => {
     if (QC.f === f) qcClose();
     toast('✓ Salvat' + (site ? ' · ' + site.name : ''));
     if (site && routeVisited(site.id) && S.navOn && !S.scout) { const nx = S.sites.get(S.nav.legs[navItem().leg].to); toast('✓ Salvat · ' + site.name + (navIsDest(navItem().leg) ? ' — urmează drumul spre ' + destName() : ' — urmează oprirea ' + navNo(navItem().leg) + (nx ? ': ' + nx.name : '')), 5000); }
-    OB.pump([k]);   // photos go up in the background
-    if (!site) { CLOUD.sharePanel(sid, f.panouR.blob); PN.put(sid, f.panouR.blob).catch(() => {}); }   // colleagues see / use the panel of this new site
+    // photos go up in the background, one after the other. A new site sends the light copy of its panel first (about 1 MB,
+    // so colleagues see the panel within seconds), then the pair. The panel is no longer sent a second time at full size.
+    if (!site) PN.put(sid, f.panouR.blob).catch(() => {}).then(() => OB.pump([k])); else OB.pump([k]);
   }
 });
 /* ---------- Cloud: photos go up automatically, site states are shared in real time ---------- */
@@ -2602,9 +2607,26 @@ const CLOUD = {
   // the panel of a new site, kept in the cloud (30 days) so other phones can show it and update the site
   // changes that could not be sent yet survive a restart of the app
   savePS() { try { if (CLOUD.pendingState && Object.keys(CLOUD.pendingState).length) localStorage.setItem('harta_ps', JSON.stringify(CLOUD.pendingState)); else localStorage.removeItem('harta_ps'); } catch (e) {} },
-  async sharePanel(sid, blob, n = 0) {
-    try { await CLOUD.req('/f/' + encodeURIComponent(sid) + '/p.jpg', { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: blob }); }
-    catch (e) { if (n < 5) setTimeout(() => CLOUD.sharePanel(sid, blob, n + 1), 30000 * (n + 1)); }
+  // upload of a photo, with progress and a stall guard: a connection that died (weak signal, app sent to the background)
+  // is dropped after a minute without progress, so the queue tries again instead of waiting for ever
+  async put(path, blob, onProg) {
+    const key = await CLOUD.k(); if (!key) throw new Error('fără cheie');
+    return new Promise((res, rej) => {
+      const x = new XMLHttpRequest(); let last = Date.now(), over = false;
+      const tm = setInterval(() => { if (Date.now() - last > 60000) { try { x.abort(); } catch (e) {} } }, 5000);
+      const end = (f, v) => { if (over) return; over = true; clearInterval(tm); f(v); };
+      x.open('PUT', CLOUD.url + path); x.setRequestHeader('x-key', key); x.setRequestHeader('content-type', 'image/jpeg');
+      x.upload.onprogress = e => { last = Date.now(); if (onProg && e.lengthComputable) onProg(e.loaded, e.total); };
+      x.upload.onload = () => { last = Date.now(); if (onProg) onProg(1, 1); };
+      x.onprogress = () => { last = Date.now(); };
+      x.onload = () => {
+        let j = null; try { j = JSON.parse(x.responseText); } catch (e) {}
+        if (x.status === 401 && isOp()) { try { localStorage.removeItem('harta_pass'); localStorage.removeItem('harta_slot'); } catch (e) {} alert('Accesul tău a fost oprit. Cere o parolă nouă.'); location.reload(); }
+        if (x.status >= 200 && x.status < 300) end(res, j || {}); else end(rej, new Error('server ' + x.status + (j && j.error ? ': ' + j.error : '')));
+      };
+      x.onerror = () => end(rej, new Error('fără legătură')); x.onabort = () => end(rej, new Error('trimitere întreruptă'));
+      x.send(blob);
+    });
   },
   async push(sid, extra, cur) {
     const s = cur || S.sites.get(sid) || {}; if (!cur && !S.sites.get(sid) && !(extra && extra.site)) return;
@@ -2703,8 +2725,9 @@ const PN = {
   mark(id) { const m = PN.sent(); m[id] = 1; try { localStorage.setItem('harta_pn2', JSON.stringify(m)); } catch (e) {} },
   // a light copy of the panel goes to the server and stays there (the full-quality original goes to iCloud as before)
   async put(sid, blob) {
+    PN.tried[sid] = Date.now();   // the background sync must not send the same panel at the same time
     const small = await shrink(blob, 2000, 0.85);
-    const r = await CLOUD.req('/pn/' + encodeURIComponent(sid) + '.jpg', { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: small });
+    const r = await CLOUD.put('/pn/' + encodeURIComponent(sid) + '.jpg', small);
     if (!r || r.app) throw new Error('server vechi');   // an older server answers "ok" to anything: not stored
     PN.mark(sid);
   },
@@ -2739,7 +2762,7 @@ const PN = {
           try { const b = assets.get && await assets.get(s.panouA); if (b) await PN.put(s.id, b); } catch (e) {}
           continue;
         }
-        if (now - (PN.tried[s.id] || 0) < 45000) continue;
+        if (now - (PN.tried[s.id] || 0) < (now - (s.creat || 0) < 20 * 60000 ? 14000 : 45000)) continue;
         PN.tried[s.id] = now; n++;
         try {
           let b = await PN.get(s.id); if (!b) continue;
@@ -2899,14 +2922,20 @@ const OB = {
       for (const [k, v] of OB.pending()) {
         if (only && !only.includes(k)) continue;
         try {
-          for (const w of ['p', 's']) await CLOUD.req('/f/' + k + '/' + w + '.jpg', { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: await OB.blobOf(k, w) });
-          await CLOUD.req('/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k, nou: v.nou, stamp: v.stamp, siteId: v.siteId, siteName: v.siteName, name: v.name, d: v.d, t: v.t, lat: v.lat, lng: v.lng }) });
-          v.sent = true; delete v.err; delete OB.files[k]; await OB.save(); setTimeout(() => C2.pull(true), 1500);
-        } catch (e) { allOk = false; v.tries = (v.tries || 0) + 1; v.err = String((e && (e.message || e.code)) || e).slice(0, 120); if (!navigator.onLine) break; }
+          for (const w of ['p', 's']) {
+            if (v.up && v.up[w]) continue;   // already on the server from an earlier, interrupted attempt
+            const base = w === 's' || (v.up && v.up.s) ? 50 : 0;
+            await CLOUD.put('/f/' + k + '/' + w + '.jpg', await OB.blobOf(k, w), (l, t) => { const q = Math.min(99, Math.round(base + 50 * l / Math.max(t, 1))); if (q !== OB.pct) { OB.pct = q; OB.ui(); } });
+            v.up = Object.assign(v.up || {}, { [w]: 1 }); await OB.save();
+          }
+          try { await CLOUD.req('/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k, nou: v.nou, stamp: v.stamp, siteId: v.siteId, siteName: v.siteName, name: v.name, d: v.d, t: v.t, lat: v.lat, lng: v.lng }) }); }
+          catch (e2) { if (/server 409/.test(String(e2 && e2.message))) { delete v.up; await OB.save(); } throw e2; }   // the server misses a photo: both go again
+          v.sent = true; delete v.up; delete v.err; delete OB.files[k]; OB.pct = null; await OB.save(); setTimeout(() => C2.pull(true), 1500);
+        } catch (e) { allOk = false; OB.pct = null; v.tries = (v.tries || 0) + 1; v.err = String((e && (e.message || e.code)) || e).slice(0, 120); if (!navigator.onLine) break; }
         OB.ui();
       }
       return allOk;
-    })().finally(() => { OB.busy = null; OB.ui(); });
+    })().finally(() => { OB.busy = null; OB.pct = null; OB.ui(); });
     return OB.busy;
   },
   // small cloud chip: sending happens by itself (now, every 30 s, when the signal returns); it only asks for attention after repeated failures
@@ -2916,13 +2945,13 @@ const OB = {
     const stuck = !OB.busy && p.some(([, v]) => (v.tries || 0) >= 3);
     b.classList.toggle('stuck', stuck); b.classList.toggle('busy', !!OB.busy);
     b.querySelector('span').textContent = stuck ? '☁︎ Netrimise ' : OB.busy ? '☁︎ Se trimit ' : '☁︎ De trimis ';
-    b.querySelector('b').textContent = n;
+    b.querySelector('b').textContent = n + (OB.busy && OB.pct != null ? ' · ' + OB.pct + '%' : '');
   },
 };
 $('#obBtn').addEventListener('click', () => {
   const p = OB.pending(); if (!p.length) return;
   const e = p.map(([, v]) => v.err).filter(Boolean)[0];
-  toast(navigator.onLine ? (OB.busy ? 'Pozele se trimit acum…' : 'Retrimit acum' + (e ? ' (ultima eroare: ' + e + ')' : '') + '. Se reîncearcă singur la 30 de secunde.') : 'Fără internet — pozele pleacă singure când revine semnalul.');
+  toast(navigator.onLine ? (OB.busy ? 'Pozele se trimit acum' + (OB.pct != null ? ' (' + OB.pct + '%)' : '') + '. Ține aplicația deschisă până dispare norul.' : 'Retrimit acum' + (e ? ' (ultima eroare: ' + e + ')' : '') + '. Se reîncearcă singur la 30 de secunde.') : 'Fără internet — pozele pleacă singure când revine semnalul.');
   OB.pump();
 });
 
@@ -3828,6 +3857,71 @@ function actChart(bs, sel) {
   });
   return `<svg class="ch" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Șantiere verificate pe perioadă">${hl}${g}${bars}${lbl}${hits}</svg>`;
 }
+
+/* ---------- control (admin): sites saved in the app  vs  photos that reached the server  vs  photos copied into the folders ----------
+   saved   = what the phones reported when "Salvează" was pressed (the site's state, sent at once and tiny)
+   server  = pairs of photos that arrived (the server counts them itself, per person and day)
+   folders = pairs the evening shortcut has taken and marked as done (arrived and no longer waiting) */
+const CTL = {
+  day: null, data: null, busy: false, err: '',
+  async fetch() {
+    if (CTL.busy || isOp()) return; CTL.busy = true; CTL.err = ''; if (S.view === 'activ') render();
+    try {
+      const [st, act, pe] = await Promise.all([CLOUD.req('/state'), CLOUD.req('/act'), CLOUD.req('/pending?limit=200')]);
+      if (!st || st.app || !act || !act.users || !pe || !pe.items) throw new Error('serverul nu a răspuns complet');
+      CTL.data = { st, users: act.users, pend: pe.items, more: !!pe.more, t: Date.now() };
+    } catch (e) { CTL.err = String((e && e.message) || e).slice(0, 120); }
+    CTL.busy = false; if (S.view === 'activ') render();
+  },
+  // one row per person who saved something that day
+  rows(day) {
+    const D = CTL.data, out = []; if (!D) return out;
+    const dayOf = t => iso(new Date(t));
+    for (const id of ['admin'].concat(Object.keys(D.users).filter(x => x !== 'admin'))) {
+      const u = D.users[id] || {}; const srvName = id === 'admin' ? 'Ionuț' : (u.name || id);
+      const ids = d => Object.keys((((u.z || {})[d]) || {}).ids || {});
+      const arrived = new Set(ids(day));
+      const saved = new Set(arrived);
+      if (id === 'admin') { for (const k of Object.keys(((ACT.z || {})[day] || {}).ids || {})) saved.add(k); }
+      else for (const [sid, v] of Object.entries(D.st)) if (v && v.by === id && !v.sters && (v.ultima === day || (v.site && v.site.creat && dayOf(v.site.creat) === day))) saved.add(sid);
+      // a photo taken around midnight is counted by the server on the neighbouring day: still arrived
+      for (const d of [addDays(day, -1), addDays(day, 1)]) for (const k of ids(d)) if (saved.has(k)) arrived.add(k);
+      const mine = D.pend.filter(i => i.op === srvName && dayOf(i.t) === day);
+      const wait = new Set(mine.filter(i => !/_c2$/.test(i.id)).map(i => String(i.panou || '').replace(/^PN?_/, '')));
+      const c2 = mine.filter(i => /_c2$/.test(i.id)).length;
+      if (!saved.size) continue;
+      out.push({ id, name: id === 'admin' ? 'Eu' : srvName, saved: saved.size, arrived: arrived.size, fold: [...arrived].filter(x => !wait.has(x)).length,
+        phone: [...saved].filter(x => !arrived.has(x)), wait: [...arrived].filter(x => wait.has(x)).length, c2 });
+    }
+    return out;
+  },
+  siteName(id) { const s = S.sites.get(id), v = CTL.data && CTL.data.st[id]; const n = (s && s.name) || (v && v.site && v.site.name) || 'șantier'; const p = s || (v && v.site); let c = ''; try { if (p && p.lat) c = cityOf(p.lat, p.lng).name; } catch (e) {} return n + (c ? ' (' + c + ')' : ''); },
+};
+function ctlBox() {
+  if (isOp()) return '';
+  const t0 = today(); const day = CTL.day || t0;
+  if (!CTL.data && !CTL.busy && !CTL.err) setTimeout(() => CTL.fetch(), 0);
+  const chip = (d, l) => `<button class="chip${day === d ? ' on' : ''}" data-act="ctlDay" data-v="${d}" aria-pressed="${day === d}">${l}</button>`;
+  let h = `<div class="row sp" style="margin-top:18px"><h3 style="margin:0">Control poze</h3><button class="btn sm act" data-act="ctlRefresh" ${CTL.busy ? 'disabled' : ''}>${CTL.busy ? 'Verific…' : '↻ Verifică'}</button></div>
+  <div class="who-seg" role="group" aria-label="Ziua verificată" style="margin-top:8px">${chip(t0, 'Azi')}${chip(addDays(t0, -1), 'Ieri')}${chip(addDays(t0, -2), roDate(addDays(t0, -2)).slice(0, 5))}</div>`;
+  if (!CTL.data) return h + `<div class="sub" style="margin-top:8px">${CTL.err ? 'Nu am putut verifica: ' + esc(CTL.err) : 'Verific ce a ajuns pe server…'}</div>`;
+  const rows = CTL.rows(day);
+  if (!rows.length) return h + `<div class="sub" style="margin-top:8px">Niciun șantier salvat ${day === t0 ? 'azi' : 'în ' + roDate(day)}.</div>`;
+  const bad = (v, ref) => v < ref ? ' style="color:var(--danger);font-weight:700"' : '';
+  const tot = rows.reduce((a, r) => ({ saved: a.saved + r.saved, arrived: a.arrived + r.arrived, fold: a.fold + r.fold, wait: a.wait + r.wait, c2: a.c2 + r.c2 }), { saved: 0, arrived: 0, fold: 0, wait: 0, c2: 0 });
+  h += `<table class="act-tab ctl-tab" style="margin-top:8px"><thead><tr><th>Persoană</th><th class="num">Salvate</th><th class="num">Pe server</th><th class="num">În foldere</th></tr></thead>
+  <tbody>${rows.map(r => `<tr><td>${esc(r.name)}</td><td class="num">${r.saved}</td><td class="num"${bad(r.arrived, r.saved)}>${r.arrived}</td><td class="num"${day < t0 ? bad(r.fold, r.saved) : ''}>${r.fold}</td></tr>`).join('')}
+  ${rows.length > 1 ? `<tr><td><b>Total</b></td><td class="num"><b>${tot.saved}</b></td><td class="num"${bad(tot.arrived, tot.saved)}><b>${tot.arrived}</b></td><td class="num"${day < t0 ? bad(tot.fold, tot.saved) : ''}><b>${tot.fold}</b></td></tr>` : ''}</tbody></table>`;
+  const notes = [];
+  for (const r of rows) if (r.phone.length) notes.push(`<div class="ctl-n bad">⚠ <b>${esc(r.name === 'Eu' ? 'Telefonul tău' : r.name)}</b>: ${r.phone.length === 1 ? 'un șantier salvat, dar pozele lui' : r.phone.length + ' șantiere salvate, dar pozele lor'} nu au ajuns încă pe server — ${r.phone.slice(0, 6).map(x => esc(CTL.siteName(x))).join(', ')}${r.phone.length > 6 ? ' …' : ''}. Pleacă singure când aplicația e deschisă pe ${r.name === 'Eu' ? 'telefonul tău' : 'telefonul operatorului'} și are semnal.</div>`);
+  if (tot.wait) notes.push(day < t0
+    ? `<div class="ctl-n bad">⚠ ${tot.wait === 1 ? 'Un șantier' : tot.wait + ' șantiere'} din ${roDate(day)} ${tot.wait === 1 ? 'are' : 'au'} pozele pe server, dar nu ${tot.wait === 1 ? 'e' : 'sunt'} încă în foldere. Rulează scurtătura „Descarcă Santiere”.</div>`
+    : `<div class="ctl-n">${tot.wait === 1 ? 'Un șantier are' : tot.wait + ' șantiere au'} pozele pe server și ${tot.wait === 1 ? 'intră' : 'intră'} în foldere la descărcarea de seară.</div>`);
+  else if (tot.c2) notes.push(`<div class="ctl-n${day < t0 ? ' bad' : ''}">${day < t0 ? '⚠ ' : ''}${tot.c2 === 1 ? 'O copie' : tot.c2 + ' copii'} pentru clientul 2 ${tot.c2 === 1 ? 'așteaptă' : 'așteaptă'} încă descărcarea.</div>`);
+  if (!notes.length) notes.push(`<div class="ctl-n ok">✓ Toate pozele ${day === t0 ? 'de azi' : 'din ' + roDate(day)} sunt în foldere.</div>`);
+  if (CTL.data.more) notes.push('<div class="ctl-n">Pe server așteaptă peste 200 de perechi; coloana „În foldere” e orientativă până la descărcare.</div>');
+  return h + notes.join('') + `<div class="sub" style="margin-top:6px">„Salvate” = ce au raportat telefoanele la apăsarea pe Salvează; „Pe server” = pozele chiar au ajuns; „În foldere” = preluate de scurtătura de seară. Verificat la ${pad(new Date(CTL.data.t).getHours())}:${pad(new Date(CTL.data.t).getMinutes())}.</div>`;
+}
 function viewActiv() {
   if (!ACT.loaded) { ACT.load(); return '<div class="empty">Se încarcă activitatea…</div>'; }
   const admin = !isOp();
@@ -3880,6 +3974,7 @@ function viewActiv() {
   <div class="ch-legend"><span><i class="sw u"></i>Actualizate</span><span><i class="sw n"></i>Noi</span><span class="sub">Atinge o bară pentru detalii</span></div>
   <div class="ch-wrap">${actChart(bs, sel)}</div>
   ${team}
+  ${ctlBox()}
   ${any ? `<h3>Detaliu</h3>
   <table class="act-tab"><thead><tr><th>${{ z: 'Zi', s: 'Săptămână', l: 'Lună' }[mode]}</th><th class="num">Verificate</th><th class="num">Noi</th><th class="num">Km</th><th class="num">Timp</th></tr></thead>
   <tbody>${rows.map(r => `<tr><td>${esc(r.lab)}</td><td class="num">${r.u + r.n}</td><td class="num">${r.n}</td><td class="num">${km(r.m)}</td><td class="num">${r.s >= 60 ? hm(r.s) : '—'}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">Nimic în această perioadă.</td></tr>'}</tbody></table>`
