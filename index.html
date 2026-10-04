@@ -1589,7 +1589,7 @@ function gLegs(stops, start) {
 function viewRoute() {
   const stops = S.route.stops.map(id => S.sites.get(id)).filter(Boolean);
   const pending = stops.filter(s => !S.route.done.includes(s.id));
-  return `<div class="row sp"><h2>${S.route.name ? esc(S.route.name) : 'Traseul curent'}</h2>${stops.length ? '<button class="btn sm ghost danger" data-act="clearRoute">Șterge traseul</button>' : ''}</div>
+  return `<div class="row sp"><h2>${S.route.name ? esc(S.route.name) : 'Traseul curent'}</h2>${stops.length ? `<button class="btn sm ghost danger" data-act="clearRoute">${S.cfClr && Date.now() - S.cfClr < 8000 ? 'Confirmă ștergerea' : 'Șterge traseul'}</button>` : ''}</div>
   <div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · ia toate șantierele de actualizat din zona de pe ecran sau din zona pe care o desenezi cu degetul, în ordinea cea mai rapidă
     <div class="btns" style="margin-top:8px"><button class="btn amber" data-act="areaMode">Zona de pe ecran</button><button class="btn amber" data-act="areaDraw">✏️ Desenează zona</button></div></div>
   ${commuteBox()}
@@ -2151,7 +2151,8 @@ document.addEventListener('click', async (e) => {
       const s = S.sites.get(id); const vis = Object.assign({}, S.visits); delete vis[vid];
       { const u = recomputeUltima(s, vis); await patchSite(id, { ultima: u, ultimaApp: u }); } toast('Vizita a fost ștearsă'); break;
     }
-    case 'clearRoute': if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'Confirmă ștergerea'; break; } S.route = { stops: [], done: [], start: S.route.start, name: '' }; RS.set(null); DEST.clear(); saveRouteSoon(); refresh(); break;
+    // second tap within 8 s confirms; the question is kept outside the page, so a redraw in between (a recalculation, a sync) does not lose it
+    case 'clearRoute': if (!(S.cfClr && Date.now() - S.cfClr < 8000)) { S.cfClr = Date.now(); t.textContent = 'Confirmă ștergerea'; break; } S.cfClr = 0; S.route = { stops: [], done: [], start: S.route.start, name: '' }; RS.set(null); DEST.clear(); saveRouteSoon(); refresh(); break;
     case 'optimize': optimizeRoute(); break;
     case 'roadOpt': computeRoute(true); break;
     case 'setMode': setMode(t.dataset.v); break;
@@ -3142,29 +3143,6 @@ function solveOrder(C, fixed, endFixed) {
   return bo;
 }
 
-const PRIO_MIN = 50;   // routes with more open stops than this put the client-2 sites first
-const PRIO_SLACK = 60;  // …but any other stop that costs at most this many seconds of detour is done on the way (never driven past)
-// Same, but the stops marked in `pr` (sites due for client 2) come first: the fastest path through them,
-// picking up on the way any other stop that costs at most `slack` seconds of detour; the rest follow, fastest from there.
-function solveOrderPrio(C, fixed, pr, slack) {
-  const n = C.length, P = [], R = [];
-  for (let i = fixed ? 1 : 0; i < n; i++) (pr[i] ? P : R).push(i);
-  if (!P.length || !R.length) return solveOrder(C, fixed);
-  const sub = ix => ix.map(a => ix.map(b => C[a][b]));
-  const iP = (fixed ? [0] : []).concat(P);
-  const o = solveOrder(sub(iP), fixed).map(k => iP[k]);
-  const left = new Set(R);
-  for (;;) {
-    let br = -1, bp = -1, bd = slack;
-    for (const r of left) for (let k = 1; k < o.length; k++) { const d = C[o[k - 1]][r] + C[r][o[k]] - C[o[k - 1]][o[k]]; if (d <= bd) { bd = d; br = r; bp = k; } }
-    if (br < 0) break;
-    o.splice(bp, 0, br); left.delete(br);
-  }
-  if (!left.size) return o;
-  const iT = [o[o.length - 1], ...left];
-  return o.concat(solveOrder(sub(iT), true).slice(1).map(k => iT[k]));
-}
-
 // stops whose site is no longer "De actualizat" (photographed on an older version of the app, or while this phone was closed) are not open any more
 function routeTidy() {
   if (S.route.stops.length < 2) return 0;   // "Navighează" to a single site works for any site
@@ -3207,9 +3185,8 @@ async function computeRoute(optimize, opts) {
       if (big) { const rs = []; rows.forEach((row, i) => row.forEach((r, j) => { if (r && r.cost < Infinity && i !== j) { const h = hav(pts[okIdx[i]], pts[okIdx[j]]) * 1000; if (h > 300) rs.push(r.cost / h); } })); rs.sort((x, y) => x - y); if (rs.length) f = rs[rs.length >> 1]; }
       rows.forEach((row, i) => C.push(row.map((r, j) => r && r.cost < Infinity ? r.cost : big ? hav(pts[okIdx[i]], pts[okIdx[j]]) * 1000 * f * 1.1 + 30 : 1e9)));
       routeMsg('Aleg ordinea cea mai rapidă…'); await tick();
-      // long routes are rarely finished in one outing: there the sites due for client 2 come first (short routes keep the plain fastest order)
-      const pr = okIdx.map(i => !!pts[i].id && pts[i].id !== DEST_ID && C2.due(pts[i]));
-      order = (endOk ? solveOrder(C, !!start, true) : okIdx.length - 1 > PRIO_MIN ? solveOrderPrio(C, !!start, pr, PRIO_SLACK) : solveOrder(C, !!start)).map(k => okIdx[k]);
+      // every route, short or long, is the fastest order through all its stops (the "client 2 first" rule for long routes was removed on 04.10.2026)
+      order = solveOrder(C, !!start, endOk).map(k => okIdx[k]);
       const newPending = order.filter(i => !start || i > 0).map(i => pts[i].id).filter(id => id && id !== DEST_ID);
       // stops added or removed while this was being computed are respected: nothing the user did in the meantime is lost
       const open = S.route.stops.filter(id => !S.route.done.includes(id));
