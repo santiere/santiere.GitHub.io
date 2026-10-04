@@ -367,7 +367,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .nav-bot{border-radius:0 0 18px 18px;padding-top:calc(var(--sat) + 10px);padding-bottom:12px}
 #navPrev,#navNext{display:none}
 #navMove{display:none!important}
-/* route progress: bottom strip in portrait, vertical gauge on the left in landscape */
+/* route progress: a small horizontal gauge at the top right, in portrait and in landscape */
 /* portrait: a small horizontal gauge at the top right, under the top bar, next to the sign */
 .nav-prog{position:absolute;right:12px;top:calc(var(--navtop,120px) + 10px);width:122px;display:flex;flex-direction:column;align-items:stretch;gap:6px;background:var(--surface);color:var(--ink);border-radius:14px;padding:8px 12px 10px;box-shadow:0 4px 18px rgba(0,0,0,.22)}
 .np-txt{display:flex;align-items:baseline;justify-content:space-between;gap:8px;white-space:nowrap}
@@ -376,14 +376,11 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .nav-prog{box-sizing:border-box;width:126px}.nav-sign{box-sizing:border-box;max-width:min(300px,calc(100% - 162px))}
 .np-fill{position:absolute;left:0;top:0;bottom:0;width:var(--p,0%);background:var(--accent);border-radius:6px;transition:width .6s ease,height .6s ease}
 @media (orientation: landscape) and (max-height: 600px) {
-  .nav-prog{box-sizing:content-box;left:calc(var(--sal) + 12px);right:auto;top:auto;bottom:calc(var(--sab) + 12px);width:64px;height:min(52vh,230px);flex-direction:column;align-items:center;padding:10px 0;gap:8px}
+  /* landscape: the gauge lies flat in the top-right corner (stops · bar · percent), clear of the island and the rounded screen corner */
+  .nav-prog{left:auto;right:calc(var(--sar) + 12px);top:calc(var(--sat) + 8px);bottom:auto;width:min(236px,30vw);height:auto;flex-direction:row;align-items:center;gap:10px;padding:8px 12px;border-radius:12px}
   .nav-sign{box-sizing:content-box;max-width:min(300px,40vw)}
-  .np-txt{flex-direction:column;align-items:center;gap:2px}.np-txt b{font-size:16px}.np-txt span{font-size:12.5px}
-  .np-track{flex:1;width:12px;height:auto}
-  .np-fill{top:auto;right:0;width:auto;height:var(--p,0%)}
-  /* gauge tucked into the bottom-left corner, clear of the island and the rounded screen corner */
-  .nav-prog{left:12px;bottom:24px;width:52px;height:min(30vh,128px);padding:8px 0;gap:6px;border-radius:12px}
-  .np-txt b{font-size:14px}.np-txt span{font-size:11px}.np-track{width:10px}
+  .np-txt{display:contents}.np-txt b{font-size:16px;white-space:nowrap}.np-txt span{font-size:13px;order:2;white-space:nowrap}
+  .np-track{order:1;flex:1;min-width:40px}
   /* compact top bar */
   .nav-bot{width:auto;max-width:min(400px,44vw);margin-left:8px;padding:6px 8px 6px 12px;border-radius:0 0 14px 14px}
   .nav-bot .row{gap:8px!important}
