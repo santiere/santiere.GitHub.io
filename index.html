@@ -3437,7 +3437,7 @@ function scoutStart() {
   closeSheet(); $('#nav').classList.add('scout'); $('#nav').hidden = false; $('.top').hidden = true; $('.fab-col').hidden = true; $('.tabs').hidden = true;
   if (S.meMarker) S.meMarker.getElement().classList.add('nav');
   try { localStorage.setItem('harta_scout', String(Date.now())); } catch (e) {}
-  S.navTrack = null; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null; S.navFree = false;
+  S.navTrack = null; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.navTurnK = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null; S.navFree = false;
   navShow(false);
   // start from the position I already have; if it is an old one, ask the phone for a fresh one quietly (no error screen while I look at the map)
   if (S.me) { navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }); if (Date.now() - (S.me.t || 0) > 30000 && typeof startGeoWatch === 'function') startGeoWatch(); }
@@ -3453,7 +3453,7 @@ function navStart() {
   try { localStorage.setItem('harta_nav', String(Date.now())); } catch (e) {}
   try { map.setLayoutProperty('route-start', 'visibility', 'none'); } catch (e) {}
   if (S.voice && 'speechSynthesis' in window) { try { speechSynthesis.getVoices(); } catch (e) {} }
-  S.navTrack = { off: 0, lastReroute: 0 }; S.nearSeen = {}; S.nearT = 0; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null;
+  S.navTrack = { off: 0, lastReroute: 0 }; S.nearSeen = {}; S.nearT = 0; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.navTurnK = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null;
   navShow(true);
   if (S.me && Date.now() - (S.me.t || 0) < 30000) navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc });
   else if (typeof locateNow === 'function' && S.geoErr != null) locateNow();
@@ -3737,17 +3737,22 @@ async function navNearCheck(c, cur, legLeft) {
   speak('Șantier lângă tine. Îl facem acum.');
 }
 
-/* a change of direction is coming: from TURN_FAR m before it the map comes back to the standstill zoom, whatever the speed,
-   and it is fully there about 3 s of driving later — never closer than TURN_DONE m to the turn — so the junction is already
-   large on the screen long before I reach it (it used to start at 150 m and was still moving when I arrived).
+/* a change of direction is coming: the map comes back to the standstill zoom TURN_LEAD_S seconds of driving before it —
+   150 m at town speeds, up to 300 m when driving fast — and is fully there about 3 s later, so the junction is large on the
+   screen well before I reach it. (A fixed 300 m at every speed left no room to zoom out between the turns of a town route.)
+   Once the map has started coming in for a turn, slowing down for that turn must not push it out again.
    1 = far from any turn (speed zoom as usual), 0 = standstill zoom. */
-const TURN_FAR = 300, TURN_DONE = 200, TURN_IN_S = 3.2;
+const TURN_LEAD_S = 12, TURN_FAR_MIN = 150, TURN_FAR_MAX = 300, TURN_IN_S = 3.2;
 function navTurnNear(it, toMan) {
   const s = it && it.s; if (!s) return 1;
   const turn = s.type === 'roundabout' || s.type === 'arrive' || (s.type === 'turn' && s.mod !== 'straight');
   if (!turn) return 1;
-  const v = S.navSpd ? S.navSpd.v : 0, near = Math.max(TURN_DONE, Math.min(TURN_FAR - 30, TURN_FAR - v * TURN_IN_S));
-  return Math.max(0, Math.min(1, (toMan - near) / (TURN_FAR - near)));
+  const v = S.navSpd ? S.navSpd.v : 0;
+  let far = Math.max(TURN_FAR_MIN, Math.min(TURN_FAR_MAX, v * TURN_LEAD_S)), near = far - Math.max(30, v * TURN_IN_S);
+  const key = [it.leg, it.j, s.type, s.mod || ''].join('|'), h = S.navTurnK;
+  if (h && h.key === key && toMan <= h.far + 80 && h.far >= far) { far = h.far; near = h.near; }
+  if (toMan <= far) S.navTurnK = { key, far, near };
+  return Math.max(0, Math.min(1, (toMan - near) / (far - near)));
 }
 
 /* ---------- zoom follows the speed (like Waze): farther out when driving fast, back in when slowing down ---------- */
