@@ -296,6 +296,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .qc.upd #qcBody{flex:1;min-height:0}
 .qcu{display:flex;flex-direction:column;height:100%;gap:8px}
 .qcu-side{display:contents}
+.qcu-fin{display:flex;align-items:center;gap:12px;flex:none;padding:8px 12px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);cursor:pointer}.qcu-fin input{width:24px;height:24px;flex:none;accent-color:var(--off);margin:0}.qcu-fin>span{display:flex;flex-direction:column;min-width:0}.qcu-fin b{font-size:15px}.qcu-fin .qc-s{font-size:11.5px;color:var(--muted)}.qcu-fin.on{border-color:var(--off);background:color-mix(in srgb,var(--off) 12%,var(--surface))}
 .qcu .qc-site{order:-1;margin:0;font-size:16px}
 .qc-panel{background:#101418;padding:0;cursor:zoom-in;border-color:#13202A}
 .qc-panel img{object-fit:contain}
@@ -2543,6 +2544,7 @@ function qcRender() {
       <div class="qcu-side">
         <div class="qc-site"><b>${esc(site.name)}</b></div>
         <label class="qc-tile qcu-stage ${r ? 'done' : ''}${f.santier ? ' has' : ''}">${f.santier ? `<img src="${f.santierUrl}" alt="">` : '<span class="qc-n">Na</span>'}<span class="qcu-t"><span class="qc-l">${r ? '✓ ' : ''}Stadiu șantier</span><span class="qc-s">${sub}</span></span><input type="file" accept="image/*" capture="environment" data-qc="santier"></label>
+        <label class="qcu-fin${f.fin ? ' on' : ''}"><input type="checkbox" id="qcFin" ${f.fin ? 'checked' : ''}><span><b>Lucrare finalizată</b><span class="qc-s">stadiul se salvează și se livrează normal</span></span></label>
         ${gpsLine(true)}
         <div class="sub" id="qcProg" style="margin-top:4px;color:var(--ink)"></div>
         ${buttons}
@@ -2624,6 +2626,7 @@ function qcPicked(e) {
   { const u = f[k + 'Url'], im = new Image(); im.onload = () => { const w = im.naturalWidth > im.naturalHeight * 1.1; if (QC.f === f && f[k + 'Url'] === u && w !== f[k + 'Wide']) { f[k + 'Wide'] = w; qcRender(); } }; im.src = u; }
   qcRender(); qcPrepare(f, k, f[k + 'G']);
 }
+$('#qc').addEventListener('change', e => { if (e.target.id !== 'qcFin' || !QC.f) return; QC.f.fin = e.target.checked; const l = e.target.closest('.qcu-fin'); if (l) l.classList.toggle('on', QC.f.fin); });
 $('#qc').addEventListener('click', async e => {
   const id = e.target.id; const f = QC.f; if (!f) return;
   if (id === 'qcCancel' || id === 'qcBack') { qcClose(); return; }
@@ -2647,7 +2650,8 @@ $('#qc').addEventListener('click', async e => {
         const ref = db.doc('vizite/' + site.id); const snap = await ref.get(); const vid = uid('v');
         const visit = { d, poze: [aid], t: Date.now(), gps: g ? [+g.lat.toFixed(6), +g.lng.toFixed(6)] : null };
         if (snap.exists) await ref.update({ v: { [vid]: visit } }); else await ref.set({ v: { [vid]: visit } });
-        await patchSite(site.id, { ultima: d, ultimaApp: d, inactiv: false });
+        // "Lucrare finalizată" ticked: the stage photo is saved and delivered as usual, and the site is reported finished in the same step
+        await patchSite(site.id, Object.assign({ ultima: d, ultimaApp: d, inactiv: !!f.fin }, f.fin ? { finBy: (window.PWA_me && window.PWA_me.name) || '', finT: Date.now() } : {}));
         const [pa] = site.panouA ? [site.panouA] : f.panouR.blob ? await uploadFiles([f.panouR.blob], null, true) : [aid];
         await OB.add(k, { siteId: site.id, siteName: cityDir(site.lat, site.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: site.name, nou: 0, stamp: site.id, t: Date.now(), p: pa, s: aid, lat: g && g.lat, lng: g && g.lng }, files);
       } else {
@@ -2662,7 +2666,7 @@ $('#qc').addEventListener('click', async e => {
     } catch (err) { toast('Nu s-a salvat în aplicație: ' + (err.code || err.message)); f.saving = false; e.target.disabled = false; e.target.textContent = 'Salvează'; }
     if (!saved) return;
     if (QC.f === f) qcClose();
-    toast('✓ Salvat' + (site ? ' · ' + site.name : ''));
+    toast('✓ Salvat' + (site ? ' · ' + site.name : '') + (site && f.fin ? ' · marcat finalizat' : ''));
     if (site && routeVisited(site.id) && S.navOn && !S.scout) { const nx = S.sites.get(S.nav.legs[navItem().leg].to); toast('✓ Salvat · ' + site.name + (navIsDest(navItem().leg) ? ' — urmează drumul spre ' + destName() : ' — urmează oprirea ' + navNo(navItem().leg) + (nx ? ': ' + nx.name : '')), 5000); }
     // photos go up in the background, one after the other. A new site sends the light copy of its panel first (about 1 MB,
     // so colleagues see the panel within seconds), then the pair. The panel is no longer sent a second time at full size.
