@@ -299,6 +299,8 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .qcu-side{display:contents}
 .qcu-fin{display:flex;align-items:center;gap:12px;flex:none;padding:8px 12px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);cursor:pointer}.qcu-fin input{width:24px;height:24px;flex:none;accent-color:var(--off);margin:0}.qcu-fin>span{display:flex;flex-direction:column;min-width:0}.qcu-fin b{font-size:15px}.qcu-fin .qc-s{font-size:11.5px;color:var(--muted)}.qcu-fin.on{border-color:var(--off);background:color-mix(in srgb,var(--off) 12%,var(--surface))}
 .qcu .qc-site{order:-1;margin:0;font-size:16px}
+.qc-stg-w{flex:none}.qc-tiles+.qc-stg-w{margin-top:12px}.qc-stg-h{font-size:12.5px;font-weight:600;margin:2px 0 5px}.qc-stg-h span{font-weight:500;color:var(--muted)}.qc-stg-h .need{color:var(--amber,#F0A202)}
+.qc-stg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.qc-stg-b{font:inherit;font-size:12.5px;font-weight:600;min-height:36px;padding:4px 2px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.qc-stg-b.on{background:var(--ink);border-color:var(--ink);color:var(--surface)}.qc-stg-b.fin.on{background:var(--off);border-color:var(--off);color:#fff}
 .qc-panel{background:#101418;padding:0;cursor:zoom-in;border-color:#13202A}
 .qc-panel img{object-fit:contain}
 .qcu-panel{flex:1;min-height:0;aspect-ratio:auto;border-radius:12px}
@@ -913,6 +915,9 @@ const CYCLE = 30;      // a site comes back as "De actualizat" 30 days after its
 const C2_DAYS = 80;    // the second client gets a site again at least 80 days after the last photo sent to him
 const STOP_S = 30;       // time spent at a site: about half a minute (Ionuț, 04.10.2026)
 const STOP_LBL = STOP_S < 60 ? STOP_S + ' s' : Math.round(STOP_S / 60) + ' min';
+// the stage of the works, chosen by the operator with one tap at every update (kept per visit and in the shared state, for the website)
+const STG = ['Teren', 'Fundație', 'Structură', 'Închideri', 'Fațadă', 'Finisaje', 'Finalizat'];
+const stgName = n => STG[(+n || 0) - 1] || '';
 const FORCED = '1970-01-01';   // "De actualizat" set by hand by the admin, whatever the dates say
 const STADII = ['Organizare de șantier', 'Săpătură / fundații', 'Structură', 'Închideri / acoperiș', 'Finisaje / instalații', 'Finalizat'];
 const pad = n => String(n).padStart(2, '0');
@@ -1561,7 +1566,7 @@ function viewSite() {
   const vd = new Set((s.viz || []).map(v => v.d));
   for (const p of (s.poze || [])) if (!vd.has(p.d)) events.push({ d: p.d, t: 'Poză panou', s: '' });
   for (const v of (s.viz || [])) events.push({ d: v.d, t: 'Vizită', s: v.w });
-  if (vis) for (const [vid, v] of Object.entries(vis)) if (v) events.push({ d: v.d, t: 'Vizită', s: '', vid, n: (v.poze || []).length });
+  if (vis) for (const [vid, v] of Object.entries(vis)) if (v) events.push({ d: v.d, t: 'Vizită' + (v.st ? ' · ' + stgName(v.st) : ''), s: '', vid, n: (v.poze || []).length });
   events.sort((a, b) => (b.d || '').localeCompare(a.d || ''));
   const [k] = statusLabel(s);
   return `<div class="row sp" style="margin:2px 0 8px"><button class="btn sm ghost" data-act="back">‹ Înapoi</button>${isOp() ? '' : `<button class="btn sm act" data-act="edit" data-id="${s.id}">✎ Editează</button>`}</div>
@@ -1569,6 +1574,7 @@ function viewSite() {
     <div class="kicker"><span class="kid">Șantier ${esc(s.id.toUpperCase())}</span>${pillShort(s)}</div>
     <h2>${esc(s.name)}</h2>
     <div class="sub num" style="margin-top:4px">${k === 'off' ? 'Lucrare finalizată' : lastUpd(s) ? 'Actualizat ' + roDate(lastUpd(s)) + (k === 'wait' ? ' · din nou la ' + roDate(addDays(lastUpd(s), CYCLE)) : '') : 'Neactualizat încă'}</div>
+    ${s.st ? `<div class="sub" style="margin-top:2px">Stadiu: <b>${stgName(s.st)}</b>${s.stD ? ' · ' + roDate(s.stD) : ''}</div>` : ''}
   </div>
   <div class="btns" style="margin-top:12px">
     ${stageBtn(s)}
@@ -2355,12 +2361,13 @@ async function createSite(o, prog) {
   let near = null, nd = 3;
   for (const x of S.sites.values()) { const dd = hav({ lat: o.lat, lng: o.lng }, x); if (dd < nd && x.loc) { nd = dd; near = x; } }
   const site = { name: 'Șantier nou · ' + roDate(d), lat: +o.lat.toFixed(6), lng: +o.lng.toFixed(6), loc: near ? near.loc : cityOf(o.lat, o.lng).name, strada: near && nd < 0.15 ? near.strada || '' : '', ultima: d, inactiv: false, creat: Date.now(), manual: true, deScanat: true, poze: [], panouA: pid, santierA: sid, panouT: o.panouT || '' };
+  if (o.st) { site.st = o.st; site.stD = d; }
   const sh = pickShard();
   const ref = db.doc('sites/' + sh); const snap = await ref.get();
   if (snap.exists) await ref.update({ s: { [id]: site } }); else await ref.set({ s: { [id]: site } });
   // the pin is on the map at once; the stored copy comes back through the listener a moment later and says the same
   { const shd = S.shards[sh] || (S.shards[sh] = { s: {} }); (shd.s || (shd.s = {}))[id] = Object.assign({}, site); S.sites.set(id, Object.assign({}, site, { id, _sh: sh })); refresh(); }
-  await db.doc('vizite/' + id).set({ v: { [uid('v')]: { d, poze: [pid, sid], t: Date.now() } } });
+  await db.doc('vizite/' + id).set({ v: { [uid('v')]: Object.assign({ d, poze: [pid, sid], t: Date.now() }, o.st ? { st: o.st } : {}) } });
   CLOUD.push(id, { ultima: d, inactiv: false, site: { name: site.name, lat: site.lat, lng: site.lng, loc: site.loc, strada: site.strada, creat: site.creat, panouT: site.panouT || '' } });
   return { id, base: shotBase(), week: weekLabel(d), panou: o.panou, santier: o.santier, assets: { p: pid, s: sid } };
 }
@@ -2370,10 +2377,11 @@ async function acFirstPhoto(site, o) {
   const d = today();
   const [pid, sid] = await uploadFiles([o.panou, o.santier], null, true);
   const patch = { lat: +o.lat.toFixed(6), lng: +o.lng.toFixed(6), moved: true, ultima: d, ultimaApp: d, inactiv: false, creat: Date.now(), manual: true, deScanat: true, panouA: pid, santierA: sid, panouT: o.panouT || '' };
+  if (o.st) { patch.st = o.st; patch.stD = d; }
   S.pend[site.id] = Object.assign(S.pend[site.id] || {}, patch);
   await db.doc('sites/' + site._sh).update({ s: { [site.id]: patch } });
   { const sh = S.shards[site._sh], cur = S.sites.get(site.id); if (sh && sh.s && sh.s[site.id]) Object.assign(sh.s[site.id], patch); if (cur) { S.sites.set(site.id, Object.assign({}, cur, patch)); refresh(); } }
-  const ref = db.doc('vizite/' + site.id); const snap = await ref.get(); const visit = { d, poze: [pid, sid], t: Date.now() };
+  const ref = db.doc('vizite/' + site.id); const snap = await ref.get(); const visit = { d, poze: [pid, sid], t: Date.now() }; if (o.st) visit.st = o.st;
   if (snap.exists) await ref.update({ v: { [uid('v')]: visit } }); else await ref.set({ v: { [uid('v')]: visit } });
   CLOUD.push(site.id, { ultima: d, inactiv: false, site: { name: site.name, lat: patch.lat, lng: patch.lng, loc: site.loc || '', strada: site.strada || '', creat: patch.creat, panouT: patch.panouT } }, Object.assign({}, site, patch));
   return { id: site.id, assets: { p: pid, s: sid } };
@@ -2535,7 +2543,8 @@ function qcRender() {
     const short = label.split(' ')[0];
     return `<label class="qc-tile ${r ? 'done' : ''}${f[k] ? ' pic' : ''}">${f[k] ? `<img src="${f[k + 'Url']}" alt="">` : `<span class="qc-n">${n}</span>`}<span class="qc-l">${f[k] ? (r ? '✓ ' : '') + short : label}</span><span class="qc-s">${sub}</span><input type="file" accept="image/*" ${QC.src() === 'lib' ? '' : 'capture="environment"'} data-qc="${k}"></label>`;
   };
-  const ready = (site ? f.panouR : f.panouR) && f.santierR;
+  const ready = (site ? f.panouR : f.panouR) && f.santierR && f.st;
+  const stg = `<div class="qc-stg-w"><div class="qc-stg-h">Stadiul lucrării${f.st ? (f.st0 && f.st === f.st0 ? ' <span>· la fel ca data trecută</span>' : '') : ' <span class="need">· atinge stadiul de acum</span>'}</div><div class="qc-stg" role="group" aria-label="Stadiul lucrării">${STG.map((n, i) => `<button type="button" class="qc-stg-b${f.st === i + 1 ? ' on' : ''}${i === 6 ? ' fin' : ''}" data-st="${i + 1}" aria-pressed="${f.st === i + 1}">${n}</button>`).join('')}</div></div>`;
   const gpsLine = short => `<div class="qc-gps ${g ? 'ok' : 'wait'}">${g ? `● GPS activ (±${Math.round(g.acc || 0)} m)` + (short ? '' : ' · locația se scrie în fiecare poză') : '● Aștept semnalul GPS… Pozele se salvează doar cu locație.'}</div>`;
   const buttons = `<div class="btns" style="margin-top:10px"><button class="btn primary qc-big" id="qcSave" ${ready ? '' : 'disabled'}>Salvează</button><button class="btn ghost" id="qcCancel">Renunță</button></div>`;
   if (site) {
@@ -2546,6 +2555,7 @@ function qcRender() {
       <div class="qcu-side">
         <div class="qc-site"><b>${esc(site.name)}</b></div>
         <label class="qc-tile qcu-stage ${r ? 'done' : ''}${f.santier ? ' has' : ''}">${f.santier ? `<img src="${f.santierUrl}" alt="">` : '<span class="qc-n">Na</span>'}<span class="qcu-t"><span class="qc-l">${r ? '✓ ' : ''}Stadiu șantier</span><span class="qc-s">${sub}</span></span><input type="file" accept="image/*" capture="environment" data-qc="santier"></label>
+        ${stg}
         <label class="qcu-fin${f.fin ? ' on' : ''}"><input type="checkbox" id="qcFin" ${f.fin ? 'checked' : ''}><span><b>Lucrare finalizată</b><span class="qc-s">stadiul se salvează și se livrează normal</span></span></label>
         ${gpsLine(true)}
         <div class="sub" id="qcProg" style="margin-top:4px;color:var(--ink)"></div>
@@ -2555,6 +2565,7 @@ function qcRender() {
     const a0 = f.acId ? S.sites.get(f.acId) : null;
     box.innerHTML = `<div class="qc-site"><b>${a0 ? esc(a0.name) : 'Șantier nou'}</b>${a0 ? '<div class="sub" style="font-weight:500">Prima fotografiere: panoul și stadiul</div>' : ''}</div>
     <div class="qc-tiles">${tile('panou', 'N', 'Panou șantier')}${tile('santier', 'Na', 'Stadiu șantier')}</div>
+    ${stg}
     ${gpsLine(false)}
     <div class="sub" id="qcProg" style="margin-top:4px;color:var(--ink)"></div>
     ${buttons}`;
@@ -2585,6 +2596,7 @@ async function qcLoadPanel(f) {
 function qcOpen(o) {
   const s0 = o.siteId ? S.sites.get(o.siteId) : null, first = acNew(s0);
   const f = QC.f = first ? { siteId: null, id: o.siteId, acId: o.siteId } : { siteId: o.siteId || null, id: o.siteId ? null : uid('n') };
+  f.st = f.siteId && s0 && +s0.st && +s0.st < 7 ? +s0.st : null; f.st0 = f.st;
   if (!gpsFresh() && typeof locateNow === 'function' && S.geoErr != null) locateNow();
   if (f.siteId) qcLoadPanel(f);
   $('#qc').hidden = false; qcRender();
@@ -2628,14 +2640,15 @@ function qcPicked(e) {
   { const u = f[k + 'Url'], im = new Image(); im.onload = () => { const w = im.naturalWidth > im.naturalHeight * 1.1; if (QC.f === f && f[k + 'Url'] === u && w !== f[k + 'Wide']) { f[k + 'Wide'] = w; qcRender(); } }; im.src = u; }
   qcRender(); qcPrepare(f, k, f[k + 'G']);
 }
-$('#qc').addEventListener('change', e => { if (e.target.id !== 'qcFin' || !QC.f) return; QC.f.fin = e.target.checked; const l = e.target.closest('.qcu-fin'); if (l) l.classList.toggle('on', QC.f.fin); });
+$('#qc').addEventListener('change', e => { if (e.target.id !== 'qcFin' || !QC.f) return; const f = QC.f; f.fin = e.target.checked; if (f.fin) f.st = 7; else if (f.st === 7) f.st = f.st0 || null; qcRender(); });
 $('#qc').addEventListener('click', async e => {
   const id = e.target.id; const f = QC.f; if (!f) return;
   if (id === 'qcCancel' || id === 'qcBack') { qcClose(); return; }
+  { const b = e.target.closest('[data-st]'); if (b && !f.saving && !f.done) { f.st = +b.dataset.st; if (f.siteId) f.fin = f.st === 7; qcRender(); return; } }
   if (e.target.closest('#qcPanelView') && f.panouUrl) { const s0 = S.sites.get(f.siteId); $('#lbImg').classList.remove('zoom'); $('#lbZoom').textContent = 'Mărește'; $('#lbCap').textContent = 'Panou · ' + (s0 ? s0.name : '') + ' · previzualizare (seara primești originalul)'; $('#lbImg img').src = f.panouUrl; $('#lb').hidden = false; return; }
   if (id === 'qcSave') {
     const site = f.siteId ? S.sites.get(f.siteId) : null;
-    if (!f.panouR || !f.santierR) return;
+    if (!f.panouR || !f.santierR || !f.st) return;
     e.target.disabled = true;
     const sid = site ? site.id : f.id;
     const pName = site ? 'P_' + (panelStamp(site) || 'X') + '.jpg' : 'PN_' + sid + '.jpg';
@@ -2650,19 +2663,19 @@ $('#qc').addEventListener('click', async e => {
         const [aid] = await uploadFiles([f.santierR.blob], null, true);
         const d = today();
         const ref = db.doc('vizite/' + site.id); const snap = await ref.get(); const vid = uid('v');
-        const visit = { d, poze: [aid], t: Date.now(), gps: g ? [+g.lat.toFixed(6), +g.lng.toFixed(6)] : null };
+        const visit = { d, poze: [aid], t: Date.now(), gps: g ? [+g.lat.toFixed(6), +g.lng.toFixed(6)] : null, st: f.st };
         if (snap.exists) await ref.update({ v: { [vid]: visit } }); else await ref.set({ v: { [vid]: visit } });
         // "Lucrare finalizată" ticked: the stage photo is saved and delivered as usual, and the site is reported finished in the same step
-        await patchSite(site.id, Object.assign({ ultima: d, ultimaApp: d, inactiv: !!f.fin }, f.fin ? { finBy: (window.PWA_me && window.PWA_me.name) || '', finT: Date.now() } : {}));
+        await patchSite(site.id, Object.assign({ ultima: d, ultimaApp: d, inactiv: !!f.fin, st: f.st, stD: d }, f.fin ? { finBy: (window.PWA_me && window.PWA_me.name) || '', finT: Date.now() } : {}));
         const [pa] = site.panouA ? [site.panouA] : f.panouR.blob ? await uploadFiles([f.panouR.blob], null, true) : [aid];
-        await OB.add(k, { siteId: site.id, siteName: cityDir(site.lat, site.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: site.name, nou: 0, stamp: site.id, t: Date.now(), p: pa, s: aid, lat: g && g.lat, lng: g && g.lng }, files);
+        await OB.add(k, { siteId: site.id, siteName: cityDir(site.lat, site.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: site.name, nou: 0, stamp: site.id, t: Date.now(), p: pa, s: aid, lat: g && g.lat, lng: g && g.lng, st: f.st }, files);
       } else {
         const gp = f.panouR.gps || g;
         const a0 = f.acId ? S.sites.get(f.acId) : null;
-        const r = a0 ? await acFirstPhoto(a0, { panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt })
-          : await createSite({ id: sid, panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt }, null);
+        const r = a0 ? await acFirstPhoto(a0, { panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt, st: f.st })
+          : await createSite({ id: sid, panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt, st: f.st }, null);
         const s2 = r.assets || {};
-        await OB.add(k, { siteId: sid, siteName: cityDir(gp.lat, gp.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: a0 ? a0.name : 'Șantier nou', nou: 1, stamp: sid, t: Date.now(), p: s2.p, s: s2.s, lat: gp.lat, lng: gp.lng }, files);
+        await OB.add(k, { siteId: sid, siteName: cityDir(gp.lat, gp.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: a0 ? a0.name : 'Șantier nou', nou: 1, stamp: sid, t: Date.now(), p: s2.p, s: s2.s, lat: gp.lat, lng: gp.lng, st: f.st }, files);
       }
       saved = true; ACT.site(sid, !site, photoDay(f.santierR.dt)); RS.photo(sid);
     } catch (err) { toast('Nu s-a salvat în aplicație: ' + (err.code || err.message)); f.saving = false; e.target.disabled = false; e.target.textContent = 'Salvează'; }
@@ -2726,6 +2739,7 @@ const CLOUD = {
       if (s.manual) v.site = { name: s.name, lat: s.lat, lng: s.lng, loc: s.loc || '', strada: s.strada || '', creat: s.creat || u, panouT: s.panouT || '' };
       if (s.edk && s.edk.length && !isOp()) { v.e = {}; for (const k of s.edk) v.e[k] = own(s, k) && s[k] != null ? s[k] : ''; }
     }
+    if (s.st && !s.sters) { v.st = +s.st; v.stD = s.stD || ''; }
     Object.assign(v, extra || {});
     try { localStorage.setItem('harta_stateU', JSON.stringify(CLOUD.stateU)); } catch (e) {}
     try {
@@ -2764,7 +2778,7 @@ const CLOUD = {
         }
         if (!s && v.site) {   // a new site added by another operator
           const sh = pickShard(); const ref = db.doc('sites/' + sh); const snap = await ref.get();
-          const site = Object.assign({ poze: [], manual: true, deScanat: true }, v.site, v.e || {}, { ultima: v.ultima, ultimaApp: v.ultima, inactiv: !!v.inactiv }, v.e ? { edk: Object.keys(v.e) } : {});
+          const site = Object.assign({ poze: [], manual: true, deScanat: true }, v.site, v.e || {}, { ultima: v.ultima, ultimaApp: v.ultima, inactiv: !!v.inactiv }, v.e ? { edk: Object.keys(v.e) } : {}, v.st ? { st: +v.st, stD: v.stD || '' } : {});
           if (snap.exists) await ref.update({ s: { [sid]: site } }); else await ref.set({ s: { [sid]: site } });
           changed++; continue;
         }
@@ -2772,6 +2786,7 @@ const CLOUD = {
         const up = {};
         if (v.site && s.ac && !s.manual && !s.panouA) Object.assign(up, { manual: true, deScanat: true, creat: v.site.creat || v.u, panouT: v.site.panouT || '' }, v.site.lat && v.site.lng ? { lat: v.site.lat, lng: v.site.lng, moved: true } : {});
         if ((s.ultima || '') !== (v.ultima || '') || !!s.inactiv !== !!v.inactiv) Object.assign(up, { ultima: v.ultima || '', ultimaApp: v.ultima || '', inactiv: !!v.inactiv });
+        if (v.st && (+v.st !== +(s.st || 0) || (v.stD || '') !== (s.stD || ''))) Object.assign(up, { st: +v.st, stD: v.stD || '' });
         // who reported it as finished (an operator), so the admin can see it and reopen it if it was a mistake
         if (v.inactiv && v.fn && s.finBy !== v.fn) { up.finBy = v.fn; up.finT = v.u || Date.now(); } else if (!v.inactiv && s.finBy) up.finBy = '';
         if (v.e) { for (const [k, x] of Object.entries(v.e)) if (SYNC_E.includes(k) && (own(s, k) && s[k] != null ? s[k] : '') !== x) up[k] = x; if (Object.keys(up).some(k => SYNC_E.includes(k))) up.edk = [...new Set([...(s.edk || []), ...Object.keys(v.e)])]; }
@@ -3018,7 +3033,7 @@ const OB = {
             await CLOUD.put('/f/' + k + '/' + w + '.jpg', await OB.blobOf(k, w), (l, t) => { const q = Math.min(99, Math.round(base + 50 * l / Math.max(t, 1))); if (q !== OB.pct) { OB.pct = q; OB.ui(); } });
             v.up = Object.assign(v.up || {}, { [w]: 1 }); await OB.save();
           }
-          try { await CLOUD.req('/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k, nou: v.nou, stamp: v.stamp, siteId: v.siteId, siteName: v.siteName, name: v.name, d: v.d, t: v.t, lat: v.lat, lng: v.lng }) }); }
+          try { await CLOUD.req('/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k, nou: v.nou, stamp: v.stamp, siteId: v.siteId, siteName: v.siteName, name: v.name, d: v.d, t: v.t, lat: v.lat, lng: v.lng, st: v.st || 0 }) }); }
           catch (e2) { if (/server 409/.test(String(e2 && e2.message))) { delete v.up; await OB.save(); } throw e2; }   // the server misses a photo: both go again
           v.sent = true; delete v.up; delete v.err; delete OB.files[k]; OB.pct = null; await OB.save(); setTimeout(() => C2.pull(true), 1500);
         } catch (e) { allOk = false; OB.pct = null; v.tries = (v.tries || 0) + 1; v.err = String((e && (e.message || e.code)) || e).slice(0, 120); if (!navigator.onLine) break; }
