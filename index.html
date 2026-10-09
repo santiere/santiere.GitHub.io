@@ -297,9 +297,8 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .qc.upd #qcBody{flex:1;min-height:0}
 .qcu{display:flex;flex-direction:column;height:100%;gap:8px}
 .qcu-side{display:contents}
-.qcu-fin{display:flex;align-items:center;gap:12px;flex:none;padding:8px 12px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);cursor:pointer}.qcu-fin input{width:24px;height:24px;flex:none;accent-color:var(--off);margin:0}.qcu-fin>span{display:flex;flex-direction:column;min-width:0}.qcu-fin b{font-size:15px}.qcu-fin .qc-s{font-size:11.5px;color:var(--muted)}.qcu-fin.on{border-color:var(--off);background:color-mix(in srgb,var(--off) 12%,var(--surface))}
 .qcu .qc-site{order:-1;margin:0;font-size:16px}
-.qc-stg-w{flex:none}.qc-tiles+.qc-stg-w{margin-top:12px}.qc-stg-h{font-size:12.5px;font-weight:600;margin:2px 0 5px}.qc-stg-h span{font-weight:500;color:var(--muted)}.qc-stg-h .need{color:var(--amber,#F0A202)}
+.qc-stg-w{flex:none}.qc-fin-note{margin-top:6px;padding:6px 10px;border-radius:10px;font-size:12.5px;font-weight:600;background:color-mix(in srgb,var(--off) 14%,var(--surface));color:var(--ink)}.qc-tiles+.qc-stg-w{margin-top:12px}.qc-stg-h{font-size:12.5px;font-weight:600;margin:2px 0 5px}.qc-stg-h span{font-weight:500;color:var(--muted)}.qc-stg-h .need{color:var(--amber,#F0A202)}
 .qc-stg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.qc-stg-b{font:inherit;font-size:12.5px;font-weight:600;min-height:36px;padding:4px 2px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.qc-stg-b.on{background:var(--ink);border-color:var(--ink);color:var(--surface)}.qc-stg-b.fin.on{background:var(--off);border-color:var(--off);color:#fff}
 .qc-panel{background:#101418;padding:0;cursor:zoom-in;border-color:#13202A}
 .qc-panel img{object-fit:contain}
@@ -2544,7 +2543,7 @@ function qcRender() {
     return `<label class="qc-tile ${r ? 'done' : ''}${f[k] ? ' pic' : ''}">${f[k] ? `<img src="${f[k + 'Url']}" alt="">` : `<span class="qc-n">${n}</span>`}<span class="qc-l">${f[k] ? (r ? '✓ ' : '') + short : label}</span><span class="qc-s">${sub}</span><input type="file" accept="image/*" ${QC.src() === 'lib' ? '' : 'capture="environment"'} data-qc="${k}"></label>`;
   };
   const ready = (site ? f.panouR : f.panouR) && f.santierR && f.st;
-  const stg = `<div class="qc-stg-w"><div class="qc-stg-h">Stadiul lucrării${f.st ? (f.st0 && f.st === f.st0 ? ' <span>· la fel ca data trecută</span>' : '') : ' <span class="need">· atinge stadiul de acum</span>'}</div><div class="qc-stg" role="group" aria-label="Stadiul lucrării">${STG.map((n, i) => `<button type="button" class="qc-stg-b${f.st === i + 1 ? ' on' : ''}${i === 6 ? ' fin' : ''}" data-st="${i + 1}" aria-pressed="${f.st === i + 1}">${n}</button>`).join('')}</div></div>`;
+  const stg = `<div class="qc-stg-w"><div class="qc-stg-h">Stadiul lucrării${f.st ? (f.st0 && f.st === f.st0 ? ' <span>· la fel ca data trecută</span>' : '') : ' <span class="need">· atinge stadiul de acum</span>'}</div><div class="qc-stg" role="group" aria-label="Stadiul lucrării">${STG.map((n, i) => `<button type="button" class="qc-stg-b${f.st === i + 1 ? ' on' : ''}${i === 6 ? ' fin' : ''}" data-st="${i + 1}" aria-pressed="${f.st === i + 1}">${n}</button>`).join('')}</div>${site && f.st === 7 ? '<div class="qc-fin-note">Finalizat: poza se livrează normal, iar șantierul iese din ciclu</div>' : ''}</div>`;
   const gpsLine = short => `<div class="qc-gps ${g ? 'ok' : 'wait'}">${g ? `● GPS activ (±${Math.round(g.acc || 0)} m)` + (short ? '' : ' · locația se scrie în fiecare poză') : '● Aștept semnalul GPS… Pozele se salvează doar cu locație.'}</div>`;
   const buttons = `<div class="btns" style="margin-top:10px"><button class="btn primary qc-big" id="qcSave" ${ready ? '' : 'disabled'}>Salvează</button><button class="btn ghost" id="qcCancel">Renunță</button></div>`;
   if (site) {
@@ -2556,7 +2555,6 @@ function qcRender() {
         <div class="qc-site"><b>${esc(site.name)}</b></div>
         <label class="qc-tile qcu-stage ${r ? 'done' : ''}${f.santier ? ' has' : ''}">${f.santier ? `<img src="${f.santierUrl}" alt="">` : '<span class="qc-n">Na</span>'}<span class="qcu-t"><span class="qc-l">${r ? '✓ ' : ''}Stadiu șantier</span><span class="qc-s">${sub}</span></span><input type="file" accept="image/*" capture="environment" data-qc="santier"></label>
         ${stg}
-        <label class="qcu-fin${f.fin ? ' on' : ''}"><input type="checkbox" id="qcFin" ${f.fin ? 'checked' : ''}><span><b>Lucrare finalizată</b><span class="qc-s">stadiul se salvează și se livrează normal</span></span></label>
         ${gpsLine(true)}
         <div class="sub" id="qcProg" style="margin-top:4px;color:var(--ink)"></div>
         ${buttons}
@@ -2640,7 +2638,6 @@ function qcPicked(e) {
   { const u = f[k + 'Url'], im = new Image(); im.onload = () => { const w = im.naturalWidth > im.naturalHeight * 1.1; if (QC.f === f && f[k + 'Url'] === u && w !== f[k + 'Wide']) { f[k + 'Wide'] = w; qcRender(); } }; im.src = u; }
   qcRender(); qcPrepare(f, k, f[k + 'G']);
 }
-$('#qc').addEventListener('change', e => { if (e.target.id !== 'qcFin' || !QC.f) return; const f = QC.f; f.fin = e.target.checked; if (f.fin) f.st = 7; else if (f.st === 7) f.st = f.st0 || null; qcRender(); });
 $('#qc').addEventListener('click', async e => {
   const id = e.target.id; const f = QC.f; if (!f) return;
   if (id === 'qcCancel' || id === 'qcBack') { qcClose(); return; }
