@@ -1438,10 +1438,8 @@ function buildChips() {
   const cnt = { due: 0, ac: 0, wait: 0, off: 0 };
   for (const s of S.sites.values()) cnt[pinSt(s)]++;
   const C = [['due', 'De actualizat', 'var(--due)'], ['ac', 'Neverificate', 'var(--ac)'], ['wait', 'Actualizate', 'var(--wait)'], ['off', 'Finalizate', 'var(--off)']];
-  // admin only: the sites whose next photo also goes to client 2 (operators see nothing of this)
-  let c2chip = '';
-  if (!isOp() && typeof C2 !== 'undefined' && C2.on) { let n = 0; for (const s of S.sites.values()) if (status(s) === 'due' && C2.due(s)) n++; c2chip = `<button class="chip" data-k="c2" aria-pressed="${!!S.onlyC2}" title="De actualizat, trecute de ${C2_DAYS} de zile de la ultima trimitere către clientul 2"><span class="dot" style="background:#0E9F8A"></span>Client 2 <b class="num">${n}</b></button>`; }
-  else S.onlyC2 = false;
+  // 11.10.2026 Ionuț: no „Client 2” filter on the map (the client 2 bookkeeping itself stays as it was)
+  const c2chip = ''; S.onlyC2 = false;
   $('#chips').innerHTML = C.map(([k, l, c]) => `<button class="chip" data-k="${k}" aria-pressed="${S.show[k]}"><span class="dot" style="background:${c}"></span>${l} <b class="num">${cnt[k]}</b></button>`).join('') + c2chip;
 }
 function buildLocOptions() {
@@ -1644,7 +1642,7 @@ function viewRoute() {
   const pending = stops.filter(s => !S.route.done.includes(s.id));
   const head = `<div class="row sp"><h2>${S.route.name ? esc(S.route.name) : 'Traseul curent'}</h2>${stops.length ? `<button class="btn sm ghost danger" data-act="clearRoute">${S.cfClr && Date.now() - S.cfClr < 8000 ? 'Confirmă ștergerea' : 'Șterge traseul'}</button>` : ''}</div>`;
   // the ways to build a route: a zone, the way to work or home, or just exploring
-  const build = `<div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · ia toate șantierele de actualizat din zona de pe ecran sau din zona pe care o desenezi cu degetul, în ordinea cea mai rapidă
+  const build = `<div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · ia toate șantierele de actualizat din zona de pe ecran sau din zona pe care o desenezi cu degetul, în ordine, zonă cu zonă
     <div class="btns" style="margin-top:8px"><button class="btn amber" data-act="areaMode">Zona de pe ecran</button><button class="btn amber" data-act="areaDraw">✏️ Desenează zona</button></div></div>
   ${commuteBox()}
   <button class="btn" style="width:100%;margin-top:10px" data-act="scout">🧭 Explorare · fără traseu</button>`;
@@ -3282,6 +3280,19 @@ function solveOrder(C, fixed, endFixed) {
   return bo;
 }
 
+// two legs of the order that cross on the map: the part between them is walked the other way (the first and the last stop stay)
+function uncross(o, P) {
+  o = o.slice(); const xy = i => [P[o[i]].lng, P[o[i]].lat * 1.0];
+  const f = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  for (let guard = 0, ch = true; ch && guard < 400; guard++) {
+    ch = false;
+    for (let i = 0; i + 1 < o.length && !ch; i++) for (let j = i + 2; j + 1 < o.length; j++) {
+      const a = xy(i), b = xy(i + 1), c = xy(j), d = xy(j + 1);
+      if (f(a, b, c) * f(a, b, d) < 0 && f(c, d, a) * f(c, d, b) < 0) { const seg = o.slice(i + 1, j + 1).reverse(); o.splice(i + 1, seg.length, ...seg); ch = true; break; }
+    }
+  }
+  return o;
+}
 // stops whose site is no longer "De actualizat" (photographed on an older version of the app, or while this phone was closed) are not open any more
 function routeTidy() {
   if (S.route.stops.length < 2) return 0;   // "Navighează" to a single site works for any site
@@ -3323,9 +3334,16 @@ async function computeRoute(optimize, opts) {
       let f = 0.3;
       if (big) { const rs = []; rows.forEach((row, i) => row.forEach((r, j) => { if (r && r.cost < Infinity && i !== j) { const h = hav(pts[okIdx[i]], pts[okIdx[j]]) * 1000; if (h > 300) rs.push(r.cost / h); } })); rs.sort((x, y) => x - y); if (rs.length) f = rs[rs.length >> 1]; }
       rows.forEach((row, i) => C.push(row.map((r, j) => r && r.cost < Infinity ? r.cost : big ? hav(pts[okIdx[i]], pts[okIdx[j]]) * 1000 * f * 1.1 + 30 : 1e9)));
-      routeMsg('Aleg ordinea cea mai rapidă…'); await tick();
+      routeMsg('Aleg ordinea, zonă cu zonă…'); await tick();
       // every route, short or long, is the fastest order through all its stops (the "client 2 first" rule for long routes was removed on 04.10.2026)
-      order = solveOrder(C, !!start, endOk).map(k => okIdx[k]);
+      // 11.10.2026 Ionuț: the stops are numbered by closeness on the map, area by area, not only by the fastest driving time
+      // (one-way streets made the fastest order jump between areas). Cost = 70% street time (both ways averaged) + 30% distance
+      // as the crow flies, at the average street speed of this route; then any two legs that still cross on the map are untangled.
+      const P = okIdx.map(i => pts[i]), H = P.map(a => P.map(b => hav(a, b) * 1000));
+      let ts = 0, hs = 0; C.forEach((r, i) => r.forEach((v, j) => { if (i !== j && v < 1e8) { ts += v; hs += H[i][j]; } }));
+      const sp = hs ? ts / hs : 0.1;
+      const G = C.map((r, i) => r.map((v, j) => 0.7 * (Math.min(v, 1e7) + Math.min(C[j][i], 1e7)) / 2 + 0.3 * H[i][j] * sp));
+      order = uncross(solveOrder(G, !!start, endOk), P).map(k => okIdx[k]);
       const newPending = order.filter(i => !start || i > 0).map(i => pts[i].id).filter(id => id && id !== DEST_ID);
       // stops added or removed while this was being computed are respected: nothing the user did in the meantime is lost
       const open = S.route.stops.filter(id => !S.route.done.includes(id));
@@ -3408,7 +3426,7 @@ function routeSection() {
     html += `<div class="stats"><div class="stat"><b class="num">${(t.dist / 1000).toFixed(1).replace('.', ',')}</b><span>km de parcurs</span></div><div class="stat"><b class="num">${fmtTime(t.time)}</b><span>${S.mode === 'car' ? 'de condus' : 'cu scuterul'}</span></div><div class="stat"><b class="num">${fmtTime(t.time + pending.length * STOP_S)}</b><span>cu ${STOP_LBL}/oprire</span></div></div>
     <button class="btn primary" style="width:100%;height:50px;font-size:16px" data-act="navStart">▶ ${RS.get() ? 'Continuă navigarea' : 'Pornește navigarea'}</button>`;
   } else if (pending.length && !S.routeMsg) {
-    html += `<div class="note" style="margin-top:8px">Se calculează cel mai rapid traseu…</div>`;
+    html += `<div class="note" style="margin-top:8px">Se calculează traseul…</div>`;
   }
   // an outing in progress can be closed by hand: the summary appears, what is left stays in the route
   if (RS.get()) html += `<button class="btn" style="width:100%;margin-top:8px" data-act="rsEnd">Încheie traseul</button>`;
