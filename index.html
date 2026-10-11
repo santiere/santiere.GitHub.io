@@ -1457,6 +1457,7 @@ function refresh() {
   $('#selText').textContent = S.selectMode ? (n ? n + ' în traseu · atinge pinii' : 'Atinge pinii de pe hartă') : '';
   updateMap();
   if (['card', 'site', 'list', 'route'].includes(S.view)) render();
+  if (typeof routeAutoMaybe === 'function') routeAutoMaybe();
 }
 
 /* ============ sheet ============ */
@@ -3294,6 +3295,24 @@ function uncross(o, P) {
   return o;
 }
 // stops whose site is no longer "De actualizat" (photographed on an older version of the app, or while this phone was closed) are not open any more
+// 11.10.2026: until the route is computed on the streets (no GPS yet, or the graph still loading), the stops are at least numbered
+// by closeness on the map, never in the order they were added
+function geoOrderOpen() {
+  const done = S.route.stops.filter(id => S.route.done.includes(id));
+  const P = S.route.stops.filter(id => !S.route.done.includes(id)).map(id => S.sites.get(id)).filter(Boolean);
+  if (P.length < 3) return;
+  const pts = (S.me ? [S.me] : []).concat(P), H = pts.map(a => pts.map(b => hav(a, b)));
+  const o = uncross(solveOrder(H, !!S.me, false), pts);
+  const ids = o.filter(i => !S.me || i > 0).map(i => pts[i].id);
+  const missing = S.route.stops.filter(id => !S.route.done.includes(id) && !ids.includes(id));
+  S.route.stops = done.concat(ids, missing); saveRouteSoon(); updateMap();
+}
+// the route is computed by itself as soon as it has stops and is not computed yet, from any screen (not only the "Traseu" tab)
+function routeAutoMaybe() {
+  if (S.navOn || S.routing || S.cmBusy || S.scout) return;
+  if (!S.route.stops.some(id => !S.route.done.includes(id)) || navValid() || S.autoSig === routeSig()) return;
+  S.autoSig = routeSig(); setTimeout(() => { if (!S.routing && !navValid()) computeRoute(true, { fit: false }); }, 400);
+}
 function routeTidy() {
   if (S.route.stops.length < 2) return 0;   // "Navighează" to a single site works for any site
   let n = 0;
@@ -3312,7 +3331,7 @@ async function computeRoute(optimize, opts) {
     await loadGraph();
     routeMsg('Caut străzile…'); await tick();
     // the route always starts from where you are
-    if (!S.me) { routeMsg('Aștept locația ta (GPS) ca punct de plecare…'); if (typeof locateNow === 'function') locateNow(); render(); return; }
+    if (!S.me) { if (optimize) geoOrderOpen(); routeMsg('Aștept locația ta (GPS) ca punct de plecare…'); if (typeof locateNow === 'function') locateNow(); render(); return; }
     const start = { lat: S.me.lat, lng: S.me.lng, label: 'Locația mea' };
     const dest = typeof DEST !== 'undefined' ? DEST.get() : null;   // "drum cu șantiere": the route ends at home / at work
     const pts = (start ? [start] : []).concat(pending, dest ? [{ lat: dest.lat, lng: dest.lng, name: dest.label, id: DEST_ID }] : []);
