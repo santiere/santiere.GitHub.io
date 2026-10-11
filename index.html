@@ -1103,7 +1103,7 @@ function dupBtn(s) {
   const nr = dupNear(s); if (!nr) return '';
   const cf = S.cfDup && S.cfDup.id === s.id && Date.now() - S.cfDup.t < 8000;
   return `<div class="dup-box"><div class="sub">La ${nr.m} m mai e un șantier: <b style="color:var(--ink)">${esc(nr.s.name)}</b>. Dacă e același, șterge-l pe acesta.</div>
-    <button class="btn ${cf ? 'amber' : 'ghost danger'}" data-act="dupDel" data-id="${s.id}">${cf ? 'Confirmă: șterg „' + esc(s.name) + '”, rămâne „' + esc(nr.s.name) + '”' : 'Șterge duplicat'}</button></div>`;
+    <button class="btn ${cf ? 'amber' : 'ghost danger'}" data-act="dupDel" data-id="${s.id}">${cf ? 'Confirmă' : 'Șterge duplicat'}</button></div>`;
 }
 const rawSite = id => { for (const [sh, d] of Object.entries(S.shards)) { const x = d && d.s && d.s[id]; if (x) return [sh, x]; } return null; };
 const stersSent = id => { try { const m = JSON.parse(localStorage.getItem('harta_sters_sent') || '{}'); m[id] = 1; localStorage.setItem('harta_sters_sent', JSON.stringify(m)); } catch (e) {} };
@@ -1413,7 +1413,7 @@ async function initDb() {
   claude.use('assets').then(a => { assets = a; if (S.view === 'site' || S.view === 'add') render(); }).catch(() => {});
   claude.use('downloads').then(d => { downloads = d; }).catch(() => {});
   if (!db) { S.loaded = true; render(); return; }
-  setTimeout(() => OB.load(), 1500); setTimeout(() => ACT.load(), 800);
+  setTimeout(() => OB.load(), 1500); setTimeout(() => ACT.load(), 800); PLACES.restore();
   db.collection('sites').onSnapshot(snap => {
     for (const d of snap.docs) S.shards[d.id] = d.data();
     for (const ch of snap.docChanges()) if (ch.type === 'removed') delete S.shards[ch.doc.id];
@@ -1643,8 +1643,8 @@ function viewRoute() {
   const pending = stops.filter(s => !S.route.done.includes(s.id));
   const head = `<div class="row sp"><h2>${S.route.name ? esc(S.route.name) : 'Traseul curent'}</h2>${stops.length ? `<button class="btn sm ghost danger" data-act="clearRoute">${S.cfClr && Date.now() - S.cfClr < 8000 ? 'Confirmă ștergerea' : 'Șterge traseul'}</button>` : ''}</div>`;
   // the ways to build a route: a zone, the way to work or home, or just exploring
-  const build = `<div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · ia toate șantierele de actualizat din zona de pe ecran sau din zona pe care o desenezi cu degetul, în ordine, zonă cu zonă
-    <div class="btns" style="margin-top:8px"><button class="btn amber" data-act="areaMode">Zona de pe ecran</button><button class="btn amber" data-act="areaDraw">✏️ Desenează zona</button></div></div>
+  const build = `<div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · ia toate șantierele de actualizat din zona pe care o desenezi cu degetul, în ordine, zonă cu zonă
+    <div class="btns" style="margin-top:8px"><button class="btn amber" data-act="areaDraw">✏️ Desenează zona</button></div></div>
   ${commuteBox()}
   <button class="btn" style="width:100%;margin-top:10px" data-act="scout">🧭 Explorare · fără traseu</button>`;
   const saved = `${trSentList()}
@@ -1874,9 +1874,13 @@ const RS = {
 };
 /* ============ "Drum cu șantiere": from where I am to home / to work, with a detour through at least N sites to update ============ */
 const PLACE_NAMES = { work: ['🏢', 'Serviciu', 'Spre serviciu'], home: ['🏠', 'Acasă', 'Spre casă'] };
-const PLACES = {   // my two addresses, kept on this phone only
+const PLACES = {   // my two addresses, kept on this phone (11.10.2026: also in the phone's database, so they stay set until changed)
   get() { if (!this.v) { try { this.v = JSON.parse(localStorage.getItem('harta_places') || '{}') || {}; } catch (e) { this.v = {}; } } return this.v; },
-  save() { try { localStorage.setItem('harta_places', JSON.stringify(this.get())); } catch (e) {} },
+  save() { try { localStorage.setItem('harta_places', JSON.stringify(this.get())); } catch (e) {} try { if (db) db.doc('setari/locuri').set(JSON.parse(JSON.stringify(this.get()))); } catch (e) {} },
+  async restore() {   // the browser storage was emptied (iOS may do it): take them back from the database
+    const P = this.get(); if (P.work || P.home || !db) return;
+    try { const d = await db.doc('setari/locuri').get(); const v = d.exists && d.data(); if (v && (v.work || v.home)) { this.v = v; try { localStorage.setItem('harta_places', JSON.stringify(v)); } catch (e) {} if (S.view === 'route') render(true); } } catch (e) {}
+  },
   n() { const n = +this.get().n; return n >= 2 && n <= 30 ? n : 10; },
 };
 const DEST = {     // where the current route ends (null: at its last stop)
@@ -1936,7 +1940,8 @@ async function placeFind() {
   const E = S.placeForm || (S.placeForm = { q: '', res: null }); const el = $('#plQ'); if (el) E.q = el.value.trim();
   if (E.q.length < 3) { E.err = 'Scrie strada și numărul.'; render(true); return; }
   if (E.busy) return; E.busy = true; E.err = ''; E.res = null; render(true);
-  try { E.res = await geocode(E.q); if (!E.res.length) E.err = 'Nu am găsit adresa. Scrie strada, numărul și orașul, sau alege locul pe hartă.'; }
+  try { E.res = await geocode(E.q); if (!E.res.length) E.err = 'Nu am găsit adresa. Scrie strada, numărul și orașul, sau alege locul pe hartă.';
+    else if (E.res.length === 1 && S.placeEdit) { const k = S.placeEdit, r = E.res[0]; E.busy = false; placeSet(k, { lat: r.lat, lng: r.lng, label: r.label }); render(true); toast(PLACE_NAMES[k][1] + ' salvat: ' + r.label, 3000); return; } }
   catch (e) { E.err = 'Căutarea de adrese nu merge acum (fără internet?). Poți alege locul pe hartă.'; }
   E.busy = false; if (S.placeForm === E && S.view === 'route') render(true);
 }
