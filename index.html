@@ -3264,11 +3264,11 @@ const SPLASH = {
       const got = SPLASH.ORD.reduce((t, k) => t + (SPLASH.done[k] ? SPLASH.W[k] : 0), 0), next = SPLASH.ORD.find(k => !SPLASH.done[k]);
       // while a step is under way the bar keeps creeping into it (never past 90 % of the step), so it never looks stuck
       const goal = next ? got + SPLASH.W[next] * .9 * (1 - Math.exp(-(Date.now() - SPLASH.ts) / 2500)) : 100;
-      SPLASH.shown = Math.min(100, SPLASH.shown + Math.max(.15, (goal - SPLASH.shown) * .12));
+      SPLASH.shown = Math.min(100, SPLASH.shown + Math.max(next ? .15 : 1.5, (goal - SPLASH.shown) * (next ? .12 : .25)));
       if (SPLASH.shown > goal) SPLASH.shown = Math.max(goal, SPLASH.shown - .15);
       document.getElementById('spFill').style.width = SPLASH.shown.toFixed(1) + '%';
       document.getElementById('spPct').textContent = Math.floor(SPLASH.shown) + '%';
-      document.getElementById('spStep').textContent = next ? SPLASH.L[next] : 'Gata';
+      document.getElementById('spStep').textContent = next ? SPLASH.L[next] : SPLASH.shown >= 95 ? 'Gata' : 'Aproape gata…';
       document.getElementById('spSub').textContent = SPLASH.sub;
       if (!next && SPLASH.shown >= 99.5) { SPLASH.gone = true; el.classList.add('out'); setTimeout(() => el.remove(), 400); return; }
       SPLASH.raf = requestAnimationFrame(frame);
