@@ -482,11 +482,38 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .maplibregl-ctrl-attrib{font-size:10px}
 .maplibregl-ctrl-bottom-right{bottom:calc(56px + var(--sab))}
 .maplibregl-ctrl-bottom-left{bottom:calc(56px + var(--sab))}
+
+/* 12.10.2026 (Ionuț): the start screen — the app needs a few seconds to open the data and bring the colleagues' news;
+   until everything is ready a progress bar says what it is doing (it leaves by itself, at the latest after 15 s) */
+.splash{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:24px;color:#F3F5F4;background-color:#172026;
+  background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);background-size:28px 28px;transition:opacity .35s ease}
+.splash.out{opacity:0;pointer-events:none}
+.sp-card{width:100%;max-width:340px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+.sp-ic{width:96px;height:96px}
+.sp-k{font-family:var(--f-display);font-weight:700;font-size:30px;letter-spacing:.01em;line-height:1}
+.sp-t{font-size:14px;color:#AEB9BF;margin-top:-6px}
+.sp-bar{width:100%;height:12px;background:#24313A;border-radius:999px;overflow:hidden;margin-top:18px;box-shadow:inset 0 0 0 1px #2F3E48}
+.sp-bar i{display:block;height:100%;width:0;border-radius:999px;background:repeating-linear-gradient(-45deg,#F0A202 0 10px,#FFC63D 10px 20px);background-size:28px 28px;animation:spmove .9s linear infinite}
+@keyframes spmove{to{background-position:28px 0}}
+.sp-row{width:100%;display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:15px}
+.sp-row b{font-family:var(--f-display);font-size:22px;color:#FFC63D;font-variant-numeric:tabular-nums}
+.sp-sub{width:100%;text-align:left;font-size:13px;color:#8D9AA1;min-height:1.3em;margin-top:-8px}
+@media (prefers-reduced-motion:reduce){.sp-bar i{animation:none}.splash{transition:none}}
 </style>
 
 </head>
 <body>
 <div id="app">
+  <div id="splash" class="splash" role="status" aria-live="polite" aria-label="Se încarcă aplicația">
+    <div class="sp-card">
+      <svg class="sp-ic" viewBox="0 0 32 32" aria-hidden="true"><g fill="none" stroke="#FFC63D" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M22 29V4M25 29V4M22 8l3-3M22 12l3-3M22 16l3-3M22 20l3-3M22 24l3-3M3 4h28M22 4l3-3M28 4v6"/></g><path d="M2 19l8.5-7 8.5 7v10H2z" fill="#D42A1F"/><rect x="8.5" y="22" width="4" height="7" fill="#172026"/></svg>
+      <div class="sp-k">Harta Șantierelor</div>
+      <div class="sp-t">Se pregătește harta</div>
+      <div class="sp-bar"><i id="spFill"></i></div>
+      <div class="sp-row"><span id="spStep">Pornesc…</span><b id="spPct">0%</b></div>
+      <div class="sp-sub" id="spSub"></div>
+    </div>
+  </div>
   <div id="map" role="application" aria-label="Harta șantierelor"></div>
   <div class="top">
     <div class="search">
@@ -1412,13 +1439,13 @@ async function initDb() {
   S.dbOk = !!db;
   claude.use('assets').then(a => { assets = a; if (S.view === 'site' || S.view === 'add') render(); }).catch(() => {});
   claude.use('downloads').then(d => { downloads = d; }).catch(() => {});
-  if (!db) { S.loaded = true; render(); return; }
+  if (!db) { S.loaded = true; render(); SPLASH.mark('loc'); SPLASH.mark('srv'); SPLASH.mark('rez'); return; }
   setTimeout(() => OB.load(), 1500); setTimeout(() => ACT.load(), 800); PLACES.restore();
   db.collection('sites').onSnapshot(snap => {
     for (const d of snap.docs) S.shards[d.id] = d.data();
     for (const ch of snap.docChanges()) if (ch.type === 'removed') delete S.shards[ch.doc.id];
     const first = !S.loaded; S.loaded = true; rebuildSites(); refresh();
-    if (first) { buildLocOptions(); if (S.sites.size) fitAll(); }
+    if (first) { buildLocOptions(); if (S.sites.size) fitAll(); SPLASH.mark('loc', S.sites.size.toLocaleString('ro-RO') + ' șantiere pe telefon'); OB.load(); }
     else buildLocOptions();
   }, e => { toast('Eroare la citirea datelor: ' + e.code); });
   db.collection('trasee').onSnapshot(snap => {
@@ -2807,14 +2834,14 @@ const CLOUD = {
     CLOUD.req('/me').then(me => { window.PWA_me = me; try { localStorage.setItem('harta_me', JSON.stringify(me)); } catch (e) {} const go = () => ACT.loaded ? ACT.mergeServer() : setTimeout(go, 1000); go(); }).catch(() => {});
     try { CLOUD.stateU = JSON.parse(localStorage.getItem('harta_stateU') || '{}'); } catch (e) {}
     try { const ps = JSON.parse(localStorage.getItem('harta_ps') || 'null'); if (ps) CLOUD.pendingState = Object.assign(ps, CLOUD.pendingState || {}); } catch (e) {}
-    CLOUD.pull(); OB.pump();
+    (async () => { for (let i = 0; i < 150 && !S.loaded; i++) await new Promise(r => setTimeout(r, 200)); await CLOUD.pull(); })().finally(() => SPLASH.mark('srv')); OB.pump();
     // sites deleted on this phone before deletions were shared: tell the others once
     if (!isOp()) setTimeout(async () => {
       let sent = {}; try { sent = JSON.parse(localStorage.getItem('harta_sters_sent') || '{}'); } catch (e) {}
       for (const d of Object.values(S.shards)) for (const [id, x] of Object.entries((d && d.s) || {})) if (x && x.sters && !sent[id] && !x.delBy) { await CLOUD.push(id, null, Object.assign({}, x, { id })); sent[id] = 1; }
       try { localStorage.setItem('harta_sters_sent', JSON.stringify(sent)); } catch (e) {}
     }, 6000);
-    RZ.pull(); setTimeout(RZ.send, 3000);
+    RZ.pull().finally(() => SPLASH.mark('rez')); setTimeout(RZ.send, 3000);
     setTimeout(() => PN.sync(), 5000);
     C2.load(); C2.pull(true); setTimeout(() => TR.pull(true), 4000);
     setInterval(() => { if (document.visibilityState === 'visible') { CLOUD.pull().then(() => PN.sync()); RZ.pull(); C2.pull(); if (isOp() || S.view === 'route') TR.pull(); } }, 15000);
@@ -3000,7 +3027,7 @@ const RZ = {
 const OB = {
   items: {}, files: {}, loaded: false, busy: null,
   async load() {
-    if (!db) return;
+    if (!db || OB.started) return; OB.started = true;
     try { const sn = await db.doc('outbox/q').get(); OB.items = (sn.exists && sn.data().items) || {}; } catch (e) { OB.items = {}; }
     const old = Date.now() - 14 * 864e5;
     for (const [k, v] of Object.entries(OB.items)) if (v.sent && v.t < old) delete OB.items[k];
@@ -3217,6 +3244,38 @@ function tryLocate() {
   setInterval(tick, 60000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') tick(); });
 })();
+/* ---------- start screen (12.10.2026, Ionuț): a progress bar until the map, the sites on the phone and the colleagues'
+   news from the server are all in; it says what it is doing and leaves by itself (at the latest after 15 s) ---------- */
+const SPLASH = {
+  ORD: ['map', 'loc', 'srv', 'rez'],
+  W: { map: 25, loc: 35, srv: 32, rez: 8 },
+  L: { map: 'Încarc harta…', loc: 'Deschid șantierele…', srv: 'Aduc noutățile de la colegi…', rez: 'Verific rezervările…' },
+  done: {}, shown: 0, gone: false, ts: Date.now(), raf: 0, sub: '',
+  mark(k, sub) { if (SPLASH.gone || SPLASH.done[k]) return; SPLASH.done[k] = 1; SPLASH.ts = Date.now(); if (sub) SPLASH.sub = sub; SPLASH.loop(); },
+  timeout() {
+    if (SPLASH.gone) return;
+    if (document.querySelector('.lock')) { setTimeout(SPLASH.timeout, 5000); return; }   // still asking for the password
+    SPLASH.sub = 'Restul se încarcă în fundal'; SPLASH.ORD.forEach(k => SPLASH.done[k] = 1); SPLASH.loop();
+  },
+  loop() {
+    if (SPLASH.raf || SPLASH.gone) return;
+    const frame = () => {
+      SPLASH.raf = 0; const el = document.getElementById('splash'); if (!el || SPLASH.gone) { SPLASH.gone = true; return; }
+      const got = SPLASH.ORD.reduce((t, k) => t + (SPLASH.done[k] ? SPLASH.W[k] : 0), 0), next = SPLASH.ORD.find(k => !SPLASH.done[k]);
+      // while a step is under way the bar keeps creeping into it (never past 90 % of the step), so it never looks stuck
+      const goal = next ? got + SPLASH.W[next] * .9 * (1 - Math.exp(-(Date.now() - SPLASH.ts) / 2500)) : 100;
+      SPLASH.shown = Math.min(100, SPLASH.shown + Math.max(.15, (goal - SPLASH.shown) * .12));
+      if (SPLASH.shown > goal) SPLASH.shown = Math.max(goal, SPLASH.shown - .15);
+      document.getElementById('spFill').style.width = SPLASH.shown.toFixed(1) + '%';
+      document.getElementById('spPct').textContent = Math.floor(SPLASH.shown) + '%';
+      document.getElementById('spStep').textContent = next ? SPLASH.L[next] : 'Gata';
+      document.getElementById('spSub').textContent = SPLASH.sub;
+      if (!next && SPLASH.shown >= 99.5) { SPLASH.gone = true; el.classList.add('out'); setTimeout(() => el.remove(), 400); return; }
+      SPLASH.raf = requestAnimationFrame(frame);
+    };
+    SPLASH.raf = requestAnimationFrame(frame);
+  },
+};
 /* ============ road routing + turn-by-turn navigation ============ */
 const graphP = {};
 const MODES = { car: 'Mașină', scooter: 'Scuter' };
@@ -4141,9 +4200,10 @@ function viewActiv() {
 function boot() {
   const ok = initMap();
   if (!ok) { $('#map').innerHTML = '<div class="empty" style="padding-top:40vh">Harta nu s-a putut încărca. Reîncarcă pagina.</div>'; }
+  SPLASH.loop(); setTimeout(SPLASH.timeout, 15000);
   buildChips();
-  if (window.claude && claude.use) initDb(); else { S.dbOk = false; S.loaded = true; }
-  if (ok) map.once('load', tryLocate);
+  if (window.claude && claude.use) initDb(); else { S.dbOk = false; S.loaded = true; ['loc', 'srv', 'rez'].forEach(k => SPLASH.mark(k)); }
+  if (ok) { map.once('load', tryLocate); map.once('load', () => SPLASH.mark('map')); } else SPLASH.mark('map');
 }
 if (window.maplibregl) boot();
 else { const load = (src, next) => { const sc = document.createElement('script'); sc.src = src; sc.onload = boot; sc.onerror = next; document.head.appendChild(sc); };
