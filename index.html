@@ -1678,8 +1678,6 @@ function viewRoute() {
   ${S.routes.length ? `<h3>Trasee salvate</h3>${S.routes.map(r => `<div class="leg"><span><b>${esc(r.name || 'Fără nume')}</b> <span class="sub">· ${(r.stops || []).length} opriri</span></span><span class="row"><button class="btn sm" data-act="loadRoute" data-id="${r.id}">Încarcă</button><button class="btn sm ghost danger" data-act="delRoute" data-id="${r.id}">Șterge</button></span></div>`).join('')}` : ''}`;
   if (!stops.length) return `${head}
   ${build}
-  <div class="note" style="margin-top:10px">Sau alege tu oricâte șantiere (minim 2), în orice ordine: butonul de traseu de pe hartă, „+ Active din zonă”, sau bifează-le din Listă. Ordinea o stabilesc eu.</div>
-    <div class="btns" style="margin-top:10px"><button class="btn" data-act="selMode">Alege pe hartă</button><button class="btn" data-act="tab" data-v="list">Din listă</button></div>
   ${saved}
   <div style="height:10px"></div>`;
   // a route exists: the navigation part comes first, then the other details, and the list of stops at the very bottom
