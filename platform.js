@@ -83,7 +83,7 @@
     return new Promise(async resolve => {
       if (!document.body) await new Promise(r => document.addEventListener('DOMContentLoaded', r, { once: true }));
       const el = document.createElement('div'); el.className = 'lock';
-      el.innerHTML = `<form class="lock-card"><div class="lock-k">Harta Șantierelor</div><h2>Parola datelor</h2><p class="sub">${msg || 'Scrie parola primită. O cer o singură dată pe acest telefon.'}</p>
+      el.innerHTML = `<form class="lock-card"><img src="icons/apple-touch-icon.png" width="72" height="72" alt="" style="border-radius:16px;margin-bottom:8px"><div class="lock-k">Harta Șantierelor</div><h2>Parola datelor</h2><p class="sub">${msg || 'Scrie parola primită. O cer o singură dată pe acest telefon.'}</p>
         <input class="in" id="lockPass" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="parola">
         <button class="btn primary" type="submit" style="width:100%;margin-top:12px">Deschide</button><p class="sub" id="lockErr" style="color:var(--danger);min-height:1.4em"></p></form>`;
       document.body.appendChild(el);
