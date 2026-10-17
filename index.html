@@ -586,6 +586,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
   <div class="lb-img" id="lbImg"><img alt=""></div>
 </div>
 
+<script src="pcam.js"></script>
 <script src="lib/NoSleep.min.js"></script>
 <script src="lib/maplibre-gl.js"></script>
 <script>
@@ -2662,6 +2663,10 @@ function qcPicked(e) {
   const k = e.target.dataset && e.target.dataset.qc; if (!k) return;
   const file = e.target.files[0]; if (!file) return;
   const f = QC.f; if (!f || !f.inp || f.inp[k] !== e.target) return;   // a field of a dialog already closed
+  qcSetPhoto(f, k, file);
+}
+function qcSetPhoto(f, k, file) {
+  if (QC.f !== f || f.saving || f.done) return;
   f[k] = file; f[k + 'Url'] = URL.createObjectURL(file); f[k + 'R'] = null; f[k + 'G'] = gpsNow(); f[k + 'Wide'] = true;
   // sideways or upright: the frame takes the shape of the photo
   { const u = f[k + 'Url'], im = new Image(); im.onload = () => { const w = im.naturalWidth > im.naturalHeight * 1.1; if (QC.f === f && f[k + 'Url'] === u && w !== f[k + 'Wide']) { f[k + 'Wide'] = w; qcRender(); } }; im.src = u; }
@@ -2669,6 +2674,10 @@ function qcPicked(e) {
 }
 $('#qc').addEventListener('click', async e => {
   const id = e.target.id; const f = QC.f; if (!f) return;
+  // the panel is photographed with the camera inside the app (real zoom, sharpest frame); the iPhone camera stays one tap away
+  { const t = e.target.closest('label.qc-tile'), inp = t && t.querySelector('input[data-qc="panou"]');
+    if (inp && e.target !== inp && QC.src() !== 'lib' && window.PCAM && PCAM.ok() && !f.saving && !f.done) {
+      e.preventDefault(); PCAM.open(file => qcSetPhoto(f, 'panou', file), inp); return; } }
   if (id === 'qcCancel' || id === 'qcBack') { qcClose(); return; }
   { const b = e.target.closest('[data-st]'); if (b && !f.saving && !f.done) { f.st = +b.dataset.st; if (f.siteId) f.fin = f.st === 7; qcRender(); return; } }
   if (e.target.closest('#qcPanelView') && f.panouUrl) { const s0 = S.sites.get(f.siteId); $('#lbImg').classList.remove('zoom'); $('#lbZoom').textContent = 'Mărește'; $('#lbCap').textContent = 'Panou · ' + (s0 ? s0.name : '') + ' · previzualizare (seara primești originalul)'; $('#lbImg img').src = f.panouUrl; $('#lb').hidden = false; return; }
