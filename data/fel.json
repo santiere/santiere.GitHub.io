@@ -7,7 +7,6 @@
 "s039": "r",
 "s040": "r",
 "s047": "r",
-"s052": "r",
 "s054": "r",
 "s058": "r",
 "s060": "r",
@@ -23,7 +22,6 @@
 "s190": "r",
 "s191": "r",
 "s193": "r",
-"s194": "r",
 "s199": "r",
 "s200": "i",
 "s201": "i",
@@ -193,7 +191,6 @@
 "s1100": "r",
 "s1103": "i",
 "s1121": "i",
-"s1124": "r",
 "s1152": "i",
 "s1186": "r",
 "s1195": "i",
@@ -252,12 +249,11 @@
 "nmv93o5qf19v1": "r",
 "nmvce9ydalq4m": "r",
 "nmvcel7emnfbe": "r",
-"nmvcezawtyj4l": "r",
 "nmvcg2t05h0kg": "r",
 "nmvcguis8nrx7": "r",
 "nmvchg2thu0e5": "r",
-"nmvchucilzuew": "r",
 "nmvciauax4bib": "r",
 "nmvcjgbnv7s45": "i",
-"nmvcfuzfg13gt": "r"
+"nmvcfuzfg13gt": "r",
+"s158": "r"
 }

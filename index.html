@@ -301,7 +301,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .qc-stg-w{flex:none}.qc-fin-note{margin-top:6px;padding:6px 10px;border-radius:10px;font-size:12.5px;font-weight:600;background:color-mix(in srgb,var(--off) 14%,var(--surface));color:var(--ink)}.qc-tiles+.qc-stg-w{margin-top:12px}.qc-stg-h{font-size:12.5px;font-weight:600;margin:2px 0 5px}.qc-stg-h span{font-weight:500;color:var(--muted)}.qc-stg-h .need{color:var(--amber,#F0A202)}
 .zone-h{margin:12px 0 6px;padding:6px 10px;border-radius:10px;background:var(--surface-2);font-size:12.5px;font-weight:700;letter-spacing:.02em;color:var(--muted)}
 .qc-fel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-bottom:6px}.qc-fel-b{font:inherit;font-size:12.5px;font-weight:600;min-height:32px;padding:4px 2px;border-radius:10px;border:1.5px dashed var(--line);background:var(--surface);color:var(--ink)}.qc-fel-b.on{border-style:solid;border-color:var(--ink);background:var(--ink);color:var(--surface)}
-.qc-stg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.qc-stg-b{font:inherit;font-size:12.5px;font-weight:600;min-height:36px;padding:4px 2px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.qc-stg-b.on{background:var(--ink);border-color:var(--ink);color:var(--surface)}.qc-stg-b.fin.on{background:var(--off);border-color:var(--off);color:#fff}
+.qc-stg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.qc-stg-b{font:inherit;font-size:12.5px;font-weight:600;min-height:36px;padding:4px 2px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:normal;line-height:1.15;overflow:hidden;hyphens:auto}.qc-stg-b.on{background:var(--ink);border-color:var(--ink);color:var(--surface)}.qc-stg-b.fin.on{background:var(--off);border-color:var(--off);color:#fff}
 .qc-panel{background:#101418;padding:0;cursor:zoom-in;border-color:#13202A}
 .qc-panel img{object-fit:contain}
 .qcu-panel{flex:1;min-height:0;aspect-ratio:auto;border-radius:12px}
@@ -945,7 +945,8 @@ const C2_DAYS = 80;    // the second client gets a site again at least 80 days a
 const STOP_S = 30;       // time spent at a site: about half a minute (Ionuț, 04.10.2026)
 const STOP_LBL = STOP_S < 60 ? STOP_S + ' s' : Math.round(STOP_S / 60) + ' min';
 // the stage of the works, chosen by the operator with one tap at every update (kept per visit and in the shared state, for the website)
-const STG = ['Teren', 'Fundație', 'Structură', 'Închideri', 'Fațadă', 'Finisaje', 'Finalizat'];
+// 17.10.2026 (Ionuț): new buildings get the new stages too (same numbers 1–7)
+const STG = ['Organizare și săpătură', 'Fundație și subsol', 'Structură în lucru', 'Structură gata (la roșu)', 'Închideri și tâmplărie', 'Fațadă și finisaje', 'Finalizat'];
 // 17.10.2026 (Ionuț): renovations of existing buildings (r) and ground-level works — water, sewage, gas, heating networks,
 // tram lines, roads (i) — have their own stages; same numbers 1–7 as new buildings (n), so everything else stays the same
 const STGF = { n: STG, r: ['Organizare', 'Schelă și desfaceri', 'Consolidare', 'Tâmplărie și acoperiș', 'Termoizolare', 'Finisaj fațadă', 'Finalizat'], i: ['Organizare', 'Desfaceri', 'Săpături', 'Montaj', 'Umpluturi', 'Refacere', 'Finalizat'] };
@@ -961,7 +962,8 @@ let STMAP = {};
 fetch('data/stadii.json').then(r => r.ok ? r.json() : {}).then(j => { STMAP = j || {}; if (typeof refresh === 'function' && S && S.loaded) refresh(); }).catch(() => {});
 function stOf(s) {
   if (!s) return { st: 0, d: '' };
-  const own = +s.st || 0, od = s.stD || '', e = STMAP[s.id];
+  // 17.10.2026 (Ionuț): new buildings got new stages; a stage chosen before then (old names) is read on the new scale
+  const od = s.stD || '', own = felOf(s) === 'n' && od && od <= '2026-10-17' ? [0, 1, 2, 3, 5, 6, 6, 7][+s.st || 0] : +s.st || 0, e = STMAP[s.id];
   if (!e || !e[0]) return { st: own, d: od };
   if (own && od > e[1]) return { st: own, d: od };   // 17.10.2026: the photo re-check wins on the same day, a newer app visit wins
   return { st: +e[0], d: e[1], est: true };
