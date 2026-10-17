@@ -486,7 +486,8 @@ ol.steps .mi{flex:none;color:var(--ink)}
 /* 12.10.2026 (Ionuț): the start screen — the app needs a few seconds to open the data and bring the colleagues' news;
    until everything is ready a progress bar says what it is doing (it leaves by itself, at the latest after 15 s) */
 .splash{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:24px;color:#F3F5F4;
-  background-color:#07101A;background-image:linear-gradient(180deg,#07101A 0,rgba(7,16,26,.5) 45%,rgba(7,16,26,0) 75%),url(icons/map-strip.jpg);background-size:auto,auto 300px;background-position:0 0,-330px 100%;background-repeat:no-repeat,repeat-x;transition:opacity .35s ease}
+  background-color:#07101A;background-image:url(icons/splash-bg.jpg);background-size:cover;background-position:center;background-repeat:no-repeat;transition:opacity .35s ease}
+@media (orientation:landscape){.splash{background-image:url(icons/splash-bg-wide.jpg)}}
 .splash.out{opacity:0;pointer-events:none}
 .sp-card{width:100%;max-width:340px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
 .sp-logo{display:block;width:min(330px,86vw);height:auto;margin-bottom:6px}
