@@ -955,6 +955,18 @@ fetch('data/fel.json').then(r => r.ok ? r.json() : {}).then(j => { FELMAP = j ||
 const felOf = s => (s && (s.fel || FELMAP[s.id])) || 'n';
 const stgOf = fel => STGF[fel] || STG;
 const stgName = (n, s) => stgOf(felOf(s))[(+n || 0) - 1] || '';
+// 17.10.2026 (Ionuț): the stage judged from the site photos (data/stadii.json: id -> [stage, date]) shows on every site in the app.
+// The stage chosen in the app wins when it is newer; for renovations / ground-level works also when it is from the same day
+// or later, never an older one given on the new-building scale. Kept apart from s.st, so it is never sent as a phone's choice.
+let STMAP = {};
+fetch('data/stadii.json').then(r => r.ok ? r.json() : {}).then(j => { STMAP = j || {}; if (typeof refresh === 'function' && S && S.loaded) refresh(); }).catch(() => {});
+function stOf(s) {
+  if (!s) return { st: 0, d: '' };
+  const own = +s.st || 0, od = s.stD || '', e = STMAP[s.id];
+  if (!e || !e[0]) return { st: own, d: od };
+  if (own && (od > e[1] || (felOf(s) === 'n' && od === e[1]))) return { st: own, d: od };
+  return { st: +e[0], d: e[1], est: true };
+}
 const FORCED = '1970-01-01';   // "De actualizat" set by hand by the admin, whatever the dates say
 const STADII = ['Organizare de șantier', 'Săpătură / fundații', 'Structură', 'Închideri / acoperiș', 'Finisaje / instalații', 'Finalizat'];
 const pad = n => String(n).padStart(2, '0');
@@ -1610,7 +1622,7 @@ function viewSite() {
     <div class="kicker"><span class="kid">Șantier ${esc(s.id.toUpperCase())}</span>${pillShort(s)}</div>
     <h2>${esc(s.name)}</h2>
     <div class="sub num" style="margin-top:4px">${k === 'off' ? 'Lucrare finalizată' : lastUpd(s) ? 'Actualizat ' + roDate(lastUpd(s)) + (k === 'wait' ? ' · din nou la ' + roDate(addDays(lastUpd(s), CYCLE)) : '') : 'Neactualizat încă'}</div>
-    ${s.st ? `<div class="sub" style="margin-top:2px">Stadiu: <b>${stgName(s.st, s)}</b>${s.stD ? ' · ' + roDate(s.stD) : ''}</div>` : ''}
+    ${(() => { const e = stOf(s); return e.st ? `<div class="sub" style="margin-top:2px">Stadiu: <b>${stgName(e.st, s)}</b>${e.d ? ' · ' + roDate(e.d) : ''}${e.est ? ' · din poză' : ''}</div>` : ''; })()}
   </div>
   <div class="btns" style="margin-top:12px">
     ${stageBtn(s)}
@@ -2649,7 +2661,7 @@ async function qcLoadPanel(f) {
 function qcOpen(o) {
   const s0 = o.siteId ? S.sites.get(o.siteId) : null, first = acNew(s0);
   const f = QC.f = first ? { siteId: null, id: o.siteId, acId: o.siteId } : { siteId: o.siteId || null, id: o.siteId ? null : uid('n') };
-  f.st = f.siteId && s0 && +s0.st && +s0.st < 7 ? +s0.st : null; f.st0 = f.st;
+  { const e = stOf(s0); f.st = f.siteId && s0 && e.st && e.st < 7 ? e.st : null; } f.st0 = f.st;
   f.fel = felOf(s0 || (f.acId ? S.sites.get(f.acId) : null));
   if (!gpsFresh() && typeof locateNow === 'function' && S.geoErr != null) locateNow();
   if (f.siteId) qcLoadPanel(f);
