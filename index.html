@@ -299,6 +299,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .qcu-side{display:contents}
 .qcu .qc-site{order:-1;margin:0;font-size:16px}
 .qc-stg-w{flex:none}.qc-fin-note{margin-top:6px;padding:6px 10px;border-radius:10px;font-size:12.5px;font-weight:600;background:color-mix(in srgb,var(--off) 14%,var(--surface));color:var(--ink)}.qc-tiles+.qc-stg-w{margin-top:12px}.qc-stg-h{font-size:12.5px;font-weight:600;margin:2px 0 5px}.qc-stg-h span{font-weight:500;color:var(--muted)}.qc-stg-h .need{color:var(--amber,#F0A202)}
+.zone-h{margin:12px 0 6px;padding:6px 10px;border-radius:10px;background:var(--surface-2);font-size:12.5px;font-weight:700;letter-spacing:.02em;color:var(--muted)}
 .qc-fel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-bottom:6px}.qc-fel-b{font:inherit;font-size:12.5px;font-weight:600;min-height:32px;padding:4px 2px;border-radius:10px;border:1.5px dashed var(--line);background:var(--surface);color:var(--ink)}.qc-fel-b.on{border-style:solid;border-color:var(--ink);background:var(--ink);color:var(--surface)}
 .qc-stg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.qc-stg-b{font:inherit;font-size:12.5px;font-weight:600;min-height:36px;padding:4px 2px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.qc-stg-b.on{background:var(--ink);border-color:var(--ink);color:var(--surface)}.qc-stg-b.fin.on{background:var(--off);border-color:var(--off);color:#fff}
 .qc-panel{background:#101418;padding:0;cursor:zoom-in;border-color:#13202A}
@@ -1703,7 +1704,11 @@ function viewRoute() {
   ${build}
   ${saved}
   <h3>Opriri</h3>
-  ${stops.map((s, i) => { const done = S.route.done.includes(s.id); return `<div class="stop ${done ? 'done' : ''}"><span class="n num">${i + 1}</span><button class="main" style="border:0;background:none;text-align:left;padding:0;min-width:0" data-act="open" data-id="${s.id}"><div class="t">${esc(s.name)}</div><div class="m">${esc(subtitle(s))} · ${pillHTML(s)}${RZ.other(s.id) && !done ? ` <span class="rz-t">· îl are și ${esc(RZ.other(s.id).n || 'un coleg')}</span>` : ''}</div></button>
+  ${(() => { const Z = S.route.zones; if (!Z || Z.length < 2) return ''; S.zoneOf = new Map(); Z.forEach((z, k) => z.forEach(id => S.zoneOf.set(id, k))); S.zoneSeen = new Set(); return ''; })()}${stops.map((s, i) => { const done = S.route.done.includes(s.id);
+    // 17.10.2026: long routes are shown as sub-routes of ~20 sites
+    const zk = S.route.zones && S.route.zones.length > 1 && S.zoneOf ? S.zoneOf.get(s.id) : undefined;
+    const zh = zk != null && !S.zoneSeen.has(zk) ? (S.zoneSeen.add(zk), `<div class="zone-h">Subtraseul ${zk + 1} din ${S.route.zones.length} · ${S.route.zones[zk].length} șantiere</div>`) : '';
+    return `${zh}<div class="stop ${done ? 'done' : ''}"><span class="n num">${i + 1}</span><button class="main" style="border:0;background:none;text-align:left;padding:0;min-width:0" data-act="open" data-id="${s.id}"><div class="t">${esc(s.name)}</div><div class="m">${esc(subtitle(s))} · ${pillHTML(s)}${RZ.other(s.id) && !done ? ` <span class="rz-t">· îl are și ${esc(RZ.other(s.id).n || 'un coleg')}</span>` : ''}</div></button>
     <span class="mini"><button data-act="up" data-i="${i}" aria-label="Mută în sus">↑</button><button data-act="down" data-i="${i}" aria-label="Mută în jos">↓</button><button data-act="done" data-id="${s.id}" aria-label="Vizitat" style="${done ? 'background:var(--ok);color:#fff;border-color:var(--ok)' : ''}">✓</button><button data-act="toggleStop" data-id="${s.id}" aria-label="Scoate">✕</button></span></div>`; }).join('')}
   <div style="height:10px"></div>`;
 }
@@ -2095,6 +2100,15 @@ function optimizeRoute() {
   const pts = S.route.stops.map(id => S.sites.get(id)).filter(Boolean);
   if (pts.length < 2) return;
   const start = S.me || null;
+  // 17.10.2026: more than 25 sites → sub-routes of ~20, joined where they meet
+  if (pts.length > 25) {
+    const P = (start ? [start] : []).concat(pts), zp = zonePlan(P, (a, b) => hav(P[a], P[b]) * 1000, !!start, false);
+    if (zp) {
+      S.route.stops = zp.order.filter(i => !start || i > 0).map(i => P[i].id);
+      S.route.zones = zp.zones.map(z => z.map(k => P[k].id).filter(Boolean));
+      saveRouteSoon(); refresh(); toast('Ordinea a fost optimizată: ' + zp.zones.length + ' subtrasee de câte ~20 de șantiere'); return;
+    }
+  }
   const rest = pts.slice(); const out = [];
   let cur = start || rest.shift(); if (!start) out.push(cur);
   while (rest.length) { let bi = 0, bd = Infinity; rest.forEach((p, i) => { const d = hav(cur, p); if (d < bd) { bd = d; bi = i; } }); cur = rest.splice(bi, 1)[0]; out.push(cur); }
@@ -2206,7 +2220,7 @@ document.addEventListener('click', async (e) => {
     case 'cancelMove': { const sid = S.moveId; S.moveId = null; S.addForm = null; openSite(sid, 'card'); break; }
     case 'sort': S.sort = t.dataset.v; render(true); break;
     case 'more': S.listMax = (S.listMax || 150) + 150; render(); break;
-    case 'addAll': { const add = visibleSites().filter(s => !S.route.stops.includes(s.id)); if (add.length > 120) { toast('Sunt ' + add.length + ' șantiere. Filtrează mai întâi (zonă sau căutare).'); break; } S.route.stops.push(...add.map(s => s.id)); optimizeRoute(); break; }
+    case 'addAll': { const add = visibleSites().filter(s => !S.route.stops.includes(s.id)); if (add.length > 200) { toast('Sunt ' + add.length + ' șantiere. Filtrează mai întâi (zonă sau căutare).'); break; } S.route.stops.push(...add.map(s => s.id)); optimizeRoute(); break; }
     case 'setActive': await patchSite(id, t.dataset.v === '1' ? { inactiv: true } : { inactiv: false, finBy: '' }); toast(t.dataset.v === '1' ? 'Marcat finalizat' : 'Șantier redeschis'); if (S.view === 'activ') render(); break;
     case 'dupDel': {
       const d0 = S.sites.get(id); if (!d0) break; const nr = dupNear(d0);
@@ -3366,6 +3380,39 @@ function solveOrder(C, fixed, endFixed) {
   return bo;
 }
 
+// 17.10.2026 (Ionuț): long routes (more than 25 sites) are worked out in pieces. First the order of all the sites by the map
+// alone (area by area, nothing jumping back and forth because of one-way streets), then that order is cut into sub-routes
+// of about 20 sites, and each sub-route is put in the fastest order on the real streets with its first and last site kept,
+// so the hop from one sub-route to the next (20 → 21, 40 → 41 …) stays short. A second pass over windows shifted by half a
+// sub-route smooths the joins.
+// P: points (P[0] = my position when fixed, the last = the destination when endFixed); M(i, j): the street cost i → j.
+// Returns null for short routes, else { order: indices into P, zones: the sub-routes in visiting order }.
+function zonePlan(P, M, fixed, endFixed, size) {
+  size = size || 20;
+  const n = P.length, inner = n - (fixed ? 1 : 0) - (endFixed ? 1 : 0);
+  if (inner <= size + 5) return null;
+  const H = P.map(a => P.map(b => hav(a, b) * 1000));
+  let o = uncross(solveOrder(H, fixed, endFixed), P);
+  const a0 = fixed ? 1 : 0, a1 = endFixed ? n - 1 : n;   // positions in o that hold sites
+  const k = Math.ceil(inner / size), sz = inner / k;
+  const cuts = []; for (let z = 0; z <= k; z++) cuts.push(a0 + Math.round(z * sz));
+  // reorder o[from..to) on the streets; the site before `from` (if any) is the fixed entry, o[to-1] stays last unless open
+  const polish = (from, to) => {
+    const keepEnd = to < a1 || endFixed;
+    const head = from > 0 ? o[from - 1] : -1;
+    const seg = o.slice(from, to); if (seg.length < 3) return;
+    const sub = (head >= 0 ? [head] : []).concat(keepEnd ? seg.slice(0, -1) : seg, keepEnd ? [seg[seg.length - 1]] : []);
+    const SM = sub.map(x => sub.map(y => M(x, y)));
+    let r = solveOrder(SM, head >= 0, keepEnd);
+    if (r.length > 3) r = uncross(r, sub.map(x => P[x]));
+    const res = r.map(x => sub[x]).filter(x => x !== head);
+    if (res.length === seg.length) o.splice(from, seg.length, ...res);
+  };
+  for (let z = 0; z < k; z++) polish(cuts[z], cuts[z + 1]);
+  for (let z = 0; z + 1 < k; z++) polish(Math.round((cuts[z] + cuts[z + 1]) / 2), Math.round((cuts[z + 1] + cuts[z + 2]) / 2));
+  const zones = []; for (let z = 0; z < k; z++) zones.push(o.slice(cuts[z], cuts[z + 1]));
+  return { order: o, zones };
+}
 // two legs of the order that cross on the map: the part between them is walked the other way (the first and the last stop stay)
 function uncross(o, P) {
   o = o.slice(); const xy = i => [P[o[i]].lng, P[o[i]].lat * 1.0];
@@ -3387,7 +3434,9 @@ function geoOrderOpen() {
   const P = S.route.stops.filter(id => !S.route.done.includes(id)).map(id => S.sites.get(id)).filter(Boolean);
   if (P.length < 3) return;
   const pts = (S.me ? [S.me] : []).concat(P), H = pts.map(a => pts.map(b => hav(a, b)));
-  const o = uncross(solveOrder(H, !!S.me, false), pts);
+  const zp = zonePlan(pts, (a, b) => H[a][b], !!S.me, false);
+  const o = zp ? zp.order : uncross(solveOrder(H, !!S.me, false), pts);
+  S.route.zones = zp ? zp.zones.map(z => z.map(k => pts[k].id).filter(Boolean)) : null;
   const ids = o.filter(i => !S.me || i > 0).map(i => pts[i].id);
   const missing = S.route.stops.filter(id => !S.route.done.includes(id) && !ids.includes(id));
   S.route.stops = done.concat(ids, missing); saveRouteSoon(); updateMap();
@@ -3447,7 +3496,9 @@ async function computeRoute(optimize, opts) {
       let ts = 0, hs = 0; C.forEach((r, i) => r.forEach((v, j) => { if (i !== j && v < 1e8) { ts += v; hs += H[i][j]; } }));
       const sp = hs ? ts / hs : 0.1;
       const G = C.map((r, i) => r.map((v, j) => 0.7 * (Math.min(v, 1e7) + Math.min(C[j][i], 1e7)) / 2 + 0.3 * H[i][j] * sp));
-      order = uncross(solveOrder(G, !!start, endOk), P).map(k => okIdx[k]);
+      const zp = zonePlan(P, (a, b) => G[a][b], !!start, endOk);   // 17.10.2026: long routes in sub-routes of ~20
+      order = (zp ? zp.order : uncross(solveOrder(G, !!start, endOk), P)).map(k => okIdx[k]);
+      S.route.zones = zp ? zp.zones.map(z => z.map(k => P[k].id).filter(Boolean)) : null;
       const newPending = order.filter(i => !start || i > 0).map(i => pts[i].id).filter(id => id && id !== DEST_ID);
       // stops added or removed while this was being computed are respected: nothing the user did in the meantime is lost
       const open = S.route.stops.filter(id => !S.route.done.includes(id));
