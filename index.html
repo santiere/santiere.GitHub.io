@@ -299,6 +299,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .qcu-side{display:contents}
 .qcu .qc-site{order:-1;margin:0;font-size:16px}
 .qc-stg-w{flex:none}.qc-fin-note{margin-top:6px;padding:6px 10px;border-radius:10px;font-size:12.5px;font-weight:600;background:color-mix(in srgb,var(--off) 14%,var(--surface));color:var(--ink)}.qc-tiles+.qc-stg-w{margin-top:12px}.qc-stg-h{font-size:12.5px;font-weight:600;margin:2px 0 5px}.qc-stg-h span{font-weight:500;color:var(--muted)}.qc-stg-h .need{color:var(--amber,#F0A202)}
+.qc-fel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-bottom:6px}.qc-fel-b{font:inherit;font-size:12.5px;font-weight:600;min-height:32px;padding:4px 2px;border-radius:10px;border:1.5px dashed var(--line);background:var(--surface);color:var(--ink)}.qc-fel-b.on{border-style:solid;border-color:var(--ink);background:var(--ink);color:var(--surface)}
 .qc-stg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.qc-stg-b{font:inherit;font-size:12.5px;font-weight:600;min-height:36px;padding:4px 2px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.qc-stg-b.on{background:var(--ink);border-color:var(--ink);color:var(--surface)}.qc-stg-b.fin.on{background:var(--off);border-color:var(--off);color:#fff}
 .qc-panel{background:#101418;padding:0;cursor:zoom-in;border-color:#13202A}
 .qc-panel img{object-fit:contain}
@@ -944,7 +945,15 @@ const STOP_S = 30;       // time spent at a site: about half a minute (Ionuț, 0
 const STOP_LBL = STOP_S < 60 ? STOP_S + ' s' : Math.round(STOP_S / 60) + ' min';
 // the stage of the works, chosen by the operator with one tap at every update (kept per visit and in the shared state, for the website)
 const STG = ['Teren', 'Fundație', 'Structură', 'Închideri', 'Fațadă', 'Finisaje', 'Finalizat'];
-const stgName = n => STG[(+n || 0) - 1] || '';
+// 17.10.2026 (Ionuț): renovations of existing buildings (r) and ground-level works — water, sewage, gas, heating networks,
+// tram lines, roads (i) — have their own stages; same numbers 1–7 as new buildings (n), so everything else stays the same
+const STGF = { n: STG, r: ['Organizare', 'Schelă și desfaceri', 'Consolidare', 'Tâmplărie și acoperiș', 'Termoizolare', 'Finisaj fațadă', 'Finalizat'], i: ['Organizare', 'Desfaceri', 'Săpături', 'Montaj', 'Umpluturi', 'Refacere', 'Finalizat'] };
+const FELN = { n: 'Clădire nouă', r: 'Reabilitare', i: 'Lucrare la sol' };
+let FELMAP = {};   // which sites are renovations / ground-level works (data/fel.json); the rest are new buildings
+fetch('data/fel.json').then(r => r.ok ? r.json() : {}).then(j => { FELMAP = j || {}; }).catch(() => {});
+const felOf = s => (s && (s.fel || FELMAP[s.id])) || 'n';
+const stgOf = fel => STGF[fel] || STG;
+const stgName = (n, s) => stgOf(felOf(s))[(+n || 0) - 1] || '';
 const FORCED = '1970-01-01';   // "De actualizat" set by hand by the admin, whatever the dates say
 const STADII = ['Organizare de șantier', 'Săpătură / fundații', 'Structură', 'Închideri / acoperiș', 'Finisaje / instalații', 'Finalizat'];
 const pad = n => String(n).padStart(2, '0');
@@ -1592,7 +1601,7 @@ function viewSite() {
   const vd = new Set((s.viz || []).map(v => v.d));
   for (const p of (s.poze || [])) if (!vd.has(p.d)) events.push({ d: p.d, t: 'Poză panou', s: '' });
   for (const v of (s.viz || [])) events.push({ d: v.d, t: 'Vizită', s: v.w });
-  if (vis) for (const [vid, v] of Object.entries(vis)) if (v) events.push({ d: v.d, t: 'Vizită' + (v.st ? ' · ' + stgName(v.st) : ''), s: '', vid, n: (v.poze || []).length });
+  if (vis) for (const [vid, v] of Object.entries(vis)) if (v) events.push({ d: v.d, t: 'Vizită' + (v.st ? ' · ' + stgName(v.st, s) : ''), s: '', vid, n: (v.poze || []).length });
   events.sort((a, b) => (b.d || '').localeCompare(a.d || ''));
   const [k] = statusLabel(s);
   return `<div class="row sp" style="margin:2px 0 8px"><button class="btn sm ghost" data-act="back">‹ Înapoi</button>${isOp() ? '' : `<button class="btn sm act" data-act="edit" data-id="${s.id}">✎ Editează</button>`}</div>
@@ -1600,7 +1609,7 @@ function viewSite() {
     <div class="kicker"><span class="kid">Șantier ${esc(s.id.toUpperCase())}</span>${pillShort(s)}</div>
     <h2>${esc(s.name)}</h2>
     <div class="sub num" style="margin-top:4px">${k === 'off' ? 'Lucrare finalizată' : lastUpd(s) ? 'Actualizat ' + roDate(lastUpd(s)) + (k === 'wait' ? ' · din nou la ' + roDate(addDays(lastUpd(s), CYCLE)) : '') : 'Neactualizat încă'}</div>
-    ${s.st ? `<div class="sub" style="margin-top:2px">Stadiu: <b>${stgName(s.st)}</b>${s.stD ? ' · ' + roDate(s.stD) : ''}</div>` : ''}
+    ${s.st ? `<div class="sub" style="margin-top:2px">Stadiu: <b>${stgName(s.st, s)}</b>${s.stD ? ' · ' + roDate(s.stD) : ''}</div>` : ''}
   </div>
   <div class="btns" style="margin-top:12px">
     ${stageBtn(s)}
@@ -2391,6 +2400,7 @@ async function createSite(o, prog) {
   for (const x of S.sites.values()) { const dd = hav({ lat: o.lat, lng: o.lng }, x); if (dd < nd && x.loc) { nd = dd; near = x; } }
   const site = { name: 'Șantier nou · ' + roDate(d), lat: +o.lat.toFixed(6), lng: +o.lng.toFixed(6), loc: near ? near.loc : cityOf(o.lat, o.lng).name, strada: near && nd < 0.15 ? near.strada || '' : '', ultima: d, inactiv: false, creat: Date.now(), manual: true, deScanat: true, poze: [], panouA: pid, santierA: sid, panouT: o.panouT || '' };
   if (o.st) { site.st = o.st; site.stD = d; }
+  if (o.fel && o.fel !== 'n') site.fel = o.fel;
   const sh = pickShard();
   const ref = db.doc('sites/' + sh); const snap = await ref.get();
   if (snap.exists) await ref.update({ s: { [id]: site } }); else await ref.set({ s: { [id]: site } });
@@ -2407,6 +2417,7 @@ async function acFirstPhoto(site, o) {
   const [pid, sid] = await uploadFiles([o.panou, o.santier], null, true);
   const patch = { lat: +o.lat.toFixed(6), lng: +o.lng.toFixed(6), moved: true, ultima: d, ultimaApp: d, inactiv: false, creat: Date.now(), manual: true, deScanat: true, panouA: pid, santierA: sid, panouT: o.panouT || '' };
   if (o.st) { patch.st = o.st; patch.stD = d; }
+  if (o.fel && o.fel !== 'n') patch.fel = o.fel;
   S.pend[site.id] = Object.assign(S.pend[site.id] || {}, patch);
   await db.doc('sites/' + site._sh).update({ s: { [site.id]: patch } });
   { const sh = S.shards[site._sh], cur = S.sites.get(site.id); if (sh && sh.s && sh.s[site.id]) Object.assign(sh.s[site.id], patch); if (cur) { S.sites.set(site.id, Object.assign({}, cur, patch)); refresh(); } }
@@ -2573,7 +2584,7 @@ function qcRender() {
     return `<label class="qc-tile ${r ? 'done' : ''}${f[k] ? ' pic' : ''}">${f[k] ? `<img src="${f[k + 'Url']}" alt="">` : `<span class="qc-n">${n}</span>`}<span class="qc-l">${f[k] ? (r ? '✓ ' : '') + short : label}</span><span class="qc-s">${sub}</span><input type="file" accept="image/*" ${QC.src() === 'lib' ? '' : 'capture="environment"'} data-qc="${k}"></label>`;
   };
   const ready = (site ? f.panouR : f.panouR) && f.santierR && f.st;
-  const stg = `<div class="qc-stg-w"><div class="qc-stg-h">Stadiul lucrării${f.st ? (f.st0 && f.st === f.st0 ? ' <span>· la fel ca data trecută</span>' : '') : ' <span class="need">· atinge stadiul de acum</span>'}</div><div class="qc-stg" role="group" aria-label="Stadiul lucrării">${STG.map((n, i) => `<button type="button" class="qc-stg-b${f.st === i + 1 ? ' on' : ''}${i === 6 ? ' fin' : ''}" data-st="${i + 1}" aria-pressed="${f.st === i + 1}">${n}</button>`).join('')}</div>${site && f.st === 7 ? '<div class="qc-fin-note">Finalizat: poza se livrează normal, iar șantierul iese din ciclu</div>' : ''}</div>`;
+  const stg = `<div class="qc-stg-w"><div class="qc-stg-h">Stadiul lucrării${f.st ? (f.st0 && f.st === f.st0 ? ' <span>· la fel ca data trecută</span>' : '') : ' <span class="need">· atinge stadiul de acum</span>'}</div>${site ? '' : `<div class="qc-fel" role="group" aria-label="Felul lucrării">${Object.entries(FELN).map(([k, v]) => `<button type="button" class="qc-fel-b${(f.fel || 'n') === k ? ' on' : ''}" data-fel="${k}" aria-pressed="${(f.fel || 'n') === k}">${v}</button>`).join('')}</div>`}<div class="qc-stg" role="group" aria-label="Stadiul lucrării">${stgOf(site ? felOf(site) : f.fel || 'n').map((n, i) => `<button type="button" class="qc-stg-b${f.st === i + 1 ? ' on' : ''}${i === 6 ? ' fin' : ''}" data-st="${i + 1}" aria-pressed="${f.st === i + 1}">${n}</button>`).join('')}</div>${site && f.st === 7 ? '<div class="qc-fin-note">Finalizat: poza se livrează normal, iar șantierul iese din ciclu</div>' : ''}</div>`;
   const gpsLine = short => `<div class="qc-gps ${g ? 'ok' : 'wait'}">${g ? `● GPS activ (±${Math.round(g.acc || 0)} m)` + (short ? '' : ' · locația se scrie în fiecare poză') : '● Aștept semnalul GPS… Pozele se salvează doar cu locație.'}</div>`;
   const buttons = `<div class="btns" style="margin-top:10px"><button class="btn primary qc-big" id="qcSave" ${ready ? '' : 'disabled'}>Salvează</button><button class="btn ghost" id="qcCancel">Renunță</button></div>`;
   if (site) {
@@ -2625,6 +2636,7 @@ function qcOpen(o) {
   const s0 = o.siteId ? S.sites.get(o.siteId) : null, first = acNew(s0);
   const f = QC.f = first ? { siteId: null, id: o.siteId, acId: o.siteId } : { siteId: o.siteId || null, id: o.siteId ? null : uid('n') };
   f.st = f.siteId && s0 && +s0.st && +s0.st < 7 ? +s0.st : null; f.st0 = f.st;
+  f.fel = felOf(s0 || (f.acId ? S.sites.get(f.acId) : null));
   if (!gpsFresh() && typeof locateNow === 'function' && S.geoErr != null) locateNow();
   if (f.siteId) qcLoadPanel(f);
   $('#qc').hidden = false; qcRender();
@@ -2680,6 +2692,8 @@ $('#qc').addEventListener('click', async e => {
       e.preventDefault(); PCAM.open(file => qcSetPhoto(f, 'panou', file), inp); return; } }
   if (id === 'qcCancel' || id === 'qcBack') { qcClose(); return; }
   { const b = e.target.closest('[data-st]'); if (b && !f.saving && !f.done) { f.st = +b.dataset.st; if (f.siteId) f.fin = f.st === 7; qcRender(); return; } }
+  // a new site: new building, renovation or ground-level works — each has its own stages, so the stage is chosen again
+  { const b = e.target.closest('[data-fel]'); if (b && !f.saving && !f.done) { if ((f.fel || 'n') !== b.dataset.fel) { f.fel = b.dataset.fel; f.st = null; } qcRender(); return; } }
   if (e.target.closest('#qcPanelView') && f.panouUrl) { const s0 = S.sites.get(f.siteId); $('#lbImg').classList.remove('zoom'); $('#lbZoom').textContent = 'Mărește'; $('#lbCap').textContent = 'Panou · ' + (s0 ? s0.name : '') + ' · previzualizare (seara primești originalul)'; $('#lbImg img').src = f.panouUrl; $('#lb').hidden = false; return; }
   if (id === 'qcSave') {
     const site = f.siteId ? S.sites.get(f.siteId) : null;
@@ -2707,8 +2721,8 @@ $('#qc').addEventListener('click', async e => {
       } else {
         const gp = f.panouR.gps || g;
         const a0 = f.acId ? S.sites.get(f.acId) : null;
-        const r = a0 ? await acFirstPhoto(a0, { panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt, st: f.st })
-          : await createSite({ id: sid, panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt, st: f.st }, null);
+        const r = a0 ? await acFirstPhoto(a0, { panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt, st: f.st, fel: f.fel })
+          : await createSite({ id: sid, panou: f.panouR.blob, santier: f.santierR.blob, lat: gp.lat, lng: gp.lng, panouT: f.panouR.dt, st: f.st, fel: f.fel }, null);
         const s2 = r.assets || {};
         await OB.add(k, { siteId: sid, siteName: cityDir(gp.lat, gp.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: a0 ? a0.name : 'Șantier nou', nou: 1, stamp: sid, t: Date.now(), p: s2.p, s: s2.s, lat: gp.lat, lng: gp.lng, st: f.st }, files);
       }
@@ -3766,6 +3780,14 @@ function navGlide(to, dur) {
   const step = now => { const k = Math.min(1, (now - t0) / dur); S.meMarker.setLngLat([from.lng + (to[0] - from.lng) * k, from.lat + (to[1] - from.lat) * k]); if (k < 1) S.mkRaf = requestAnimationFrame(step); };
   S.mkRaf = requestAnimationFrame(step);
 }
+// the direction I actually move in, from my own positions at least 8 m apart (null when I have not moved for 15 s)
+function navMoveBrg(c, nowT) {
+  const here = [c.longitude, c.latitude], mv = S.navMove || (S.navMove = {});
+  const d = mv.at ? Router.hav([mv.at[1], mv.at[0]], [c.latitude, c.longitude]) : 0;
+  if (mv.at && d >= 8 && d < 400) { mv.brg = bearingTo(mv.at, here); mv.t = nowT; }
+  if (!mv.at || d >= 8) mv.at = here;
+  return mv.t && nowT - mv.t < 15000 ? mv.brg : null;
+}
 function navGps(c, quiet) {
   try { navGpsInner(c, quiet); } catch (e) { try { console.error('[nav]', e); } catch (x) {} }   // one bad fix must not stop the guidance
 }
@@ -3780,10 +3802,10 @@ function navGpsInner(c, quiet) {
     // direction: the phone's own heading when it gives one; otherwise from the way I actually moved (at least 8 m, so standing still doesn't spin the map)
     const here = [c.longitude, c.latitude], p0 = S.scoutAt;
     const moved = p0 ? Router.hav([p0[1], p0[0]], [c.latitude, c.longitude]) : 0;
-    if (c.heading != null && !isNaN(c.heading) && (c.speed == null || c.speed > 1.5)) brg = c.heading;
+    if (c.heading != null && !isNaN(c.heading) && (c.speed == null || c.speed > 1.2)) brg = c.heading;
     else if (p0 && moved >= 8 && moved < 400) brg = bearingTo(p0, here);
     if (!p0 || moved >= 8) S.scoutAt = here;
-    if (S.navBrg != null) { const d = ((brg - S.navBrg + 540) % 360) - 180; brg = Math.abs(d) < 3 ? S.navBrg : S.navBrg + d * 0.6; }
+    if (S.navBrg != null) { const d = ((brg - S.navBrg + 540) % 360) - 180; brg = Math.abs(d) < 3 ? S.navBrg : Math.abs(d) > 100 ? brg : S.navBrg + d * 0.6; }
     brg = (brg + 360) % 360; S.navBrg = brg; if (S.meMarker) S.meMarker.setRotation(brg);
     if (map && !S.navFree) map.easeTo({ center: here, bearing: brg, zoom: navSpeedZoom(c), pitch: 50, padding: navPad(0, 0, 120), duration: quiet ? 400 : dur, easing: t => t });
     S.navGpsFollow = true; return;
@@ -3835,10 +3857,22 @@ function navGpsInner(c, quiet) {
   // camera: follow me, pointing the way I drive
   S.navGpsFollow = true;
   let brg = map ? map.getBearing() : 0;
-  if (c.heading != null && !isNaN(c.heading) && (c.speed == null || c.speed > 1.5)) brg = c.heading;
-  else if (pr.d <= limit) { const i2 = Math.min(L.coords.length - 1, pr.i + 1); brg = bearingTo(L.coords[pr.i], L.coords[i2]); }
-  // steady direction: ignore tiny wobbles, soften the rest
-  if (S.navBrg != null) { const d = ((brg - S.navBrg + 540) % 360) - 180; brg = Math.abs(d) < 3 ? S.navBrg : S.navBrg + d * 0.6; }
+  // 17.10.2026 (Ionuț): the map turned very slowly when I turned back on the same road: it followed the direction of the route
+  // (still the old way, since I was still on it) until the phone gave its own heading above ~5 km/h. Now the way I actually
+  // move (my own fixes, 8 m apart) decides whenever it disagrees with the route; going the wrong way recalculates the route.
+  const mvb = navMoveBrg(c, nowT);
+  const hdg = c.heading != null && !isNaN(c.heading) && (c.speed == null || c.speed > 1.2) ? c.heading : null;
+  let rb = null; if (pr.d <= limit) { const i2 = Math.min(L.coords.length - 1, pr.i + 1); rb = bearingTo(L.coords[pr.i], L.coords[i2]); }
+  const diff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+  if (hdg != null) brg = hdg;
+  else if (mvb != null && (rb == null || diff(mvb, rb) > 60)) brg = mvb;
+  else if (rb != null) brg = rb;
+  else if (mvb != null) brg = mvb;
+  const way = hdg != null ? hdg : mvb;
+  if (!quiet) tr.wrong = rb != null && way != null && diff(way, rb) > 120 ? (tr.wrong || 0) + 1 : 0;
+  if (!quiet && tr.wrong >= 2 && Date.now() - tr.lastReroute > 20000) { tr.wrong = 0; navReroute(); }
+  // steady direction: ignore tiny wobbles, soften the rest; a real turn-around is shown at once
+  if (S.navBrg != null) { const d = ((brg - S.navBrg + 540) % 360) - 180; brg = Math.abs(d) < 3 ? S.navBrg : Math.abs(d) > 100 ? brg : S.navBrg + d * 0.6; }
   brg = (brg + 360) % 360; S.navBrg = brg;
   if (S.meMarker) S.meMarker.setRotation(brg);
   if (map && !S.navFree) {
