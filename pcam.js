@@ -231,7 +231,7 @@
     }
     else if (a === 'sys') {
       const inp = st.sys; close();
-      if (inp) inp.click();   // the iPhone camera, as before (this tap is the user's own)
+      if (inp) { window.PCAM.sysPass = true; inp.click(); setTimeout(() => { window.PCAM.sysPass = false; }, 1500); }   // the iPhone camera, as before (this tap is the user's own)
     }
   }
 

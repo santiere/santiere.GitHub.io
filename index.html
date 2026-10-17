@@ -2715,8 +2715,11 @@ $('#qc').addEventListener('click', async e => {
   const id = e.target.id; const f = QC.f; if (!f) return;
   // the panel is photographed with the camera inside the app (real zoom, sharpest frame); the iPhone camera stays one tap away
   { const t = e.target.closest('label.qc-tile'), inp = t && t.querySelector('input[data-qc="panou"]');
-    if (inp && e.target !== inp && QC.src() !== 'lib' && window.PCAM && PCAM.ok() && !f.saving && !f.done) {
-      e.preventDefault(); PCAM.open(file => qcSetPhoto(f, 'panou', file), inp); return; } }
+    // 17.10.2026: the invisible file field covers the whole tile, so a real tap lands on the field itself — it is caught here
+    // too; only the „Camera iPhone” button inside the app's camera lets the field open the iPhone camera (PCAM.sysPass)
+    if (inp && window.PCAM && PCAM.sysPass && e.target === inp) { PCAM.sysPass = false; }
+    else if (inp && QC.src() !== 'lib' && window.PCAM && PCAM.ok() && !f.saving && !f.done) {
+      e.preventDefault(); e.stopPropagation(); PCAM.open(file => qcSetPhoto(f, 'panou', file), inp); return; } }
   if (id === 'qcCancel' || id === 'qcBack') { qcClose(); return; }
   { const b = e.target.closest('[data-st]'); if (b && !f.saving && !f.done) { f.st = +b.dataset.st; if (f.siteId) f.fin = f.st === 7; qcRender(); return; } }
   // a new site: new building, renovation or ground-level works — each has its own stages, so the stage is chosen again
