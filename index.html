@@ -951,7 +951,7 @@ const STG = ['Teren', 'Fundație', 'Structură', 'Închideri', 'Fațadă', 'Fini
 const STGF = { n: STG, r: ['Organizare', 'Schelă și desfaceri', 'Consolidare', 'Tâmplărie și acoperiș', 'Termoizolare', 'Finisaj fațadă', 'Finalizat'], i: ['Organizare', 'Desfaceri', 'Săpături', 'Montaj', 'Umpluturi', 'Refacere', 'Finalizat'] };
 const FELN = { n: 'Clădire nouă', r: 'Reabilitare', i: 'Lucrare la sol' };
 let FELMAP = {};   // which sites are renovations / ground-level works (data/fel.json); the rest are new buildings
-fetch('data/fel.json').then(r => r.ok ? r.json() : {}).then(j => { FELMAP = j || {}; }).catch(() => {});
+fetch('data/fel.json').then(r => r.ok ? r.json() : {}).then(j => { FELMAP = j || {}; if (typeof refresh === 'function' && S && S.loaded) refresh(); }).catch(() => {});   // redraw: what was shown before the list arrived used the new-building names
 const felOf = s => (s && (s.fel || FELMAP[s.id])) || 'n';
 const stgOf = fel => STGF[fel] || STG;
 const stgName = (n, s) => stgOf(felOf(s))[(+n || 0) - 1] || '';
