@@ -956,15 +956,14 @@ const felOf = s => (s && (s.fel || FELMAP[s.id])) || 'n';
 const stgOf = fel => STGF[fel] || STG;
 const stgName = (n, s) => stgOf(felOf(s))[(+n || 0) - 1] || '';
 // 17.10.2026 (Ionuț): the stage judged from the site photos (data/stadii.json: id -> [stage, date]) shows on every site in the app.
-// The stage chosen in the app wins when it is newer; for renovations / ground-level works also when it is from the same day
-// or later, never an older one given on the new-building scale. Kept apart from s.st, so it is never sent as a phone's choice.
+// The stage chosen in the app wins only when it is newer than the photo that was re-checked. Kept apart from s.st, so it is never sent as a phone's choice.
 let STMAP = {};
 fetch('data/stadii.json').then(r => r.ok ? r.json() : {}).then(j => { STMAP = j || {}; if (typeof refresh === 'function' && S && S.loaded) refresh(); }).catch(() => {});
 function stOf(s) {
   if (!s) return { st: 0, d: '' };
   const own = +s.st || 0, od = s.stD || '', e = STMAP[s.id];
   if (!e || !e[0]) return { st: own, d: od };
-  if (own && (od > e[1] || (felOf(s) === 'n' && od === e[1]))) return { st: own, d: od };
+  if (own && od > e[1]) return { st: own, d: od };   // 17.10.2026: the photo re-check wins on the same day, a newer app visit wins
   return { st: +e[0], d: e[1], est: true };
 }
 const FORCED = '1970-01-01';   // "De actualizat" set by hand by the admin, whatever the dates say
