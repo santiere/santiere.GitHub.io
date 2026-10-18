@@ -1107,13 +1107,18 @@ function finishBtn(s) {
    The first visit takes both photos (panel + stage) and turns the pin into an ordinary site, at the place of the panel photo.
    A pin where there is no site can be deleted on the spot. ---------- */
 const acNew = s => !!(s && s.ac && !s.panouA && !(s.poze || []).length && !s.manual);
-const pinSt = s => { const st = status(s); return st === 'due' && acNew(s) ? 'ac' : st; };   // 'ac' = from a building permit, not yet seen on the ground (orange)
+// 18.10.2026 (Ionuț): sites from his iBuild list (Constanța) — the sure ones (under construction, exact place) are red like any site to
+// photograph and go into routes; the probable ones (not started yet, or only the street / area known) stay orange like the permits
+const acSure = s => acNew(s) && !!s.ac.sigur;
+const acIb = s => !!(s && s.ac && (s.ac.sursa === 'ibuild' || s.ac.ib));
+const pinSt = s => { const st = status(s); return st === 'due' && acNew(s) && !acSure(s) ? 'ac' : st; };   // 'ac' = from a building permit, not yet seen on the ground (orange)
 // 18.10.2026 (Ionuț): a new route takes only the sites to update — not the updated ones (blue) nor the unverified ones from permits (orange)
-const routeable = s => status(s) === 'due' && !acNew(s);
+const routeable = s => status(s) === 'due' && (!acNew(s) || acSure(s));
 const acApprox = s => acNew(s) && /^[snu]$/.test(String(s.ac.q || ''));
 function acNote(s) {
   if (!acNew(s)) return '';
-  return `<div class="ac-note"><b>Din autorizația de construire</b>${s.autorizatie ? ' nr. ' + esc(s.autorizatie) : ''} · nefotografiat încă${s.denumire ? `<div class="sub" style="margin-top:3px">${esc(s.denumire)}</div>` : ''}${s.beneficiar ? `<div class="sub">${esc(s.beneficiar)}</div>` : ''}${acApprox(s) ? `<div class="ac-apx">Poziție aproximativă: caută ${s.adresa ? '„' + esc(s.adresa) + '”' : 'numărul'} pe stradă.</div>` : ''}</div>`;
+  const ib = s.ac.sursa === 'ibuild';
+  return `<div class="ac-note"><b>${ib ? 'Din lista iBuild' : 'Din autorizația de construire'}</b>${!ib && s.autorizatie ? ' nr. ' + esc(s.autorizatie) : ''}${ib && s.ac.faza ? ' · ' + esc(s.ac.faza) : ''} · nefotografiat încă${s.denumire ? `<div class="sub" style="margin-top:3px">${esc(s.denumire)}</div>` : ''}${s.ibuild ? `<div class="sub" style="margin-top:3px">Și în iBuild: ${esc(s.ibuild)}</div>` : ''}${s.beneficiar ? `<div class="sub">${esc(s.beneficiar)}</div>` : ''}${acApprox(s) ? `<div class="ac-apx">Poziție aproximativă: caută ${s.adresa ? '„' + esc(s.adresa) + '”' : 'numărul'} pe stradă.</div>` : ''}</div>`;
 }
 function acDelBtn(s) {
   if (!acNew(s) || s.inactiv) return '';
@@ -1199,7 +1204,8 @@ function statusLabel(s) {
   const st = status(s);
   if (st === 'off') return ['off', 'Finalizat'];
   if (st === 'wait') return ['wait', 'Actualizat · revine ' + roShort(addDays(lastUpd(s), CYCLE))];
-  return acNew(s) ? ['ac', 'Neverificat · din autorizație'] : ['due', 'De actualizat'];
+  if (acSure(s)) return ['due', 'De fotografiat · din iBuild'];
+  return acNew(s) ? ['ac', acIb(s) && s.ac.sursa === 'ibuild' ? 'Neverificat · din iBuild' : 'Neverificat · din autorizație'] : ['due', 'De actualizat'];
 }
 const deadlinePassed = s => s.finalizare && s.finalizare < today();
 
