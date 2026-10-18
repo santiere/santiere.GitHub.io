@@ -1320,7 +1320,7 @@ function addSiteLayers() {
     'circle-color': ['case', ['==', ['get', 'sel'], 1], C.amber, ['match', ['get', 'st'], 'due', C.due, 'ac', C.ac, 'wait', C.wait, C.off]],
     'circle-stroke-color': ['case', ['==', ['get', 'sel'], 1], '#1B1300', C.surface],
     'circle-stroke-width': ['case', ['==', ['get', 'sel'], 1], 2.5, 1.6],
-    'circle-opacity': ['case', ['==', ['get', 'dim'], 1], 0.35, 1], 'circle-stroke-opacity': ['case', ['==', ['get', 'dim'], 1], 0.35, 1] } });
+    'circle-opacity': ['case', ['==', ['get', 'dim'], 1], 0.45, 1], 'circle-stroke-opacity': ['case', ['==', ['get', 'dim'], 1], 0.45, 1] } });
   // purple ring: in a colleague's route today
   add({ id: 'sites-rz', type: 'circle', source: 'sites', filter: ['==', ['get', 'rz'], 1], paint: {
     'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 6, 12, 10, 16, 14], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#8E44DD', 'circle-stroke-width': 2.5 } });
@@ -1383,7 +1383,7 @@ function siteFeatures() {
   for (const s of S.sites.values()) {
     const sel = ord.has(s.id);
     // 18.10.2026 (Ionuț): while navigating or exploring, the updated sites (blue) and the unverified ones (orange) are shown too,
-    // faded (35%), so a site already photographed is not taken for a new one; finished sites stay hidden
+    // faded (45%, 18.10 at 11:13), so a site already photographed is not taken for a new one; finished sites stay hidden
     const ps = pinSt(s), dim = S.navOn && !sel && (ps === 'wait' || ps === 'ac') && S.openId !== s.id;
     if (!vis.has(s.id) && !sel && !(S.navOn && dim)) continue;
     if (S.navOn && !S.scout && ps !== 'due' && !dim && S.openId !== s.id) continue;
