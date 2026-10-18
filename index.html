@@ -947,11 +947,11 @@ const STOP_LBL = STOP_S < 60 ? STOP_S + ' s' : Math.round(STOP_S / 60) + ' min';
 // the stage of the works, chosen by the operator with one tap at every update (kept per visit and in the shared state, for the website)
 // 17.10.2026 (Ionuț): new buildings get the new stages too (same numbers 1–7)
 // 18.10.2026 (Ionuț): „Interioare” before Finalizat; the two structure stages are one (still 7, Finalizat stays 7)
-const STG = ['Organizare și săpătură', 'Fundație și subsol', 'Structură (până la roșu)', 'Închideri și tâmplărie', 'Fațadă și finisaje', 'Interioare', 'Finalizat'];
+const STG = ['Teren', 'Fundație', 'Structură', 'Închideri', 'Fațadă', 'Interioare', 'Finalizat'];   // 18.10: the short names, like the first ones
 // 17.10.2026 (Ionuț): renovations of existing buildings (r) and ground-level works — water, sewage, gas, heating networks,
 // tram lines, roads (i) — have their own stages; same numbers 1–7 as new buildings (n), so everything else stays the same
-const STGF = { n: STG, r: ['Organizare', 'Schelă și desfaceri', 'Consolidare', 'Tâmplărie și acoperiș', 'Termoizolare și finisaj fațadă', 'Interioare', 'Finalizat'], i: ['Organizare', 'Desfaceri', 'Săpături', 'Montaj', 'Umpluturi', 'Refacere', 'Finalizat'] };
-const FELN = { n: 'Clădire nouă', r: 'Reabilitare', i: 'Lucrare la sol' };
+const STGF = { n: STG, r: ['Organizare', 'Schelă', 'Consolidare', 'Tâmplărie', 'Termoizolare / fațadă', 'Interioare', 'Finalizat'], i: ['Organizare', 'Desfaceri', 'Săpături', 'Montaj', 'Umpluturi', 'Refacere', 'Finalizat'] };
+const FELN = { n: 'Clădire nouă', r: 'Reabilitare', i: 'Infrastructură' };   // 18.10: i = roads, railways, tram, pipes and networks
 let FELMAP = {};   // which sites are renovations / ground-level works (data/fel.json); the rest are new buildings
 fetch('data/fel.json').then(r => r.ok ? r.json() : {}).then(j => { FELMAP = j || {}; if (typeof refresh === 'function' && S && S.loaded) refresh(); }).catch(() => {});   // redraw: what was shown before the list arrived used the new-building names
 const felOf = s => (s && (s.fel || FELMAP[s.id])) || 'n';
