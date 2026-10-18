@@ -946,10 +946,11 @@ const STOP_S = 30;       // time spent at a site: about half a minute (Ionuț, 0
 const STOP_LBL = STOP_S < 60 ? STOP_S + ' s' : Math.round(STOP_S / 60) + ' min';
 // the stage of the works, chosen by the operator with one tap at every update (kept per visit and in the shared state, for the website)
 // 17.10.2026 (Ionuț): new buildings get the new stages too (same numbers 1–7)
-const STG = ['Organizare și săpătură', 'Fundație și subsol', 'Structură în lucru', 'Structură gata (la roșu)', 'Închideri și tâmplărie', 'Fațadă și finisaje', 'Finalizat'];
+// 18.10.2026 (Ionuț): „Interioare” before Finalizat; the two structure stages are one (still 7, Finalizat stays 7)
+const STG = ['Organizare și săpătură', 'Fundație și subsol', 'Structură (până la roșu)', 'Închideri și tâmplărie', 'Fațadă și finisaje', 'Interioare', 'Finalizat'];
 // 17.10.2026 (Ionuț): renovations of existing buildings (r) and ground-level works — water, sewage, gas, heating networks,
 // tram lines, roads (i) — have their own stages; same numbers 1–7 as new buildings (n), so everything else stays the same
-const STGF = { n: STG, r: ['Organizare', 'Schelă și desfaceri', 'Consolidare', 'Tâmplărie și acoperiș', 'Termoizolare', 'Finisaj fațadă', 'Finalizat'], i: ['Organizare', 'Desfaceri', 'Săpături', 'Montaj', 'Umpluturi', 'Refacere', 'Finalizat'] };
+const STGF = { n: STG, r: ['Organizare', 'Schelă și desfaceri', 'Consolidare', 'Tâmplărie și acoperiș', 'Termoizolare și finisaj fațadă', 'Interioare', 'Finalizat'], i: ['Organizare', 'Desfaceri', 'Săpături', 'Montaj', 'Umpluturi', 'Refacere', 'Finalizat'] };
 const FELN = { n: 'Clădire nouă', r: 'Reabilitare', i: 'Lucrare la sol' };
 let FELMAP = {};   // which sites are renovations / ground-level works (data/fel.json); the rest are new buildings
 fetch('data/fel.json').then(r => r.ok ? r.json() : {}).then(j => { FELMAP = j || {}; if (typeof refresh === 'function' && S && S.loaded) refresh(); }).catch(() => {});   // redraw: what was shown before the list arrived used the new-building names
@@ -960,10 +961,13 @@ const stgName = (n, s) => stgOf(felOf(s))[(+n || 0) - 1] || '';
 // The stage chosen in the app wins only when it is newer than the photo that was re-checked. Kept apart from s.st, so it is never sent as a phone's choice.
 let STMAP = {};
 fetch('data/stadii.json').then(r => r.ok ? r.json() : {}).then(j => { STMAP = j || {}; if (typeof refresh === 'function' && S && S.loaded) refresh(); }).catch(() => {});
+const SC3_T = Date.parse('2026-10-18T13:45:00Z'), B2C = { n: [0, 1, 2, 3, 3, 4, 5, 7], r: [0, 1, 2, 3, 4, 5, 5, 7] };
+const stNow = (st, fel, d, v, u) => !st || !B2C[fel] || v >= 3 || !d || d <= '2026-10-17' || d > '2026-10-18' || u >= SC3_T ? st : (B2C[fel][st] ?? st);
 function stOf(s) {
   if (!s) return { st: 0, d: '' };
-  // 17.10.2026 (Ionuț): new buildings got new stages; a stage chosen before then (old names) is read on the new scale
-  const od = s.stD || '', own = felOf(s) === 'n' && od && od <= '2026-10-17' ? [0, 1, 2, 3, 5, 6, 6, 7][+s.st || 0] : +s.st || 0, e = STMAP[s.id];
+  // 18.10.2026 (Ionuț): a stage chosen on an older scale is read on the scale of now — until 17.10 the numbers stay
+  // (Fațadă → Fațadă și finisaje, Finisaje → Interioare); on 17.10 evening – 18.10 (scale B, before this version) they are moved
+  const od = s.stD || '', own = stNow(+s.st || 0, felOf(s), od, s.stV || 0, s.stU || 0), e = STMAP[s.id];
   if (!e || !e[0]) return { st: own, d: od };
   if (own && od > e[1]) return { st: own, d: od };   // 17.10.2026: the photo re-check wins on the same day, a newer app visit wins
   return { st: +e[0], d: e[1], est: true };
@@ -2432,7 +2436,7 @@ async function createSite(o, prog) {
   let near = null, nd = 3;
   for (const x of S.sites.values()) { const dd = hav({ lat: o.lat, lng: o.lng }, x); if (dd < nd && x.loc) { nd = dd; near = x; } }
   const site = { name: 'Șantier nou · ' + roDate(d), lat: +o.lat.toFixed(6), lng: +o.lng.toFixed(6), loc: near ? near.loc : cityOf(o.lat, o.lng).name, strada: near && nd < 0.15 ? near.strada || '' : '', ultima: d, inactiv: false, creat: Date.now(), manual: true, deScanat: true, poze: [], panouA: pid, santierA: sid, panouT: o.panouT || '' };
-  if (o.st) { site.st = o.st; site.stD = d; }
+  if (o.st) { site.st = o.st; site.stD = d; site.stV = 3; }   // 18.10: stV = chosen on the scale of now
   if (o.fel && o.fel !== 'n') site.fel = o.fel;
   const sh = pickShard();
   const ref = db.doc('sites/' + sh); const snap = await ref.get();
@@ -2449,7 +2453,7 @@ async function acFirstPhoto(site, o) {
   const d = today();
   const [pid, sid] = await uploadFiles([o.panou, o.santier], null, true);
   const patch = { lat: +o.lat.toFixed(6), lng: +o.lng.toFixed(6), moved: true, ultima: d, ultimaApp: d, inactiv: false, creat: Date.now(), manual: true, deScanat: true, panouA: pid, santierA: sid, panouT: o.panouT || '' };
-  if (o.st) { patch.st = o.st; patch.stD = d; }
+  if (o.st) { patch.st = o.st; patch.stD = d; patch.stV = 3; }
   if (o.fel && o.fel !== 'n') patch.fel = o.fel;
   S.pend[site.id] = Object.assign(S.pend[site.id] || {}, patch);
   await db.doc('sites/' + site._sh).update({ s: { [site.id]: patch } });
@@ -2751,7 +2755,7 @@ $('#qc').addEventListener('click', async e => {
         const visit = { d, poze: [aid], t: Date.now(), gps: g ? [+g.lat.toFixed(6), +g.lng.toFixed(6)] : null, st: f.st };
         if (snap.exists) await ref.update({ v: { [vid]: visit } }); else await ref.set({ v: { [vid]: visit } });
         // "Lucrare finalizată" ticked: the stage photo is saved and delivered as usual, and the site is reported finished in the same step
-        await patchSite(site.id, Object.assign({ ultima: d, ultimaApp: d, inactiv: !!f.fin, st: f.st, stD: d }, f.fin ? { finBy: (window.PWA_me && window.PWA_me.name) || '', finT: Date.now() } : {}));
+        await patchSite(site.id, Object.assign({ ultima: d, ultimaApp: d, inactiv: !!f.fin, st: f.st, stD: d, stV: 3 }, f.fin ? { finBy: (window.PWA_me && window.PWA_me.name) || '', finT: Date.now() } : {}));
         const [pa] = site.panouA ? [site.panouA] : f.panouR.blob ? await uploadFiles([f.panouR.blob], null, true) : [aid];
         await OB.add(k, { siteId: site.id, siteName: cityDir(site.lat, site.lng) + saptName(f.santierR.dt), d: photoDay(f.santierR.dt), name: site.name, nou: 0, stamp: site.id, t: Date.now(), p: pa, s: aid, lat: g && g.lat, lng: g && g.lng, st: f.st }, files);
       } else {
@@ -2863,7 +2867,7 @@ const CLOUD = {
         }
         if (!s && v.site) {   // a new site added by another operator
           const sh = pickShard(); const ref = db.doc('sites/' + sh); const snap = await ref.get();
-          const site = Object.assign({ poze: [], manual: true, deScanat: true }, v.site, v.e || {}, { ultima: v.ultima, ultimaApp: v.ultima, inactiv: !!v.inactiv }, v.e ? { edk: Object.keys(v.e) } : {}, v.st ? { st: +v.st, stD: v.stD || '' } : {});
+          const site = Object.assign({ poze: [], manual: true, deScanat: true }, v.site, v.e || {}, { ultima: v.ultima, ultimaApp: v.ultima, inactiv: !!v.inactiv }, v.e ? { edk: Object.keys(v.e) } : {}, v.st ? { st: +v.st, stD: v.stD || '', stV: +v.stV || 0, stU: +v.u || 0 } : {});
           if (snap.exists) await ref.update({ s: { [sid]: site } }); else await ref.set({ s: { [sid]: site } });
           changed++; continue;
         }
@@ -2871,7 +2875,7 @@ const CLOUD = {
         const up = {};
         if (v.site && s.ac && !s.manual && !s.panouA) Object.assign(up, { manual: true, deScanat: true, creat: v.site.creat || v.u, panouT: v.site.panouT || '' }, v.site.lat && v.site.lng ? { lat: v.site.lat, lng: v.site.lng, moved: true } : {});
         if ((s.ultima || '') !== (v.ultima || '') || !!s.inactiv !== !!v.inactiv) Object.assign(up, { ultima: v.ultima || '', ultimaApp: v.ultima || '', inactiv: !!v.inactiv });
-        if (v.st && (+v.st !== +(s.st || 0) || (v.stD || '') !== (s.stD || ''))) Object.assign(up, { st: +v.st, stD: v.stD || '' });
+        if (v.st && (+v.st !== +(s.st || 0) || (v.stD || '') !== (s.stD || ''))) Object.assign(up, { st: +v.st, stD: v.stD || '', stV: +v.stV || 0, stU: +v.u || 0 });   // 18.10: stV/stU = the scale it was chosen on
         // who reported it as finished (an operator), so the admin can see it and reopen it if it was a mistake
         if (v.inactiv && v.fn && s.finBy !== v.fn) { up.finBy = v.fn; up.finT = v.u || Date.now(); } else if (!v.inactiv && s.finBy) up.finBy = '';
         if (v.e) { for (const [k, x] of Object.entries(v.e)) if (SYNC_E.includes(k) && (own(s, k) && s[k] != null ? s[k] : '') !== x) up[k] = x; if (Object.keys(up).some(k => SYNC_E.includes(k))) up.edk = [...new Set([...(s.edk || []), ...Object.keys(v.e)])]; }
