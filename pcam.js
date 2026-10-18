@@ -45,6 +45,16 @@
 .pcam-rv.full img{max-width:none;max-height:none;width:calc(var(--w) * 1px / var(--dpr));height:auto}
 .pcam-rb{flex:none;display:flex;gap:10px;justify-content:center;padding:12px 14px max(14px,env(safe-area-inset-bottom));background:rgba(0,0,0,.7);flex-wrap:wrap}
 .pcam-rb .use{background:#F5B700;color:#111;border-color:#F5B700;font-weight:700}
+.pcam-v video{position:absolute;inset:0}
+@media (orientation:landscape){
+.pcam{flex-direction:row}
+.pcam-top{flex-direction:column;justify-content:space-between;align-items:stretch;width:132px;padding:max(10px,env(safe-area-inset-top)) 10px 10px max(10px,env(safe-area-inset-left))}
+.pcam-top .pcam-msg{flex:1;display:flex;align-items:center;justify-content:center;font-size:12px}
+.pcam-bot{flex-direction:column;justify-content:center;width:150px;padding:10px max(12px,env(safe-area-inset-right)) 10px 10px}
+.pcam-zs{flex-direction:column;align-items:center}
+.pcam-row{flex-direction:column;gap:10px}
+.pcam-rb{padding:8px max(14px,env(safe-area-inset-right)) 8px max(14px,env(safe-area-inset-left))}
+}
 `;
     document.head.appendChild(s);
   }
@@ -118,11 +128,29 @@
   function pinchEnd(e) { if (!e.touches || e.touches.length < 2) pin = null; }
 
   // ---------- start / stop ----------
+  const portrait = () => (screen.orientation && screen.orientation.type ? /portrait/.test(screen.orientation.type) : innerHeight >= innerWidth);
+  // the phone was turned while the camera is open: the camera starts again in the new orientation, at the same zoom
+  // (iOS keeps the old frame size after a turn, which stretched the picture)
+  let turnT = null;
+  function turned() {
+    clearTimeout(turnT);
+    turnT = setTimeout(async () => {
+      const el = $('#pcam'); if (!el || el.hidden || !st.stream || st.busy || !$('.pcam-rev', el).hidden) return;
+      if (portrait() === st.portrait) return;
+      const r = rel(); st.busy = true;
+      try { stop(); await start(); if (Math.abs(r - 1) > 0.02) setRel(r); } catch (e) {} st.busy = false;
+    }, 350);
+  }
+  addEventListener('orientationchange', turned); addEventListener('resize', turned);
+  if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', turned);
   async function start() {
     const el = ui(); const v = $('video', el);
     const base = { facingMode: { ideal: 'environment' } };
+    // 18.10.2026 (Ionuț: with the phone on its side the picture came out distorted): ask for the frame in the phone's current
+    // orientation, and start again when the phone is turned (see turned() below)
+    const P = portrait(); st.portrait = P;
     let s = null;
-    try { s = await navigator.mediaDevices.getUserMedia({ audio: false, video: Object.assign({ width: { ideal: 4032 }, height: { ideal: 3024 } }, base) }); }
+    try { s = await navigator.mediaDevices.getUserMedia({ audio: false, video: Object.assign(P ? { width: { ideal: 3024 }, height: { ideal: 4032 } } : { width: { ideal: 4032 }, height: { ideal: 3024 } }, base) }); }
     catch (e) {
       if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) throw e;
       s = await navigator.mediaDevices.getUserMedia({ audio: false, video: base });
@@ -134,8 +162,9 @@
     // the highest resolution the camera gives, if the first answer was lower
     try {
       const se = st.track.getSettings();
-      if (caps.width && caps.height && caps.width.max * caps.height.max > (se.width || 0) * (se.height || 0) * 1.2)
-        await st.track.applyConstraints({ width: { ideal: caps.width.max }, height: { ideal: caps.height.max } });
+      if (caps.width && caps.height && caps.width.max * caps.height.max > (se.width || 0) * (se.height || 0) * 1.2) {
+        const a = Math.max(caps.width.max, caps.height.max), b = Math.min(caps.width.max, caps.height.max);
+        await st.track.applyConstraints(P ? { width: { ideal: b }, height: { ideal: a } } : { width: { ideal: a }, height: { ideal: b } }); }
     } catch (e) {}
     v.srcObject = s;
     try { await v.play(); } catch (e) {}
@@ -219,7 +248,7 @@
     if (b.dataset.z) { setRel(+b.dataset.z); return; }
     if (a === 'close') close();
     else if (a === 'shot') shoot();
-    else if (a === 'again') review(false);
+    else if (a === 'again') { review(false); turned(); }   // turned while checking the photo: the camera follows now
     else if (a === 'full') {
       const box = $('#pcam .pcam-rv'); const on = box.classList.toggle('full');
       b.textContent = on ? 'Toată poza' : 'Verifică textul (mărime reală)';

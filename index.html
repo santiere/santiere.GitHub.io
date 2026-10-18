@@ -1104,6 +1104,8 @@ function finishBtn(s) {
    A pin where there is no site can be deleted on the spot. ---------- */
 const acNew = s => !!(s && s.ac && !s.panouA && !(s.poze || []).length && !s.manual);
 const pinSt = s => { const st = status(s); return st === 'due' && acNew(s) ? 'ac' : st; };   // 'ac' = from a building permit, not yet seen on the ground (orange)
+// 18.10.2026 (Ionuț): a new route takes only the sites to update — not the updated ones (blue) nor the unverified ones from permits (orange)
+const routeable = s => status(s) === 'due' && !acNew(s);
 const acApprox = s => acNew(s) && /^[snu]$/.test(String(s.ac.q || ''));
 function acNote(s) {
   if (!acNew(s)) return '';
@@ -1317,7 +1319,8 @@ function addSiteLayers() {
     'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, ['case', ['==', ['get', 'sel'], 1], 6, 3.2], 12, ['case', ['==', ['get', 'sel'], 1], 11, 6], 16, ['case', ['==', ['get', 'sel'], 1], 14, 9]],
     'circle-color': ['case', ['==', ['get', 'sel'], 1], C.amber, ['match', ['get', 'st'], 'due', C.due, 'ac', C.ac, 'wait', C.wait, C.off]],
     'circle-stroke-color': ['case', ['==', ['get', 'sel'], 1], '#1B1300', C.surface],
-    'circle-stroke-width': ['case', ['==', ['get', 'sel'], 1], 2.5, 1.6] } });
+    'circle-stroke-width': ['case', ['==', ['get', 'sel'], 1], 2.5, 1.6],
+    'circle-opacity': ['case', ['==', ['get', 'dim'], 1], 0.35, 1], 'circle-stroke-opacity': ['case', ['==', ['get', 'dim'], 1], 0.35, 1] } });
   // purple ring: in a colleague's route today
   add({ id: 'sites-rz', type: 'circle', source: 'sites', filter: ['==', ['get', 'rz'], 1], paint: {
     'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 6, 12, 10, 16, 14], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#8E44DD', 'circle-stroke-width': 2.5 } });
@@ -1379,9 +1382,12 @@ function siteFeatures() {
   const feats = [];
   for (const s of S.sites.values()) {
     const sel = ord.has(s.id);
-    if (!vis.has(s.id) && !sel) continue;
-    if (S.navOn && !S.scout && status(s) !== 'due' && S.openId !== s.id) continue;
-    feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [s.lng, s.lat] }, properties: { id: s.id, st: pinSt(s), sel: sel ? 1 : 0, ord: ord.get(s.id) || 0, rz: RZ.other(s.id) ? 1 : 0 } });
+    // 18.10.2026 (Ionuț): while navigating or exploring, the updated sites (blue) and the unverified ones (orange) are shown too,
+    // faded (35%), so a site already photographed is not taken for a new one; finished sites stay hidden
+    const ps = pinSt(s), dim = S.navOn && !sel && (ps === 'wait' || ps === 'ac') && S.openId !== s.id;
+    if (!vis.has(s.id) && !sel && !(S.navOn && dim)) continue;
+    if (S.navOn && !S.scout && ps !== 'due' && !dim && S.openId !== s.id) continue;
+    feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [s.lng, s.lat] }, properties: { id: s.id, st: ps, sel: sel ? 1 : 0, ord: ord.get(s.id) || 0, rz: RZ.other(s.id) ? 1 : 0, dim: dim ? 1 : 0 } });
   }
   // selected on top
   feats.sort((a, b) => a.properties.sel - b.properties.sel);
@@ -2013,7 +2019,7 @@ async function commuteGo(k) {
   try {
     msg('Se încarcă harta rutieră…'); await loadGraph();
     const A = { lat: S.me.lat, lng: S.me.lng }, N = PLACES.n(), base = hav(A, d);
-    const pool = [...S.sites.values()].filter(s => status(s) === 'due' && !RZ.other(s.id))
+    const pool = [...S.sites.values()].filter(s => routeable(s) && !RZ.other(s.id))
       .map(s => ({ s, ex: hav(A, s) + hav(s, d) - base })).sort((a, b) => a.ex - b.ex).slice(0, Math.max(40, N * 3 + 10)).map(x => x.s);
     const pts = [A].concat(pool, [d]); const sn = pts.map(p => Router.snap(p.lat, p.lng));
     if (!sn[0]) throw new Error('ești în afara hărții rutiere');
@@ -2140,7 +2146,7 @@ function optimizeRoute() {
 }
 function addVisibleDue() {
   if (!map) return;
-  const add = visibleSites().filter(s => status(s) === 'due' && onScreen(s) && !S.route.stops.includes(s.id));
+  const add = visibleSites().filter(s => routeable(s) && onScreen(s) && !S.route.stops.includes(s.id));
   if (!add.length) { toast('Niciun șantier activ nou în zona vizibilă'); return; }
   S.route.stops.push(...add.map(s => s.id)); optimizeRoute(); toast('Am adăugat ' + add.length + ' șantiere și am optimizat ordinea');
 }
@@ -3146,7 +3152,7 @@ function setAreaPoly(P) { S.areaPoly = P; const src = map && map.getSource('area
 function areaSites() {
   if (!map) return [];
   const P = S.areaPoly;
-  const all = visibleSites().filter(s => status(s) === 'due' && (P ? inPoly(s.lng, s.lat, P) : onScreen(s)));
+  const all = visibleSites().filter(s => routeable(s) && (P ? inPoly(s.lng, s.lat, P) : onScreen(s)));
   const mine = all.filter(s => !RZ.other(s.id)); S.areaSkip = all.length - mine.length;
   return S.areaAll && !isOp() ? all : mine;
 }
@@ -3579,7 +3585,7 @@ function routeFeatures() {
 function autoRoute(n) {
   if (!map) return;
   const c = map.getCenter(); const ctr = { lat: c.lat, lng: c.lng };
-  const cand = visibleSites().filter(s => status(s) === 'due').sort((a, b) => hav(ctr, a) - hav(ctr, b)).slice(0, n);
+  const cand = visibleSites().filter(routeable).sort((a, b) => hav(ctr, a) - hav(ctr, b)).slice(0, n);
   if (cand.length < 2) { toast('Prea puține șantiere de actualizat în filtrul curent'); return; }
   S.route = { stops: cand.map(s => s.id), done: [], start: S.route.start, name: '' }; DEST.clear(); saveRouteSoon(); refresh();
   computeRoute(true);
