@@ -2221,7 +2221,9 @@ document.addEventListener('click', async (e) => {
       if (isOp()) break;
       const name = ($('#opName').value || '').trim(), pass = ($('#opPass').value || '').trim();
       if (!name) { toast('Scrie numele operatorului'); break; }
-      if (pass.length < 10 || !/[0-9]/.test(pass) || !/[A-Za-z]/.test(pass)) { toast('Parola: minim 10 caractere, cu litere și cifre (ex. Operator1-4827)', 4000); break; }
+      // 22.10.2026 (audit): a password like "Name-1234" is guessed in minutes; at least 12 characters, not built from the name
+      const nm = name.normalize('NFD').replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+      if (pass.length < 12 || !/[0-9]/.test(pass) || !/[A-Za-z]/.test(pass) || (nm.length >= 3 && pass.toLowerCase().replace(/[^a-z0-9]/g, '').includes(nm))) { toast('Parola: minim 12 caractere, cu litere și cifre, fără numele operatorului. Apasă „Generează”.', 4500); break; }
       t.disabled = true; t.textContent = 'Se adaugă…';
       try {
         const K = await shaHex('santiere|' + pass); const h = await shaHex(K);
@@ -2245,9 +2247,10 @@ document.addEventListener('click', async (e) => {
       break;
     }
     case 'opGen': {
-      const base = (($('#opName').value || 'Operator').normalize('NFD').replace(/[^A-Za-z0-9]/g, '') || 'Operator').slice(0, 14);
-      const n = crypto.getRandomValues(new Uint32Array(1))[0] % 9000 + 1000;
-      $('#opPass').value = base + '-' + n; break;
+      // 16 random characters in 4 groups (about 79 bits), without look-alike characters (0/o, 1/l/i); always with a digit
+      const A = 'abcdefghjkmnpqrstuvwxyz23456789'; let g;
+      do { const r = crypto.getRandomValues(new Uint32Array(16)); g = [...r].map(x => A[x % A.length]).join(''); } while (!/[0-9]/.test(g) || !/[a-z]/.test(g));
+      $('#opPass').value = g.match(/.{4}/g).join('-'); break;
     }
     case 'opDel': {
       if (isOp()) break;
@@ -2403,7 +2406,9 @@ document.addEventListener('click', async (e) => {
     case 'csv': {
       const rows = [['nr', 'nume', 'zona', 'strada', 'lat', 'lng', 'ultima_poza', 'stare', 'google_maps']];
       S.route.stops.forEach((sid, i) => { const s = S.sites.get(sid); if (s) rows.push([i + 1, s.name, s.loc || '', s.strada || '', s.lat, s.lng, lastUpd(s), statusLabel(s)[1], gLink(s)]); });
-      const csv = '\ufeff' + rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
+      // 22.10.2026 (audit): a name starting with = + - @ would run as a formula in Excel / Numbers \u2014 such text cells start with '
+      const cell = v => { let s = String(v == null ? '' : v); if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
+      const csv = '\ufeff' + rows.map(r => r.map(cell).join(',')).join('\n');
       try { await downloads.save({ filename: 'traseu-' + today() + '.csv', data: new Blob([csv], { type: 'text/csv' }) }); } catch (err) { if (err.code !== 'declined') toast('Descărcarea nu e disponibilă aici'); }
       break;
     }
@@ -4295,9 +4300,9 @@ function viewActiv() {
       : `<div class="op-pw">Parola nu e notată <button class="btn sm" data-act="opPwNote" data-id="${esc(o.id)}">Notează parola</button></div>`}</div><button class="btn sm ghost danger" data-act="opDel" data-id="${esc(o.id)}">Scoate accesul</button></div>`).join('') || `<div class="sub">${ACT.ops ? 'Niciun operator încă.' : 'Se încarcă…'}</div>`}
   <div class="note" style="margin-top:10px"><b style="color:var(--ink)">Adaugă operator</b>
     <input class="in" id="opName" placeholder="Nume, ex. Operator 1" autocomplete="off" style="margin-top:8px">
-    <div class="row" style="gap:8px;margin-top:8px"><input class="in grow" id="opPass" placeholder="Parola lui, ex. Operator1-4827" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"><button class="btn sm" data-act="opGen">Generează</button></div>
+    <div class="row" style="gap:8px;margin-top:8px"><input class="in grow" id="opPass" placeholder="Parola lui (apasă Generează)" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"><button class="btn sm" data-act="opGen">Generează</button></div>
     <button class="btn amber" style="width:100%;margin-top:8px" data-act="opAdd">Adaugă</button>
-    <div class="sub" style="margin-top:6px">Parola: minim 10 caractere, cu litere și cifre (ex. Operator1-4827). Operatorul deschide aplicația pe telefonul lui și scrie parola asta. Poate naviga, fotografia, adăuga șantiere noi, marca un șantier ca finalizat și șterge un duplicat (când sunt două la aceeași locație); nu poate edita nimic. Își vede doar propria activitate.</div></div>` : '';
+    <div class="sub" style="margin-top:6px">Parola: minim 12 caractere, cu litere și cifre, fără numele lui; cea mai sigură e cea dată de „Generează” (ex. k7mq-x2pr-9tzw-h4nd). Operatorul deschide aplicația pe telefonul lui și scrie parola asta. Poate naviga, fotografia, adăuga șantiere noi, marca un șantier ca finalizat și șterge un duplicat (când sunt două la aceeași locație); nu poate edita nimic. Își vede doar propria activitate.</div></div>` : '';
   // admin: sites the operators reported as finished, newest first, each with a way back
   const fins = admin ? [...S.sites.values()].filter(x => x.inactiv && x.finBy).sort((x, y) => (y.finT || 0) - (x.finT || 0)).slice(0, 20) : [];
   const finBox = fins.length ? `<h3>Finalizate de operatori</h3>${fins.map(x => `<div class="leg tr-sent"><span><button class="lnk" data-act="open" data-id="${x.id}"><b>${esc(x.name)}</b></button> <span class="sub">· ${esc(x.finBy)}${x.finT ? ' · ' + roDate(iso(new Date(x.finT))) : ''}</span></span><span class="row"><button class="btn sm" data-act="setActive" data-id="${x.id}" data-v="0">Redeschide</button></span></div>`).join('')}

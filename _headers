@@ -1,5 +1,8 @@
-# Cloudflare Pages (app.hartasantierelor.ro): never indexed, never framed by other sites
+# Cloudflare Pages (app.hartasantierelor.ro): never indexed, never framed by other sites, HTTPS only
 /*
   X-Robots-Tag: noindex, nofollow
   X-Frame-Options: DENY
   Referrer-Policy: no-referrer
+  Strict-Transport-Security: max-age=31536000
+  X-Content-Type-Options: nosniff
+  Permissions-Policy: geolocation=(self), camera=(self), microphone=(), payment=()
