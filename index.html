@@ -3,7 +3,7 @@
 <head>
 <title>Harta Șantierelor</title>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' data: blob: https://santiere-api.i-spridon.workers.dev https://nominatim.openstreetmap.org; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' data: blob: https://santiere-api.i-spridon.workers.dev https://nominatim.openstreetmap.org https://santiere.pages.dev https://www.hartasantierelor.ro; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#172026">
@@ -329,12 +329,33 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .areabar b{display:block;font-size:16px}.areabar span{display:block;font-size:22px;font-weight:700;margin-top:2px}.areabar small{display:block;color:#5B6570;font-size:12.5px;margin-top:2px}
 .areabar ~ .selfab{display:none}.areabar:not([hidden]) ~ .selfab{display:none}
 .qc-site{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;font-size:15px}.qc-site .btn{margin-left:auto}
+.fab-ses{background:#B3261E;color:#fff}.nav-new.nav-ses{background:#B3261E;color:#fff;margin-top:8px}
+/* 22.10.2026: Sesizare dialog (ses.js) */
+#ses .qc-card{max-height:100%;overflow-y:auto}
+.ses-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;font-size:16px}.ses-h .btn{margin-left:auto}
+.ses-chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 10px}.ses-chips .chip{height:auto;min-height:38px;white-space:normal;text-align:left}
+.ses-chips .chip[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.ses-shot{aspect-ratio:auto;min-height:150px;padding:14px;text-align:center}
+.ses-f{display:flex;flex-direction:column;gap:10px;margin-top:10px}.ses-f label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--muted)}
+.ses-f input{height:44px;border-radius:10px;border:1px solid var(--line);padding:0 12px;font:inherit;font-size:16px;color:var(--ink);background:var(--surface)}
+.ses-test{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13.5px;color:var(--muted)}
+.ses-img{width:100%;max-height:38vh;object-fit:contain;border-radius:12px;background:#000;display:block}.ses-img.sm{width:96px;height:128px;max-height:none;object-fit:cover;flex:none}
+.ses-wait{margin-top:12px;font-weight:600}
+.ses-top{display:flex;gap:12px;align-items:flex-start}.ses-to{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;font-size:13.5px}.ses-to div{display:flex;flex-direction:column}.ses-to span{color:var(--muted);word-break:break-all}
+.ses-k{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.ses-txt{margin-top:10px;font-size:13.5px}.ses-txt summary{cursor:pointer;font-weight:600}.ses-txt pre{white-space:pre-wrap;font:inherit;font-size:13px;background:var(--surface-2);padding:10px;border-radius:10px;margin:8px 0 0}
+.ses-up{margin-top:8px;font-size:13px;color:var(--muted)}
+.ses-count{display:flex;align-items:baseline;gap:8px;margin-top:10px}.ses-count b{font-size:34px;color:#B3261E}.ses-count span{color:var(--muted);font-weight:600}
+.ses-ist{margin-top:14px}.ses-ih{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.ses-i{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0;border-top:1px solid var(--line)}.ses-i b{flex:none;font-weight:600}
 .qc-gps{margin-top:10px;font-size:14px;font-weight:600}.qc-gps.ok{color:#1E8E3E}.qc-gps.wait{color:#B3261E}
 .qc-ok{font-size:22px;font-weight:700;color:#1E8E3E;margin:6px 0}
 .stage-off{opacity:1;background:color-mix(in srgb,var(--wait) 12%,var(--surface));color:var(--wait);border:1px solid color-mix(in srgb,var(--wait) 35%,transparent)}
 @media (orientation: landscape) and (max-height: 600px) {
   .top{right:auto;width:min(540px,52vw);padding-left:calc(var(--sal) + 10px);padding-top:calc(var(--sat) + 6px);gap:6px}
   .fab-col{top:calc(var(--sat) + 10px);right:calc(var(--sar) + 10px);display:flex;flex-direction:column;gap:6px}
+  #btnSes{position:absolute;right:calc(100% + 8px);bottom:0;margin-top:0}
+  .nav-ses{display:none}   /* 22.10.2026: no room under „Șantier nou” when the phone lies sideways: it goes to its left */
   .fab{width:40px;height:40px;border-radius:11px}
   .fab-new{width:44px;padding:6px 0 5px;font-size:10px;margin-top:2px;border-radius:11px}.fab-new svg{width:17px;height:17px}
   .tabs{left:calc(var(--sal));right:calc(var(--sar));padding-bottom:10px}
@@ -539,6 +560,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
     </button>
     <button class="fab-new fab-scout" id="btnScout" aria-label="Explorare fără traseu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Explo-<br>rare</span></button>
     <button class="fab-new" id="btnNew" aria-label="Șantier nou"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Șantier <br>nou</span></button>
+    <button class="fab-new fab-ses" id="btnSes" aria-label="Sesizare"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17.2v.3"/></svg><span>Sesi-<br>zare</span></button>
   </div>
   <div class="areabar" id="areaBar" hidden>
     <div><b>Traseu pe zonă</b><span id="areaTxt"></span><small id="areaHint"></small></div>
@@ -571,6 +593,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
       <button class="nav-fab" id="navZin" aria-label="Mărește harta">+</button>
       <button class="nav-fab" id="navZout" aria-label="Micșorează harta">−</button>
       <button class="nav-new" id="navNew" aria-label="Șantier nou"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Șantier<br>nou</span></button>
+      <button class="nav-new nav-ses" id="navSes" aria-label="Sesizare"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17.2v.3"/></svg><span>Sesi-<br>zare</span></button>
     </div>
     <div class="nav-prog" id="navProg" role="progressbar" aria-label="Progres traseu"><div class="np-txt"><b class="num" id="npStops">0/0</b><span class="num" id="npPct">0%</span></div><div class="np-track"><div class="np-fill" id="npFill"></div></div></div>
     <div class="nav-sign" id="navSign" hidden><div class="ns-ic" id="nsIc"></div><div class="ns-t"><b class="num" id="nsDist"></b><span id="nsTxt"></span></div></div>
@@ -581,6 +604,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
     </div>
   </div>
   <div class="qc" id="qc" hidden><div class="qc-card"><div class="lock-k">Poze șantier</div><div id="qcBody"></div></div></div>
+  <div class="qc" id="ses" hidden><div class="qc-card"><div class="lock-k">Sesizare către ISC și primărie</div><div id="sesBody"></div></div></div>
   <button class="selfab" id="selFab" type="button">＋ Alege pentru traseu</button>
   <div class="toast" id="toast" hidden role="status"></div>
 </div>
@@ -4342,6 +4366,7 @@ else { const load = (src, next) => { const sc = document.createElement('script')
   load('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js', () => load('lib/maplibre-gl.js', boot)); }
 
 </script>
+<script src="ses.js"></script>
 
 </body>
 </html>
