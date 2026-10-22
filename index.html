@@ -4,7 +4,7 @@
 <title>Harta Șantierelor</title>
 <meta charset="utf-8">
 <meta name="robots" content="noindex, nofollow">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' data: blob: https://santiere-api.i-spridon.workers.dev https://nominatim.openstreetmap.org; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' data: blob: https://santiere-api.i-spridon.workers.dev https://www.hartasantierelor.ro https://nominatim.openstreetmap.org; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#172026">
@@ -89,6 +89,12 @@ button{cursor:pointer}
 html,body,button,a,input,label,.sheet,.tabs,.nav,.qc{touch-action:manipulation}
 .fab-new{width:48px;align-self:flex-end;padding:7px 0 6px;border-radius:12px;border:0;background:var(--amber);color:var(--amber-ink);font-size:10.5px;font-weight:700;line-height:1.1;display:flex;flex-direction:column;align-items:center;gap:3px;box-shadow:var(--shadow);margin-top:6px}
 .fab-new:active{transform:scale(.95)}
+.fab-ses{background:#C8372D;color:#fff}
+.ses-dlg{position:fixed;inset:0;z-index:2000;background:rgba(8,14,20,.55);display:flex;align-items:flex-end;justify-content:center}.ses-dlg[hidden]{display:none}
+.ses-card{background:var(--card,#fff);color:inherit;width:100%;max-width:520px;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+.ses-l{display:block;margin-top:10px;font-size:13px;font-weight:600}.ses-l .in{display:block;width:100%;margin-top:4px}
+.ses-m{display:flex;flex-direction:column;gap:8px;margin-top:12px;font-size:15px}.ses-to{margin:10px 0;padding-left:18px}.ses-to li{margin:4px 0}
+.ses-txt{white-space:pre-wrap;font-size:12px;max-height:240px;overflow:auto;background:rgba(0,0,0,.05);padding:8px;border-radius:8px}.ses-cd{font-size:18px;font-weight:700;margin:14px 0 8px}
 .fab[aria-pressed="true"]{background:var(--amber);color:var(--amber-ink)}
 .selbar{position:absolute;left:12px;right:12px;top:calc(var(--sat) + 112px);margin-right:56px;z-index:4;background:var(--amber);color:var(--amber-ink);border-radius:12px;padding:10px 12px;font-weight:600;font-size:14px;box-shadow:var(--shadow);display:flex;gap:10px;align-items:center;justify-content:space-between}
 .selbar button{border:0;background:rgba(0,0,0,.12);border-radius:8px;padding:6px 10px;font-weight:600;color:inherit}
@@ -544,6 +550,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
     </button>
     <button class="fab-new fab-scout" id="btnScout" aria-label="Explorare fără traseu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Explo-<br>rare</span></button>
     <button class="fab-new" id="btnNew" aria-label="Șantier nou"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Șantier <br>nou</span></button>
+    <button class="fab-new fab-ses" id="btnSes" aria-label="Sesizare"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg><span>Sesi&shy;zare</span></button>
   </div>
   <div class="areabar" id="areaBar" hidden>
     <div><b>Traseu pe zonă</b><span id="areaTxt"></span><small id="areaHint"></small></div>
@@ -2710,6 +2717,94 @@ function qcOpen(o) {
 }
 function qcClose() { const f0 = QC.f; if (f0) for (const k of ['panouUrl', 'santierUrl']) if (f0[k]) setTimeout(() => URL.revokeObjectURL(f0[k]), 1000); $('#qc').hidden = true; $('#qc').classList.remove('upd'); QC.f = null; clearInterval(QC.timer); if (S.navOn) { navShow(false); if (S.view === 'card' || S.view === 'site') render(); } else refresh(); }
 $('#navNew').addEventListener('click', () => qcOpen({ isNew: true }));
+// 22.10.2026 (Ionuț): „Sesizare” — a site with an irregularity, photographed here; from the GPS place the server finds the authorities
+// (ISC + city hall / local police) and, after 30 s that can be cancelled, sends the petition itself from sesizari@hartasantierelor.ro
+// with the photo attached (a copy stays in that mailbox). Every operator signs with their own petitioner data (kept on this phone).
+const SES = {
+  api: 'https://www.hartasantierelor.ro/api/sesizare/',
+  st: null, timer: 0,
+  pet() { try { return JSON.parse(localStorage.getItem('harta_petent') || 'null'); } catch (e) { return null; } },
+  async call(path, opt = {}) {
+    const key = SES.keyOverride || await CLOUD.k(); if (!key) throw new Error('Intră din nou în aplicație.');
+    const r = await fetch(SES.api + path, Object.assign({}, opt, { headers: Object.assign({ 'x-key': key }, opt.headers || {}) }));
+    let j = {}; try { j = await r.json(); } catch (e) {}
+    if (!r.ok) { const e = new Error(j.mesaj || j.error || ('eroare ' + r.status)); e.j = j; e.s = r.status; throw e; }
+    return j;
+  },
+  box() {
+    let d = document.getElementById('sesDlg');
+    if (!d) { d = document.createElement('div'); d.id = 'sesDlg'; d.className = 'ses-dlg'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); document.body.appendChild(d);
+      d.addEventListener('click', e => { const a = e.target.closest('[data-ses]'); if (!a) return; if (a.tagName === 'A') e.preventDefault(); SES.act(a.dataset.ses, a); }); }
+    d.hidden = false; return d;
+  },
+  close() { clearInterval(SES.timer); SES.timer = 0; const d = document.getElementById('sesDlg'); if (d) d.hidden = true; SES.st = null; },
+  open() { SES.st = { motiv: { panou: true, autorizatie: false }, test: false }; SES.st.pet = SES.pet(); SES.draw(SES.st.pet ? 'poza' : 'petent'); SES.gps(); },
+  gps() { const s = SES.st; const m = S.me; if (m && m.lat && Date.now() - (m.t || 0) < 600000) s.pos = { lat: m.lat, lng: m.lng, acc: m.acc || 0, t: Date.now() }; if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(p => { if (SES.st !== s) return; s.pos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() }; const g = document.getElementById('sesGps'); if (g) g.textContent = 'GPS ±' + Math.round(s.pos.acc) + ' m'; },
+      () => { const g = document.getElementById('sesGps'); if (g && !s.pos) g.textContent = 'GPS indisponibil — activează localizarea'; }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }); },
+  draw(step) {
+    const s = SES.st, d = SES.box(), p = s.pet || {}, M = s.motiv; s.step = step; let h = '';
+    if (step === 'petent') h = `<h2>Datele tale de petent</h2><div class="sub">Obligatorii prin lege (OG 27/2002), altfel sesizarea se clasează. Rămân doar pe acest telefon.</div>
+      <label class="ses-l">Nume și prenume<input id="sesNume" class="in" value="${esc(p.nume || '')}" autocomplete="name"></label>
+      <label class="ses-l">Adresa de domiciliu<input id="sesAdr" class="in" value="${esc(p.adresa || '')}" autocomplete="street-address"></label>
+      <label class="ses-l">Telefon (opțional)<input id="sesTel" class="in" value="${esc(p.telefon || '')}" inputmode="tel"></label>
+      <div class="row" style="gap:14px;margin-top:8px"><label><input type="radio" name="sesSub" value="m" ${p.sub !== 'f' ? 'checked' : ''}> Subsemnatul</label><label><input type="radio" name="sesSub" value="f" ${p.sub === 'f' ? 'checked' : ''}> Subsemnata</label></div>
+      <div class="btns" style="margin-top:14px"><button class="btn primary" data-ses="petSave">Salvează</button><button class="btn ghost" data-ses="close">Renunță</button></div>`;
+    if (step === 'poza') h = `<h2>Sesizare</h2><div class="sub">Fotografiază șantierul cu neregula. Locul se ia din GPS. <span id="sesGps" class="num">${s.pos ? 'GPS ±' + Math.round(s.pos.acc) + ' m' : 'caut GPS…'}</span></div>
+      <label class="drop shot" style="margin-top:10px">${s.fotoUrl ? `<img src="${s.fotoUrl}" alt="">` : '<span class="num" style="font-size:22px">📷</span>'}<span>${s.foto ? '✓ Poza · atinge pentru alta' : 'Poza șantierului (obligatoriu)'}</span><input type="file" id="sesFoto" accept="image/jpeg,image/*" capture="environment" hidden></label>
+      <div class="ses-m"><label><input type="checkbox" data-ses="m:panou" ${M.panou ? 'checked' : ''}> Lipsă panou de identificare</label><label><input type="checkbox" data-ses="m:autorizatie" ${M.autorizatie ? 'checked' : ''}> Posibil fără autorizație</label>
+      ${!isOp() ? `<label><input type="checkbox" data-ses="test" ${s.test ? 'checked' : ''}> Test — trimite doar la sesizari@</label>` : ''}</div>
+      ${s.err ? `<div class="note warn" style="margin-top:8px">${esc(s.err)}</div>` : ''}
+      <div class="btns" style="margin-top:14px"><button class="btn primary" data-ses="prep" ${s.foto && (M.panou || M.autorizatie) && !s.busy ? '' : 'disabled'}>${s.busy ? 'Pregătesc…' : 'Pregătește sesizarea'}</button><button class="btn ghost" data-ses="close">Renunță</button></div>
+      <div class="sub" style="margin-top:8px">Petent: ${esc(p.nume || '')} · <a href="#" data-ses="petEdit">schimbă</a></div>`;
+    if (step === 'gata') { const r = s.r; h = `<h2>${s.test ? 'Test · ' : ''}Sesizare către ${r.catre.length} ${r.catre.length === 1 ? 'autoritate' : 'autorități'}</h2>
+      <div class="sub">${esc(r.adr ? r.adr + ', ' : '')}${esc(r.uat)}</div>
+      <ul class="ses-to">${r.catre.map(a => `<li><b>${esc(a.nume)}</b><br><span class="sub">${esc(a.email)}</span></li>`).join('')}</ul>
+      ${r.lipsa && r.lipsa.length ? `<div class="note warn">Fără adresă de e-mail: ${esc(r.lipsa.join(', '))}.</div>` : ''}
+      ${r.dup ? `<div class="note warn">Atenție: în ultimele 60 de zile s-a trimis deja o sesizare pentru același loc (${new Date(r.dup.t).toLocaleDateString('ro-RO')}). O petiție repetată se clasează fără răspuns.</div>` : ''}
+      <details style="margin-top:8px"><summary>Textul sesizării</summary><pre class="ses-txt">${esc(r.subiect + '\n\n' + r.text)}</pre></details>
+      ${s.err ? `<div class="note warn" style="margin-top:8px">${esc(s.err)}</div>` : ''}
+      ${s.done ? `<div class="qc-ok" style="margin-top:12px">✓ ${s.test ? 'Testul a plecat către sesizari@' : 'Sesizarea a fost trimisă de pe sesizari@hartasantierelor.ro'}</div><div class="btns" style="margin-top:12px"><button class="btn primary" data-ses="close">Închide</button></div>`
+        : `<div class="ses-cd" id="sesCd">${s.upl ? 'Pleacă în ' + s.left + ' s' : 'Încarc poza…'}</div><div class="btns"><button class="btn primary" data-ses="send" ${s.upl && !s.busy ? '' : 'disabled'}>Trimite acum</button><button class="btn ghost" data-ses="cancel">Anulează</button></div>`}`; }
+    d.innerHTML = `<div class="ses-card">${h}</div>`;
+    const f = document.getElementById('sesFoto'); if (f) f.onchange = () => { const x = f.files && f.files[0]; if (!x) return; s.foto = x; if (s.fotoUrl) URL.revokeObjectURL(s.fotoUrl); s.fotoUrl = URL.createObjectURL(x); if (!s.pos) SES.gps(); s.err = ''; SES.draw('poza'); };
+  },
+  async jpeg(file) {   // the photo goes as it was taken; only a non-JPEG (e.g. HEIC) is converted
+    const h = new Uint8Array(await file.slice(0, 3).arrayBuffer()); if (h[0] === 0xFF && h[1] === 0xD8) return file;
+    const bmp = await createImageBitmap(file); const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0);
+    return await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
+  },
+  async act(a, el) {
+    const s = SES.st; if (!s) return;
+    if (a === 'close') return SES.close();
+    if (a === 'petEdit') return SES.draw('petent');
+    if (a === 'petSave') { const v = id => (document.getElementById(id).value || '').trim(); const p = { nume: v('sesNume'), adresa: v('sesAdr'), telefon: v('sesTel'), sub: (document.querySelector('input[name=sesSub]:checked') || {}).value || 'm' };
+      if (!p.nume || !p.adresa) { alert('Completează numele și adresa.'); return; } try { localStorage.setItem('harta_petent', JSON.stringify(p)); } catch (e) {} s.pet = p; return SES.draw('poza'); }
+    if (a.startsWith('m:')) { s.motiv[a.slice(2)] = el.checked; return SES.draw('poza'); }
+    if (a === 'test') { s.test = el.checked; return; }
+    if (a === 'prep') {
+      if (!s.pos && S.me && S.me.lat && Date.now() - (S.me.t || 0) < 600000) s.pos = { lat: S.me.lat, lng: S.me.lng, acc: S.me.acc || 0, t: Date.now() };
+      if (!s.pos) { s.err = 'Aștept poziția GPS. Activează localizarea și încearcă din nou.'; SES.gps(); return SES.draw('poza'); }
+      s.busy = true; s.err = ''; SES.draw('poza');
+      try {
+        s.r = await SES.call('pregatire', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ lat: s.pos.lat, lng: s.pos.lng, acc: s.pos.acc, t: s.pos.t, motiv: Object.keys(s.motiv).filter(k => s.motiv[k]), petent: s.pet, test: s.test ? 1 : 0 }) });
+      } catch (e) { s.busy = false; if (e.j && e.j.error === 'petent') return SES.draw('petent'); s.err = e.message; return SES.draw('poza'); }
+      s.busy = false; s.left = 30; s.upl = false; SES.draw('gata');
+      try { await SES.call('poza?id=' + encodeURIComponent(s.r.id), { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: await SES.jpeg(s.foto) }); }
+      catch (e) { s.err = 'Poza nu s-a încărcat: ' + e.message; return SES.draw('gata'); }
+      if (SES.st !== s) return; s.upl = true; SES.draw('gata');
+      SES.timer = setInterval(() => { if (SES.st !== s) return clearInterval(SES.timer); s.left--; const c = document.getElementById('sesCd'); if (c) c.textContent = 'Pleacă în ' + s.left + ' s'; if (s.left <= 0) { clearInterval(SES.timer); SES.act('send'); } }, 1000);
+      return;
+    }
+    if (a === 'send') { if (s.busy || s.done || !s.upl) return; clearInterval(SES.timer); s.busy = true; s.err = '';
+      try { await SES.call('trimite', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: s.r.id }) }); s.done = true; }
+      catch (e) { s.err = e.s === 503 ? 'Trimiterea automată nu e pornită încă pe server. Sesizarea a rămas salvată; o trimitem când pornește.' : e.message; }
+      s.busy = false; return SES.draw('gata'); }
+    if (a === 'cancel') { clearInterval(SES.timer); if (s.r) SES.call('stare', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: s.r.id, stare: 'anulat' }) }).catch(() => {}); toast('Sesizarea a fost anulată'); return SES.close(); }
+  },
+};
+$('#btnSes').addEventListener('click', () => { if (S.selectMode) setSelectMode(false); SES.open(); });
+
 $('#btnScout').addEventListener('click', () => scoutStart());
 async function toJpeg(file) {
   if (file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name || '')) return file;
