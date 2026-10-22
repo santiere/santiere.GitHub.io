@@ -2719,7 +2719,7 @@ function qcClose() { const f0 = QC.f; if (f0) for (const k of ['panouUrl', 'sant
 $('#navNew').addEventListener('click', () => qcOpen({ isNew: true }));
 // 22.10.2026 (Ionuț): „Sesizare” — a site with an irregularity, photographed here; from the GPS place the server finds the authorities
 // (ISC + city hall / local police) and, after 30 s that can be cancelled, sends the petition itself from sesizari@hartasantierelor.ro
-// with the photo attached (a copy stays in that mailbox). Every operator signs with their own petitioner data (kept on this phone).
+// with the photo attached (a copy stays in that mailbox), always in the company's name (22.10: no petitioner data per operator).
 const SES = {
   api: 'https://www.hartasantierelor.ro/api/sesizare/',
   st: null, timer: 0,
@@ -2738,7 +2738,7 @@ const SES = {
     d.hidden = false; return d;
   },
   close() { clearInterval(SES.timer); SES.timer = 0; const d = document.getElementById('sesDlg'); if (d) d.hidden = true; SES.st = null; },
-  open() { SES.st = { motiv: { panou: true, autorizatie: false }, test: false }; SES.st.pet = SES.pet(); SES.draw(SES.st.pet ? 'poza' : 'petent'); SES.gps(); },
+  open() { SES.st = { motiv: { panou: true, autorizatie: false }, test: false }; SES.draw('poza'); SES.gps(); },
   gps() { const s = SES.st; const m = S.me; if (m && m.lat && Date.now() - (m.t || 0) < 600000) s.pos = { lat: m.lat, lng: m.lng, acc: m.acc || 0, t: Date.now() }; if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(p => { if (SES.st !== s) return; s.pos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() }; const g = document.getElementById('sesGps'); if (g) g.textContent = 'GPS ±' + Math.round(s.pos.acc) + ' m'; },
       () => { const g = document.getElementById('sesGps'); if (g && !s.pos) g.textContent = 'GPS indisponibil — activează localizarea'; }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }); },
@@ -2756,7 +2756,7 @@ const SES = {
       ${!isOp() ? `<label><input type="checkbox" data-ses="test" ${s.test ? 'checked' : ''}> Test — trimite doar la sesizari@</label>` : ''}</div>
       ${s.err ? `<div class="note warn" style="margin-top:8px">${esc(s.err)}</div>` : ''}
       <div class="btns" style="margin-top:14px"><button class="btn primary" data-ses="prep" ${s.foto && (M.panou || M.autorizatie) && !s.busy ? '' : 'disabled'}>${s.busy ? 'Pregătesc…' : 'Pregătește sesizarea'}</button><button class="btn ghost" data-ses="close">Renunță</button></div>
-      <div class="sub" style="margin-top:8px">Petent: ${esc(p.nume || '')} · <a href="#" data-ses="petEdit">schimbă</a></div>`;
+      <div class="sub" style="margin-top:8px">Pleacă de pe sesizari@hartasantierelor.ro, în numele Harta Șantierelor.</div>`;
     if (step === 'gata') { const r = s.r; h = `<h2>${s.test ? 'Test · ' : ''}Sesizare către ${r.catre.length} ${r.catre.length === 1 ? 'autoritate' : 'autorități'}</h2>
       <div class="sub">${esc(r.adr ? r.adr + ', ' : '')}${esc(r.uat)}</div>
       <ul class="ses-to">${r.catre.map(a => `<li><b>${esc(a.nume)}</b><br><span class="sub">${esc(a.email)}</span></li>`).join('')}</ul>
@@ -2787,8 +2787,8 @@ const SES = {
       if (!s.pos) { s.err = 'Aștept poziția GPS. Activează localizarea și încearcă din nou.'; SES.gps(); return SES.draw('poza'); }
       s.busy = true; s.err = ''; SES.draw('poza');
       try {
-        s.r = await SES.call('pregatire', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ lat: s.pos.lat, lng: s.pos.lng, acc: s.pos.acc, t: s.pos.t, motiv: Object.keys(s.motiv).filter(k => s.motiv[k]), petent: s.pet, test: s.test ? 1 : 0 }) });
-      } catch (e) { s.busy = false; if (e.j && e.j.error === 'petent') return SES.draw('petent'); s.err = e.message; return SES.draw('poza'); }
+        s.r = await SES.call('pregatire', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ lat: s.pos.lat, lng: s.pos.lng, acc: s.pos.acc, t: s.pos.t, motiv: Object.keys(s.motiv).filter(k => s.motiv[k]), test: s.test ? 1 : 0 }) });
+      } catch (e) { s.busy = false; s.err = e.message; return SES.draw('poza'); }
       s.busy = false; s.left = 30; s.upl = false; SES.draw('gata');
       try { await SES.call('poza?id=' + encodeURIComponent(s.r.id), { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: await SES.jpeg(s.foto) }); }
       catch (e) { s.err = 'Poza nu s-a încărcat: ' + e.message; return SES.draw('gata'); }
