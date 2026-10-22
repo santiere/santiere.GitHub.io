@@ -3337,6 +3337,14 @@ const SPLASH = {
   L: { map: 'Încarc harta…', loc: 'Deschid șantierele…', srv: 'Aduc noutățile de la colegi…', rez: 'Verific rezervările…' },
   done: {}, shown: 0, gone: false, ts: Date.now(), raf: 0, sub: '',
   mark(k, sub) { if (SPLASH.gone || SPLASH.done[k]) return; SPLASH.done[k] = 1; SPLASH.ts = Date.now(); if (sub) SPLASH.sub = sub; SPLASH.loop(); },
+  // 22.10.2026 (Ionuț): the start screen stays until all the sites and their states are in (De actualizat / Neverificate /
+  // Actualizate), so nobody thinks the app is stuck; after 12 s it says why it takes longer, and only after 2 minutes does
+  // it give up waiting (no network) and let the rest load in the background
+  slow() {
+    if (SPLASH.gone) return;
+    if (document.querySelector('.lock')) { setTimeout(SPLASH.slow, 5000); return; }
+    SPLASH.sub = 'Se încarcă toate șantierele. Prima deschidere pe un telefon poate dura până la un minut — nu închide aplicația.'; SPLASH.loop();
+  },
   timeout() {
     if (SPLASH.gone) return;
     if (document.querySelector('.lock')) { setTimeout(SPLASH.timeout, 5000); return; }   // still asking for the password
@@ -3348,7 +3356,7 @@ const SPLASH = {
       SPLASH.raf = 0; const el = document.getElementById('splash'); if (!el || SPLASH.gone) { SPLASH.gone = true; return; }
       const got = SPLASH.ORD.reduce((t, k) => t + (SPLASH.done[k] ? SPLASH.W[k] : 0), 0), next = SPLASH.ORD.find(k => !SPLASH.done[k]);
       // while a step is under way the bar keeps creeping into it (never past 90 % of the step), so it never looks stuck
-      const goal = next ? got + SPLASH.W[next] * .9 * (1 - Math.exp(-(Date.now() - SPLASH.ts) / 2500)) : 100;
+      const goal = next ? got + SPLASH.W[next] * .9 * (1 - Math.exp(-(Date.now() - SPLASH.ts) / (next === 'srv' ? 9000 : 2500))) : 100;   // the server step creeps slowly, so a long wait never sits at 96%
       SPLASH.shown = Math.min(100, SPLASH.shown + Math.max(next ? .15 : 1.5, (goal - SPLASH.shown) * (next ? .12 : .25)));
       if (SPLASH.shown > goal) SPLASH.shown = Math.max(goal, SPLASH.shown - .15);
       document.getElementById('spFill').style.width = SPLASH.shown.toFixed(1) + '%';
@@ -4342,7 +4350,7 @@ function viewActiv() {
 function boot() {
   const ok = initMap();
   if (!ok) { $('#map').innerHTML = '<div class="empty" style="padding-top:40vh">Harta nu s-a putut încărca. Reîncarcă pagina.</div>'; }
-  SPLASH.loop(); setTimeout(SPLASH.timeout, 15000);
+  SPLASH.loop(); setTimeout(SPLASH.slow, 12000); setTimeout(SPLASH.timeout, 120000);
   buildChips();
   if (window.claude && claude.use) initDb(); else { S.dbOk = false; S.loaded = true; ['loc', 'srv', 'rez'].forEach(k => SPLASH.mark(k)); }
   if (ok) { map.once('load', tryLocate); map.once('load', () => SPLASH.mark('map')); } else SPLASH.mark('map');
