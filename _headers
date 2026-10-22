@@ -1,0 +1,5 @@
+# Cloudflare Pages (app.hartasantierelor.ro): never indexed, never framed by other sites
+/*
+  X-Robots-Tag: noindex, nofollow
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
