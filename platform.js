@@ -83,15 +83,18 @@
     return new Promise(async resolve => {
       if (!document.body) await new Promise(r => document.addEventListener('DOMContentLoaded', r, { once: true }));
       const el = document.createElement('div'); el.className = 'lock';
-      el.innerHTML = `<form class="lock-card"><img src="icons/apple-touch-icon.png" width="72" height="72" alt="" style="border-radius:16px;margin-bottom:8px"><div class="lock-k">Harta Șantierelor</div><h2>Parola datelor</h2><p class="sub">${msg || 'Scrie parola primită. O cer o singură dată pe acest telefon.'}</p>
-        <input class="in" id="lockPass" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="parola">
-        <button class="btn primary" type="submit" style="width:100%;margin-top:12px">Deschide</button><p class="sub" id="lockErr" style="color:var(--danger);min-height:1.4em"></p></form>`;
+      // 22.10.2026 (Ionuț): the same domain holds the website (www.) and this app (app.) — the entry says plainly that this is the
+      // field team's app, and a client who landed here by mistake gets a link to the website (its account password does not work here)
+      el.innerHTML = `<form class="lock-card"><img src="icons/apple-touch-icon.png" width="72" height="72" alt="" style="border-radius:16px;margin-bottom:8px"><div class="lock-k">Harta Șantierelor</div><h2>Intrare operatori</h2><p class="sub">${msg || 'Aplicația echipei care fotografiază șantierele. Scrie parola primită de la administrator; o cer o singură dată pe acest telefon.'}</p>
+        <input class="in" id="lockPass" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="parola de operator">
+        <button class="btn primary" type="submit" style="width:100%;margin-top:12px">Deschide</button><p class="sub" id="lockErr" style="color:var(--danger);min-height:1.4em;margin:6px 0 0"></p>
+        <a class="lock-site" href="https://www.hartasantierelor.ro/" rel="noopener"><span><b>Cauți harta șantierelor sau contul de client?</b><small>Sunt pe site, la www.hartasantierelor.ro. Parola contului de pe site nu merge aici.</small></span><span class="lock-go" aria-hidden="true">→</span></a></form>`;
       document.body.appendChild(el);
       el.querySelector('form').addEventListener('submit', async e => {
         e.preventDefault(); const p = el.querySelector('#lockPass').value.trim(); if (!p) return;
         el.querySelector('#lockErr').textContent = 'Verific…';
         const key = await tryPass(p);
-        if (!key) { el.querySelector('#lockErr').textContent = 'Parola nu e corectă.'; return; }
+        if (!key) { el.querySelector('#lockErr').textContent = 'Parola nu e corectă. (Contul de pe site are altă parolă.)'; return; }
         try { localStorage.setItem('harta_pass', p); } catch (e2) {}
         el.remove(); resolve(key);
       });

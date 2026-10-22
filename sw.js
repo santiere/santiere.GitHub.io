@@ -1,5 +1,5 @@
 /* Offline cache + serves photos taken in the app (stored in IndexedDB) at /_blob/<id>. */
-const VERSION = 'st19b';
+const VERSION = 'st19c';
 const SHELL = 'shell-' + VERSION, DATA = 'data-' + VERSION;
 const SHELL_FILES = ['./', 'index.html', 'platform.js', 'pcam.js', 'manifest.webmanifest', 'lib/maplibre-gl.js', 'lib/NoSleep.min.js', 'icons/icon-192.png', 'icons/apple-touch-icon.png', 'icons/lockup-name.png', 'icons/splash-bg.jpg', 'icons/splash-bg-wide.jpg', 'glyphs.json', 'tiles/index.json', 'tiles/low.json', 'data/salt.json'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(SHELL).then(c => c.addAll(SHELL_FILES)).then(() => self.skipWaiting())); });
