@@ -1136,7 +1136,7 @@ const acApprox = s => acNew(s) && /^[snu]$/.test(String(s.ac.q || ''));
 function acNote(s) {
   if (!acNew(s)) return '';
   const ib = s.ac.sursa === 'ibuild';
-  return `<div class="ac-note"><b>${ib ? 'Din lista iBuild' : 'Din autorizația de construire'}</b>${!ib && s.autorizatie ? ' nr. ' + esc(s.autorizatie) : ''}${ib && s.ac.faza ? ' · ' + esc(s.ac.faza) : ''} · nefotografiat încă${s.denumire ? `<div class="sub" style="margin-top:3px">${esc(s.denumire)}</div>` : ''}${s.ibuild ? `<div class="sub" style="margin-top:3px">Și în iBuild: ${esc(s.ibuild)}</div>` : ''}${s.beneficiar ? `<div class="sub">${esc(s.beneficiar)}</div>` : ''}${acApprox(s) ? `<div class="ac-apx">Poziție aproximativă: caută ${s.adresa ? '„' + esc(s.adresa) + '”' : 'numărul'} pe stradă.</div>` : ''}</div>`;
+  return `<div class="ac-note"><b>${ib ? 'Din lista iBuild' : s.ac.sursa === 'osm' ? 'Marcat ca șantier pe OpenStreetMap' : 'Din autorizația de construire'}</b>${!ib && s.autorizatie ? ' nr. ' + esc(s.autorizatie) : ''}${ib && s.ac.faza ? ' · ' + esc(s.ac.faza) : ''} · nefotografiat încă${s.denumire ? `<div class="sub" style="margin-top:3px">${esc(s.denumire)}</div>` : ''}${s.ibuild ? `<div class="sub" style="margin-top:3px">Și în iBuild: ${esc(s.ibuild)}</div>` : ''}${s.beneficiar ? `<div class="sub">${esc(s.beneficiar)}</div>` : ''}${acApprox(s) ? `<div class="ac-apx">Poziție aproximativă: caută ${s.adresa ? '„' + esc(s.adresa) + '”' : 'numărul'} pe stradă.</div>` : ''}</div>`;
 }
 function acDelBtn(s) {
   if (!acNew(s) || s.inactiv) return '';
