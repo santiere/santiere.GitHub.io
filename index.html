@@ -2614,6 +2614,7 @@ $('#navExit').addEventListener('click', navStop);
 function navZoom(dz) {
   const max = map ? map.getMaxZoom() : 19;
   S.navZoom = Math.max(12, Math.min(max, (S.navZoom || 17) + dz));
+  S.navZLast = null;   // my own + / − is followed at once, not eased out
   if (map) map.easeTo({ zoom: S.navFree ? Math.max(3, Math.min(max, map.getZoom() + dz)) : S.navZoom - (S.navDzOut || 0), duration: 300 });
   if (S.navFree) navFreeArm();
 }
@@ -3807,7 +3808,7 @@ function scoutStart() {
   closeSheet(); $('#nav').classList.add('scout'); $('#nav').hidden = false; $('.top').hidden = true; $('.fab-col').hidden = true; $('.tabs').hidden = true;
   if (S.meMarker) S.meMarker.getElement().classList.add('nav');
   try { localStorage.setItem('harta_scout', String(Date.now())); } catch (e) {}
-  S.navTrack = null; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.navTurnK = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null; S.navFree = false;
+  S.navTrack = null; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.navTurnK = null; S.navZLast = null; S.navTurnD = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null; S.navFree = false;
   navShow(false);
   // start from the position I already have; if it is an old one, ask the phone for a fresh one quietly (no error screen while I look at the map)
   if (S.me) { navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }); if (Date.now() - (S.me.t || 0) > 30000 && typeof startGeoWatch === 'function') startGeoWatch(); }
@@ -3823,7 +3824,7 @@ function navStart() {
   try { localStorage.setItem('harta_nav', String(Date.now())); } catch (e) {}
   try { map.setLayoutProperty('route-start', 'visibility', 'none'); } catch (e) {}
   if (S.voice && 'speechSynthesis' in window) { try { speechSynthesis.getVoices(); } catch (e) {} }
-  S.navTrack = { off: 0, lastReroute: 0 }; S.nearSeen = {}; S.nearT = 0; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.navTurnK = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null;
+  S.navTrack = { off: 0, lastReroute: 0 }; S.nearSeen = {}; S.nearT = 0; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.navTurnK = null; S.navZLast = null; S.navTurnD = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null;
   navShow(true);
   if (S.me && Date.now() - (S.me.t || 0) < 30000) navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc });
   else if (typeof locateNow === 'function' && S.geoErr != null) locateNow();
@@ -4127,22 +4128,40 @@ async function navNearCheck(c, cur, legLeft) {
   speak('Șantier lângă tine. Îl facem acum.');
 }
 
-/* a change of direction is coming: the map comes back to the standstill zoom TURN_LEAD_S seconds of driving before it —
-   150 m at town speeds, up to 300 m when driving fast — and is fully there about 3 s later, so the junction is large on the
-   screen well before I reach it. (A fixed 300 m at every speed left no room to zoom out between the turns of a town route.)
+/* a change of direction is coming (25.10.2026, Ionuț: "like Waze — 200 m before the junction the map must already be zoomed in,
+   so I don't miss the street"): the map starts coming in TURN_LEAD_S seconds of driving before the last TURN_IN_AT metres and is
+   fully in TURN_IN_AT = 200 m before the turn / roundabout / arrival. Inside those 200 m it keeps coming closer, so the junction
+   stays large on the screen (navJunctionZoom), and after the turn it goes out again gently.
    Once the map has started coming in for a turn, slowing down for that turn must not push it out again.
-   1 = far from any turn (speed zoom as usual), 0 = standstill zoom. */
-const TURN_LEAD_S = 12, TURN_FAR_MIN = 150, TURN_FAR_MAX = 300, TURN_IN_S = 3.2;
+   1 = far from any turn (speed zoom as usual), 0 = within TURN_IN_AT of the turn. */
+const TURN_IN_AT = 200, TURN_LEAD_S = 6, TURN_LEAD_MIN = 80, TURN_LEAD_MAX = 220, TURN_IN_MAX = 1.2, TURN_VIEW = 0.55;
 function navTurnNear(it, toMan) {
+  S.navTurnD = null;
   const s = it && it.s; if (!s) return 1;
   const turn = s.type === 'roundabout' || s.type === 'arrive' || (s.type === 'turn' && s.mod !== 'straight');
   if (!turn) return 1;
   const v = S.navSpd ? S.navSpd.v : 0;
-  let far = Math.max(TURN_FAR_MIN, Math.min(TURN_FAR_MAX, v * TURN_LEAD_S)), near = far - Math.max(30, v * TURN_IN_S);
+  let near = TURN_IN_AT, far = near + Math.max(TURN_LEAD_MIN, Math.min(TURN_LEAD_MAX, v * TURN_LEAD_S));
   const key = [it.leg, it.j, s.type, s.mod || ''].join('|'), h = S.navTurnK;
   if (h && h.key === key && toMan <= h.far + 80 && h.far >= far) { far = h.far; near = h.near; }
   if (toMan <= far) S.navTurnK = { key, far, near };
+  S.navTurnD = toMan;
   return Math.max(0, Math.min(1, (toMan - near) / (far - near)));
+}
+/* the zoom at which the junction d metres ahead sits at about TURN_VIEW of the free map above my arrow — measured on the map as it
+   is now, so it works the same upright and lying down, at any pitch */
+function navJunctionZoom(d) {
+  try {
+    const me = S.me; if (!map || !me) return -Infinity;
+    const p = map.project([me.lng, me.lat]);
+    const land = innerWidth > innerHeight && innerHeight < 600;
+    const topY = land ? Math.round(innerHeight * 0.1) : (parseFloat(getComputedStyle($('#app')).getPropertyValue('--navtop')) || 120) + 12;
+    if (p.y - topY < 40) return -Infinity;
+    const q = map.unproject([p.x, topY]);
+    const a = Router.hav([me.lat, me.lng], [q.lat, q.lng]);
+    if (!(a > 30 && a < 6000)) return -Infinity;
+    return map.getZoom() + Math.log2(TURN_VIEW * a / Math.max(40, d));
+  } catch (e) { return -Infinity; }
 }
 
 /* ---------- zoom follows the speed (like Waze): farther out when driving fast, back in when slowing down ---------- */
@@ -4160,7 +4179,12 @@ function navSpeedZoom(c, near) {
   let out = dz * (near == null ? 1 : near);                                   // close to a turn: back towards the standstill zoom
   if (S.navDzOut != null && out > S.navDzOut + 0.22) out = S.navDzOut + 0.22;   // and out again gently once the turn is behind
   S.navDzOut = out;
-  return (S.navZoom || 17) - out;
+  const Z0 = S.navZoom || 17; let z = Z0 - out;
+  // a turn is close: past the standstill zoom, so the junction is large (from 200 m before it), then out again gently
+  if (near != null && near < 1 && S.navTurnD != null) { const zin = Math.min(Z0 + TURN_IN_MAX, Math.max(Z0, navJunctionZoom(S.navTurnD))); z += (zin - z) * (1 - near); }
+  if (S.navZLast != null && z < S.navZLast - 0.22) z = S.navZLast - 0.22;
+  S.navZLast = z;
+  return z;
 }
 
 /* ---------- looking around during navigation (like Waze): back to my position after 12 s without touching ---------- */
