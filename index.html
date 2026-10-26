@@ -2628,7 +2628,9 @@ for (const [sel, dz] of [['#navZin', 1], ['#navZout', -1]]) {
 }
 const QC = { f: null, timer: null, _src: null,
   // 'quick' = the camera inside the app (fast; iOS makes 12 MP photos there) · 'lib' = photos taken with the iPhone Camera app, picked from the library (my own resolution)
-  src() { return 'quick'; } };   // one way only: the camera inside the app (the choice between camera and photo library was removed on request, 03.10.2026)
+  // 26.10.2026 (Ionuț): at night the admin can switch to photos taken with the iPhone Camera app (its Night mode), picked from Poze;
+  // operators keep the camera inside the app only (the 03.10.2026 single way)
+  src() { return QC._src === 'lib' && !isOp() ? 'lib' : 'quick'; } };
 const gpsFresh = () => S.me && Date.now() - (S.me.t || 0) < 90000 ? S.me : null;
 const gpsNow = () => { const g = gpsFresh(); return g ? { lat: g.lat, lng: g.lng, acc: g.acc, heading: g.heading, t: Date.now() } : null; };
 // timestamp of the site's original panel photo (as in Photos), used by the Șantier shortcut to find the original
@@ -2667,10 +2669,11 @@ function qcRender() {
   const ready = (site ? f.panouR : f.panouR) && f.santierR && f.st;
   const stg = `<div class="qc-stg-w"><div class="qc-stg-h">Stadiul lucrării${f.st ? (f.st0 && f.st === f.st0 ? ' <span>· la fel ca data trecută</span>' : '') : ' <span class="need">· atinge stadiul de acum</span>'}</div>${site ? '' : `<div class="qc-fel" role="group" aria-label="Felul lucrării">${Object.entries(FELN).map(([k, v]) => `<button type="button" class="qc-fel-b${(f.fel || 'n') === k ? ' on' : ''}" data-fel="${k}" aria-pressed="${(f.fel || 'n') === k}">${v}</button>`).join('')}</div>`}<div class="qc-stg" role="group" aria-label="Stadiul lucrării">${stgOf(site ? felOf(site) : f.fel || 'n').map((n, i) => `<button type="button" class="qc-stg-b${f.st === i + 1 ? ' on' : ''}${i === 6 ? ' fin' : ''}" data-st="${i + 1}" aria-pressed="${f.st === i + 1}">${n}</button>`).join('')}</div>${site && f.st === 7 ? '<div class="qc-fin-note">Finalizat: poza se livrează normal, iar șantierul iese din ciclu</div>' : ''}</div>`;
   const gpsLine = short => `<div class="qc-gps ${g ? 'ok' : 'wait'}">${g ? `● GPS activ (±${Math.round(g.acc || 0)} m)` + (short ? '' : ' · locația se scrie în fiecare poză') : '● Aștept semnalul GPS… Pozele se salvează doar cu locație.'}</div>`;
+  const srcBtn = isOp() ? '' : `<button type="button" class="btn ghost qc-src" id="qcSrc" style="margin-top:8px;width:100%">${QC.src() === 'lib' ? '📷 Înapoi la camera din aplicație' : '🌙 Noapte: alege poze făcute cu Camera iPhone'}</button>`;
   const buttons = `<div class="btns" style="margin-top:10px"><button class="btn primary qc-big" id="qcSave" ${ready ? '' : 'disabled'}>Salvează</button><button class="btn ghost" id="qcCancel">Renunță</button></div>`;
   if (site) {
     // updating a site: the panel fills the screen (readable without another tap); the stage photo only needs a slim row
-    const r = f.santierR, sub = f.santier && !r ? 'pregătesc poza…' : f.santier ? 'atinge pentru altă poză' : 'atinge pentru cameră';
+    const r = f.santierR, sub = f.santier && !r ? 'pregătesc poza…' : f.santier ? 'atinge pentru altă poză' : QC.src() === 'lib' ? 'atinge și alege din Poze' : 'atinge pentru cameră';
     box.innerHTML = `<div class="qcu">
       <div class="qc-tile done qc-fixed qc-panel qcu-panel" id="qcPanelView" ${f.panouUrl ? 'role="button" tabindex="0" aria-label="Panoul șantierului, atinge pentru mărire"' : ''}>${f.panouUrl ? `<img src="${f.panouUrl}" alt="Panoul șantierului">` : `<span class="qc-s">${f.panouR && f.panouR.missing ? 'Panoul original se ia seara din iCloud' : 'Se încarcă panoul…'}</span>`}${f.panouUrl ? '<span class="qc-s">🔍 mărește</span>' : ''}</div>
       <div class="qcu-side">
@@ -2678,6 +2681,7 @@ function qcRender() {
         <label class="qc-tile qcu-stage ${r ? 'done' : ''}${f.santier ? ' has' : ''}">${f.santier ? `<img src="${f.santierUrl}" alt="">` : '<span class="qc-n">Na</span>'}<span class="qcu-t"><span class="qc-l">${r ? '✓ ' : ''}Stadiu șantier</span><span class="qc-s">${sub}</span></span><input type="file" accept="image/*" capture="environment" data-qc="santier"></label>
         ${stg}
         ${gpsLine(true)}
+        ${srcBtn}
         <div class="sub" id="qcProg" style="margin-top:4px;color:var(--ink)"></div>
         ${buttons}
       </div></div>`;
@@ -2687,6 +2691,7 @@ function qcRender() {
     <div class="qc-tiles">${tile('panou', 'N', 'Panou șantier')}${tile('santier', 'Na', 'Stadiu șantier')}</div>
     ${stg}
     ${gpsLine(false)}
+    ${srcBtn}
     <div class="sub" id="qcProg" style="margin-top:4px;color:var(--ink)"></div>
     ${buttons}`;
   }
@@ -2833,11 +2838,17 @@ async function withGps(blob, g) {
   const ex2 = readExif(out.buffer.slice(out.byteOffset, out.byteOffset + Math.min(out.length, 256 * 1024)));
   return { blob: new Blob([out], { type: 'image/jpeg' }), dt: ex2 && ex2.dt, gps: g };
 }
+// „o oră”, „3 ore”, „25 de ore” — Romanian counts take „de” from 20 on (and after 100 when the last two digits are 0 or ≥ 20)
+const roN = (n, one, many) => n === 1 ? one : n + (n % 100 === 0 || n % 100 >= 20 ? ' de ' : ' ') + many;
 // each photo gets the GPS position and time of the moment it was taken
 async function qcPrepare(f, k, g) {
   g = g || f[k + 'G'] || gpsNow(); if (!g) return;
   f[k + 'G'] = g; f[k + 'Busy'] = true;
-  try { const src = f[k]; const r = await withGps(await toJpeg(src), g); if (f[k] === src) f[k + 'R'] = r; }
+  try { const src = f[k]; const r = await withGps(await toJpeg(src), g);
+    // 26.10.2026: a photo picked from Poze must be a fresh one (taken in the last 20 minutes), so an old photo of another site is not used by mistake
+    const m = QC.src() === 'lib' && /^(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d)/.exec(r.dt || ''), age = m ? (Date.now() - new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime()) / 60000 : 0;
+    if (f[k] === src && age > 20 && !confirm(`Poza aleasă e făcută acum ${age < 120 ? roN(Math.round(age), 'un minut', 'minute') : age < 2880 ? roN(Math.round(age / 60), 'o oră', 'ore') : roN(Math.round(age / 1440), 'o zi', 'zile')}. O folosești pentru acest șantier?`)) { f[k] = null; f[k + 'Url'] = null; f[k + 'Busy'] = false; if (QC.f === f) qcRender(); return; }
+    if (f[k] === src) f[k + 'R'] = r; }
   catch (e) { toast('Poza nu a putut fi pregătită'); }
   f[k + 'Busy'] = false; if (QC.f === f) qcRender();
 }
@@ -2864,6 +2875,7 @@ $('#qc').addEventListener('click', async e => {
     else if (inp && QC.src() !== 'lib' && window.PCAM && PCAM.ok() && !f.saving && !f.done) {
       e.preventDefault(); e.stopPropagation(); PCAM.open(file => qcSetPhoto(f, 'panou', file), inp); return; } }
   if (id === 'qcCancel' || id === 'qcBack') { qcClose(); return; }
+  if (id === 'qcSrc' && !f.saving && !f.done) { QC._src = QC._src === 'lib' ? null : 'lib'; qcRender(); return; }
   { const b = e.target.closest('[data-st]'); if (b && !f.saving && !f.done) { f.st = +b.dataset.st; if (f.siteId) f.fin = f.st === 7; qcRender(); return; } }
   // a new site: new building, renovation or ground-level works — each has its own stages, so the stage is chosen again
   { const b = e.target.closest('[data-fel]'); if (b && !f.saving && !f.done) { if ((f.fel || 'n') !== b.dataset.fel) { f.fel = b.dataset.fel; f.st = null; } qcRender(); return; } }
