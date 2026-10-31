@@ -141,7 +141,8 @@
     return seeded;
   }
   const listeners = new Set();
-  const notify = () => listeners.forEach(f => { try { f(); } catch (e) {} });
+  // 31.10.2026 (audit): a write wakes only the listeners of that document / collection (it reloaded every site on every write before)
+  const notify = path => listeners.forEach(l => { if (path === l.key || path.startsWith(l.key + '/')) { try { l.f(); } catch (e) {} } });
   const clone = o => o == null ? o : JSON.parse(JSON.stringify(o));
   function merge(a, b) { for (const [k, v] of Object.entries(b)) { if (v && typeof v === 'object' && !Array.isArray(v) && a[k] && typeof a[k] === 'object' && !Array.isArray(a[k])) merge(a[k], v); else a[k] = v; } return a; }
   const snap = (path, data) => ({ id: path.split('/').pop(), exists: data !== undefined, data: () => clone(data), metadata: { fromCache: false, hasPendingWrites: false } });
@@ -152,10 +153,10 @@
     return {
       id: path.split('/').pop(), path,
       get: async () => { await ensureSeed(); return snap(path, await kvGet(k)); },
-      set: d => serial(async () => { await kvPut(k, clone(d)); notify(); }),
-      update: d => serial(async () => { const cur = await kvGet(k); if (cur === undefined) throw { code: 'invalid_argument', message: 'missing' }; await kvPut(k, merge(cur, clone(d))); notify(); }),
-      delete: () => serial(async () => { await kvDel(k); notify(); }),
-      onSnapshot(next) { let alive = true; const f = async () => { await ensureSeed(); if (alive) next(snap(path, await kvGet(k))); }; listeners.add(f); f(); return () => { alive = false; listeners.delete(f); }; },
+      set: d => serial(async () => { await kvPut(k, clone(d)); notify(path); }),
+      update: d => serial(async () => { const cur = await kvGet(k); if (cur === undefined) throw { code: 'invalid_argument', message: 'missing' }; await kvPut(k, merge(cur, clone(d))); notify(path); }),
+      delete: () => serial(async () => { await kvDel(k); notify(path); }),
+      onSnapshot(next) { let alive = true; const f = async () => { await ensureSeed(); if (alive) next(snap(path, await kvGet(k))); }, l = { key: path, f }; listeners.add(l); f(); return () => { alive = false; listeners.delete(l); }; },
       collection: sub => collection(path + '/' + sub),
     };
   }
@@ -165,7 +166,7 @@
     return {
       path, doc: id => doc(path + '/' + (id || Math.random().toString(36).slice(2))),
       get: async () => { const docs = await all(); return { docs, size: docs.length, empty: !docs.length, docChanges: () => [], metadata: {} }; },
-      onSnapshot(next) { let alive = true; const f = async () => { const docs = await all(); if (alive) next({ docs, size: docs.length, empty: !docs.length, docChanges: () => [], metadata: {} }); }; listeners.add(f); f(); return () => { alive = false; listeners.delete(f); }; },
+      onSnapshot(next) { let alive = true; const f = async () => { const docs = await all(); if (alive) next({ docs, size: docs.length, empty: !docs.length, docChanges: () => [], metadata: {} }); }, l = { key: path, f }; listeners.add(l); f(); return () => { alive = false; listeners.delete(l); }; },
     };
   }
   const dbApi = { doc, collection };
@@ -204,9 +205,13 @@
       const f = 'p/' + String(e[0]).padStart(3, '0') + '.bin';
       if (!bundles.has(f)) bundles.set(f, fetchEnc(f).catch(err => { bundles.delete(f); throw err; }));
       const buf = await bundles.get(f);
+      // 31.10.2026 (audit): keep the last 4 photo packs (≈0.85 MB each) and the last 80 photos in memory; older ones are let go
+      bundles.delete(f); bundles.set(f, Promise.resolve(buf)); while (bundles.size > 4) bundles.delete(bundles.keys().next().value);
       return URL.createObjectURL(new Blob([new Uint8Array(buf, e[1], e[2])], { type: 'image/jpeg' }));
     })().catch(() => { urls.delete(id); return null; }));
-    return urls.get(id);
+    const p = urls.get(id); urls.delete(id); urls.set(id, p);
+    while (urls.size > 80) { const k0 = urls.keys().next().value, old = urls.get(k0); urls.delete(k0); old.then(u => u && setTimeout(() => URL.revokeObjectURL(u), 60000)); }
+    return p;
   };
 
   /* ---------- screen always on ---------- */

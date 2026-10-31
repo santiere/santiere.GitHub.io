@@ -1040,7 +1040,7 @@ let db = null, assets = null, downloads = null, map = null;
 /* ============ static data: tiles, glyphs, photos ============ */
 // Map tiles, fonts and panel photos ship as JSON files holding base64 data.
 // kept in memory only for the most recently used bundles, so a long day on the road does not fill the phone's memory
-const bundleCache = new Map(); const BUNDLE_MAX = 36;
+const bundleCache = new Map(); const BUNDLE_MAX = 8;   // 31.10.2026 (audit): 8 packs (≈11 MB) in memory, not 36 (≈50 MB); the rest come from the phone's cache
 function bundle(path) {
   let p = bundleCache.get(path);
   if (p) { bundleCache.delete(path); bundleCache.set(path, p); return p; }
@@ -1867,7 +1867,9 @@ async function shrink(file, max = 1600, q = 0.82) {
   const w = img.width, h = img.height, k = Math.min(1, max / Math.max(w, h), Math.sqrt(16e6 / (w * h)));   // (a phone cannot draw more than ~16 MP at once; only photos that are not JPEG pass through here)
   const c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-  return await new Promise(r => c.toBlob(r, 'image/jpeg', q));
+  // 31.10.2026 (audit): the decoded photo (≈48 MB for 12 MP) and the canvas are let go at once — iOS has a hard limit for canvases
+  try { if (img.close) img.close(); else if (img.src) URL.revokeObjectURL(img.src); } catch (e) {}
+  const out = await new Promise(r => c.toBlob(r, 'image/jpeg', q)); c.width = c.height = 0; return out;
 }
 function readExif(buf) {
   try {
@@ -2585,7 +2587,7 @@ function set3d(on) {
 $('#btn3d').addEventListener('click', () => set3d(!S.is3d));
 // compass: shown only while the map is turned; one tap puts north back up
 function northBtn() {
-  const b = $('#btnNorth'); if (!b || !map) return; const br = map.getBearing();
+  const b = $('#btnNorth'); if (!b || !map) return; if (S.navOn) { if (!b.hidden) b.hidden = true; return; } const br = map.getBearing();
   b.hidden = Math.abs(br) < 1 || !!S.navOn; const sv = b.querySelector('svg'); if (sv) sv.style.transform = 'rotate(' + (-br) + 'deg)';
 }
 $('#btnNorth').addEventListener('click', () => { if (map) map.easeTo({ bearing: 0, duration: 400 }); });
@@ -2862,6 +2864,7 @@ function qcPicked(e) {
 }
 function qcSetPhoto(f, k, file) {
   if (QC.f !== f || f.saving || f.done) return;
+  { const old = f[k + 'Url']; if (old) setTimeout(() => URL.revokeObjectURL(old), 1500); }   // 31.10.2026 (audit): a retaken photo lets the old one go
   f[k] = file; f[k + 'Url'] = URL.createObjectURL(file); f[k + 'R'] = null; f[k + 'G'] = gpsNow(); f[k + 'Wide'] = true;
   // sideways or upright: the frame takes the shape of the photo
   { const u = f[k + 'Url'], im = new Image(); im.onload = () => { const w = im.naturalWidth > im.naturalHeight * 1.1; if (QC.f === f && f[k + 'Url'] === u && w !== f[k + 'Wide']) { f[k + 'Wide'] = w; qcRender(); } }; im.src = u; }
@@ -3031,7 +3034,8 @@ const CLOUD = {
           if (S.route.stops.includes(sid) && !S.route.done.includes(sid) && status(Object.assign({}, s, up)) !== 'due') skipped.push([sid, s.name, v.bn]);
         }
       }
-      try { localStorage.setItem('harta_stateU', JSON.stringify(CLOUD.stateU)); } catch (e) {}
+      // 31.10.2026 (audit): written to the phone only when something changed (it was every 15 s)
+      try { const js = JSON.stringify(CLOUD.stateU); if (js !== CLOUD._uJs) { localStorage.setItem('harta_stateU', js); CLOUD._uJs = js; } } catch (e) {}
       if (changed) refresh();
       if (skipped.length) routeSkip(skipped);
     } catch (e) {}
@@ -4064,7 +4068,10 @@ function navGpsInner(c, quiet) {
     const seg = L.cum[pr.i + 1] - L.cum[pr.i], t = seg ? Math.max(0, Math.min(1, (pr.pos - L.cum[pr.i]) / seg)) : 0;
     const a = L.coords[pr.i], b2 = L.coords[pr.i + 1];
     S.navProj = { leg: it.leg, i: pr.i, pt: [a[0] + (b2[0] - a[0]) * t, a[1] + (b2[1] - a[1]) * t] };
-    try { const src = map && map.getSource('route'); if (src) src.setData({ type: 'FeatureCollection', features: routeFeatures() }); } catch (e) {}
+    // 31.10.2026 (audit): the whole route goes to the map again only after 20 m, a new leg or 5 s (it went on every GPS fix)
+    const ls = S.navProjSent, nowT = Date.now();
+    if (!ls || ls.leg !== it.leg || Math.abs(pr.pos - ls.pos) > 20 || nowT - ls.t > 5000) { S.navProjSent = { leg: it.leg, pos: pr.pos, t: nowT };
+      try { const src = map && map.getSource('route'); if (src) src.setData({ type: 'FeatureCollection', features: routeFeatures() }); } catch (e) {} }
   }
   const cur = items[S.navPos];
   const toMan = Math.max(0, (pr.d <= limit ? L.cum[L.stepAt[cur.j]] - pr.pos : Router.hav([c.latitude, c.longitude], cur.s.loc)));
