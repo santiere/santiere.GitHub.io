@@ -182,7 +182,6 @@
     hint('Apropie panoul cu zoom și ține telefonul nemișcat', 3500);
   }
   function stop() {
-    try { if (navigator.audioSession && st.aType != null) { navigator.audioSession.type = st.aType; st.aType = null; } } catch (e) {}
     if (st.stream) st.stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
     st.stream = st.track = null; st.pending = null; st.applying = false;
     const v = $('#pcam video'); if (v) { v.srcObject = null; v.style.transform = ''; }
