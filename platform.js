@@ -108,8 +108,6 @@
     keyResolve(key);
   })();
 
-  // 31.10.2026 (Ionuț): from the very start the app only mixes with other audio (YouTube, music) and never takes it over
-  try { if (navigator.audioSession) navigator.audioSession.type = 'ambient'; } catch (e) {}
   // 31.10.2026: ask iOS to keep the app's storage (sites, photos not yet sent) instead of clearing it when the phone is short of space
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) {}
   /* ---------- seed + local document store ---------- */

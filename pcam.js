@@ -152,7 +152,8 @@
     let s = null;
     // 31.10.2026 (Ionuț): YouTube / music keep playing while the camera is open — the page asks iOS for an „ambient” audio session
     // (mixes with other apps instead of interrupting them; Safari 17+), and the camera picture is a muted video
-    try { if (navigator.audioSession && navigator.audioSession.type !== 'ambient') { st.aType = navigator.audioSession.type; navigator.audioSession.type = 'ambient'; } } catch (e) {}
+    // (set when the camera opens and left so — set at the app's start it paused YouTube right when the app opened)
+    try { if (navigator.audioSession && navigator.audioSession.type !== 'ambient') navigator.audioSession.type = 'ambient'; } catch (e) {}
     v.muted = true; v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
     try { s = await navigator.mediaDevices.getUserMedia({ audio: false, video: Object.assign(P ? { width: { ideal: 3024 }, height: { ideal: 4032 } } : { width: { ideal: 4032 }, height: { ideal: 3024 } }, base) }); }
     catch (e) {
