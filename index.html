@@ -3714,7 +3714,7 @@ async function computeRoute(optimize, opts) {
     S.nav = { legs, total, sig: same ? routeSig() : 'stale', start: start || null, first: start ? null : pts[order[0]].id };
     if (!same && typeof routeAutoSoon === 'function') setTimeout(routeAutoSoon, 0);
     if (legs.length) S.autoSig = null;   // computed: if the stops are later put back in an order tried before, it is computed again
-    if (S.navOn) { S.navList = null; S.navPos = 0; S.navAnn = {}; S.navProj = null; S.navTot = Math.max(S.navTot || 0, total.dist); if (S.navTrack) { S.navTrack.off = 0; S.navTrack.away = 0; S.navTrack.lastD = null; } }   // a new order while navigating: guidance restarts from my position
+    if (S.navOn) { S.navList = null; S.navPos = 0; S.navAnn = {}; S.navProj = null; S.navProjPrev = null; S.navTot = Math.max(S.navTot || 0, total.dist); if (S.navTrack) { S.navTrack.off = 0; S.navTrack.away = 0; S.navTrack.lastD = null; } }   // a new order while navigating: guidance restarts from my position
     routeMsg('');
     updateMap(); refresh();
     const all = S.navOn || (opts && opts.fit === false) ? [] : legs.flatMap(l => l.coords); if (all.length && map) { const bb = new maplibregl.LngLatBounds(); all.forEach(c => bb.extend(c)); map.fitBounds(bb, { padding: { top: 130, bottom: 60, left: 30, right: 60 }, duration: 600 }); }
@@ -3831,7 +3831,7 @@ function scoutStart() {
   closeSheet(); $('#nav').classList.add('scout'); $('#nav').hidden = false; $('.top').hidden = true; $('.fab-col').hidden = true; $('.tabs').hidden = true;
   if (S.meMarker) S.meMarker.getElement().classList.add('nav');
   try { localStorage.setItem('harta_scout', String(Date.now())); } catch (e) {}
-  S.navTrack = null; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.navTurnK = null; S.navZLast = null; S.navTurnD = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null; S.navFree = false;
+  S.navTrack = null; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.navTurnK = null; S.navZLast = null; S.navTurnD = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null; S.navProjPrev = null; S.navFree = false;
   navShow(false);
   // start from the position I already have; if it is an old one, ask the phone for a fresh one quietly (no error screen while I look at the map)
   if (S.me) { navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }); if (Date.now() - (S.me.t || 0) > 30000 && typeof startGeoWatch === 'function') startGeoWatch(); }
@@ -3847,7 +3847,7 @@ function navStart() {
   try { localStorage.setItem('harta_nav', String(Date.now())); } catch (e) {}
   try { map.setLayoutProperty('route-start', 'visibility', 'none'); } catch (e) {}
   if (S.voice && 'speechSynthesis' in window) { try { speechSynthesis.getVoices(); } catch (e) {} }
-  S.navTrack = { off: 0, lastReroute: 0 }; S.nearSeen = {}; S.nearT = 0; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.navTurnK = null; S.navZLast = null; S.navTurnD = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null;
+  S.navTrack = { off: 0, lastReroute: 0 }; S.nearSeen = {}; S.nearT = 0; S.navGpsFollow = false; S.navSpd = null; S.navDz = null; S.navDzOut = null; S.navTurnK = null; S.navZLast = null; S.navTurnD = null; S.scoutAt = null; S.navBrg = null; S.navLastFix = 0; S.navProj = null; S.navProjPrev = null;
   navShow(true);
   if (S.me && Date.now() - (S.me.t || 0) < 30000) navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc });
   else if (typeof locateNow === 'function' && S.geoErr != null) locateNow();
@@ -3932,7 +3932,7 @@ function navAdvance() {
   const cur = navItem().leg;
   if (!open(legs[cur])) {   // it was the stop I was heading to: show the next one at once (the recalculation below refines the road)
     let nx = legs.findIndex((l, k) => k > cur && open(l)); if (nx < 0) nx = legs.findIndex(open);
-    S.navPos = Math.max(0, navItems().findIndex(x => x.leg === nx)); S.navAnn = {}; S.navProj = null;
+    S.navPos = Math.max(0, navItems().findIndex(x => x.leg === nx)); S.navAnn = {}; S.navProj = null; S.navProjPrev = null;
     if (S.navTrack) { S.navTrack.off = 0; S.navTrack.away = 0; S.navTrack.lastD = null; }
     navShow(false);
   }
@@ -4007,7 +4007,7 @@ async function navReroute(next, firstId) {
     const total = legs.reduce((x, l) => ({ time: x.time + l.time, dist: x.dist + l.dist }), { time: 0, dist: 0 });
     S.nav = { legs, total, sig: routeSig(), start: pts[0], first: null };
     S.navTot = Math.max(S.navTot || 0, total.dist);
-    S.navList = null; S.navPos = 0; S.navAnn = {}; tr.off = 0; S.navProj = null;
+    S.navList = null; S.navPos = 0; S.navAnn = {}; tr.off = 0; S.navProj = null; S.navProjPrev = null;
     if (!next) speak('Recalculez traseul');
     navShow(!!next); navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }, true);
   } catch (e) { } finally { tr.busy = false; }
@@ -4036,7 +4036,8 @@ function navGpsInner(c, quiet) {
   if (!S.navOn || (!S.nav && !S.scout)) return;
   S.me = Object.assign(S.me || {}, { lat: c.latitude, lng: c.longitude });
   const nowT = Date.now(); const dur = Math.max(250, Math.min(1100, (nowT - (S.navLastFix || nowT - 1000)) * 0.95)); S.navLastFix = nowT;
-  if (!quiet || !S.mkRaf) navGlide([c.longitude, c.latitude], quiet ? 300 : dur);
+  // 31.10.2026 (Ionuț): while following a route the arrow is placed on the road (see below); free driving keeps the GPS point
+  if (S.scout && (!quiet || !S.mkRaf)) navGlide([c.longitude, c.latitude], quiet ? 300 : dur);
   if (nowT - (S.navSaved || 0) > 60000) { S.navSaved = nowT; try { localStorage.setItem(S.scout ? 'harta_scout' : 'harta_nav', String(nowT)); } catch (e) {} }
   if (S.scout) {   // no route: just follow me, turned the way I move, zooming out with the speed
     let brg = map ? map.getBearing() : 0;
@@ -4052,7 +4053,7 @@ function navGpsInner(c, quiet) {
     S.navGpsFollow = true; return;
   }
   const tr = S.navTrack || (S.navTrack = { off: 0, lastReroute: 0 });
-  const items = navItems(); const it = items[S.navPos]; if (!it) return;
+  const items = navItems(); const it = items[S.navPos]; if (!it) { navGlide([c.longitude, c.latitude], quiet ? 300 : dur); return; }
   const L = legGeom(S.nav.legs[it.leg]);
   const pr = projectOnLeg(L, c.latitude, c.longitude);
   const acc = c.accuracy || 20;
@@ -4070,13 +4071,16 @@ function navGpsInner(c, quiet) {
     const gi = items.findIndex(x => x.leg === it.leg && x.j === j);
     if (gi >= 0 && gi !== S.navPos && gi > S.navPos - 1) { S.navPos = gi; S.navGpsFollow = true; navShow(false); }
   }
+  S.navSnap = null;
   if (pr.d <= limit && L.coords[pr.i + 1]) {
     const seg = L.cum[pr.i + 1] - L.cum[pr.i], t = seg ? Math.max(0, Math.min(1, (pr.pos - L.cum[pr.i]) / seg)) : 0;
     const a = L.coords[pr.i], b2 = L.coords[pr.i + 1];
-    S.navProj = { leg: it.leg, i: pr.i, pt: [a[0] + (b2[0] - a[0]) * t, a[1] + (b2[1] - a[1]) * t] };
-    // 31.10.2026 (audit): the whole route goes to the map again only after 20 m, a new leg or 5 s (it went on every GPS fix)
+    const np = { leg: it.leg, i: pr.i, pt: [a[0] + (b2[0] - a[0]) * t, a[1] + (b2[1] - a[1]) * t], pos: pr.pos };
+    // 31.10.2026 (Ionuț): the full-colour road starts where the arrow is now (the start of its glide to this fix), so the line stays
+    // glued to the arrow and the arrow drives over it; the faded part grows behind
+    const pv = S.navProjPrev; S.navProj = pv && pv.leg === np.leg && pv.pos <= np.pos ? pv : np; S.navProjPrev = np; S.navSnap = pr.d <= Math.min(limit, 30) ? np.pt : null;
     const ls = S.navProjSent, nowT = Date.now();
-    if (!ls || ls.leg !== it.leg || Math.abs(pr.pos - ls.pos) > 20 || nowT - ls.t > 5000) { S.navProjSent = { leg: it.leg, pos: pr.pos, t: nowT };
+    if (!ls || ls.leg !== it.leg || Math.abs(pr.pos - ls.pos) > 3 || nowT - ls.t > 5000) { S.navProjSent = { leg: it.leg, pos: pr.pos, t: nowT };
       try { const src = map && map.getSource('route'); if (src) src.setData({ type: 'FeatureCollection', features: routeFeatures() }); } catch (e) {} }
   }
   const cur = items[S.navPos];
@@ -4108,11 +4112,17 @@ function navGpsInner(c, quiet) {
   const hdg = c.heading != null && !isNaN(c.heading) && (c.speed == null || c.speed > 1.2) ? c.heading : null;
   let rb = null; if (pr.d <= limit) { const i2 = Math.min(L.coords.length - 1, pr.i + 1); rb = bearingTo(L.coords[pr.i], L.coords[i2]); }
   const diff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
-  if (hdg != null) brg = hdg;
+  const way = hdg != null ? hdg : mvb;
+  // 31.10.2026 (Ionuț): on the route the arrow points along the street (the phone's heading wobbles and showed it across the street);
+  // only a clear disagreement (turning back, leaving the route) lets the real direction win
+  const onRoad = pr.d <= Math.min(limit, 30) && rb != null && S.navSnap && (way == null || diff(way, rb) <= 60);
+  if (onRoad) brg = rb;
+  else if (hdg != null) brg = hdg;
   else if (mvb != null && (rb == null || diff(mvb, rb) > 60)) brg = mvb;
   else if (rb != null) brg = rb;
   else if (mvb != null) brg = mvb;
-  const way = hdg != null ? hdg : mvb;
+  const at = onRoad ? S.navSnap : [c.longitude, c.latitude];
+  if (!quiet || !S.mkRaf) navGlide(at, quiet ? 300 : dur);
   if (!quiet) tr.wrong = rb != null && way != null && diff(way, rb) > 120 ? (tr.wrong || 0) + 1 : 0;
   if (!quiet && tr.wrong >= 2 && Date.now() - tr.lastReroute > 20000) { tr.wrong = 0; navReroute(); }
   // steady direction: ignore tiny wobbles, soften the rest; a real turn-around is shown at once
@@ -4121,7 +4131,7 @@ function navGpsInner(c, quiet) {
   if (S.meMarker) S.meMarker.setRotation(brg);
   if (map && !S.navFree) {
     const top = $('#navTopBox').getBoundingClientRect().height + 20, bot = $('#navBot').getBoundingClientRect().height + 20;
-    map.easeTo({ center: [c.longitude, c.latitude], bearing: brg, zoom: navSpeedZoom(c, navTurnNear(cur, toMan)), pitch: 50, padding: navPad(top, bot, 120), duration: quiet ? 400 : dur, easing: t => t });
+    map.easeTo({ center: at, bearing: brg, zoom: navSpeedZoom(c, navTurnNear(cur, toMan)), pitch: 50, padding: navPad(top, bot, 120), duration: quiet ? 400 : dur, easing: t => t });
   }
 }
 /* ---------- dynamic order: a stop of my route that is not the next one, but is right next to me, is done now ----------
