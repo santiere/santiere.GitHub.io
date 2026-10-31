@@ -1438,13 +1438,14 @@ function siteFeatures() {
   const ord = new Map(S.route.stops.map((id, i) => [id, i + 1]));
   const feats = [];
   for (const s of S.sites.values()) {
-    const sel = ord.has(s.id);
+    // 31.10.2026 (Ionuț): a stop of the route already done is no longer a route pin — it shows like any updated site (blue, faded while driving)
+    const sel = ord.has(s.id) && !S.route.done.includes(s.id);
     // 18.10.2026 (Ionuț): while navigating or exploring, the updated sites (blue) and the unverified ones (orange) are shown too,
     // faded (45%, 18.10 at 11:13), so a site already photographed is not taken for a new one; finished sites stay hidden
     const ps = pinSt(s), dim = S.navOn && !sel && (ps === 'wait' || ps === 'ac') && S.openId !== s.id;
     if (!vis.has(s.id) && !sel && !(S.navOn && dim)) continue;
     if (S.navOn && !S.scout && ps !== 'due' && !dim && S.openId !== s.id) continue;
-    feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [s.lng, s.lat] }, properties: { id: s.id, st: ps, age: ps === 'due' ? dueAge(s) : 0, sel: sel ? 1 : 0, ord: ord.get(s.id) || 0, rz: RZ.other(s.id) ? 1 : 0, dim: dim ? 1 : 0 } });
+    feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [s.lng, s.lat] }, properties: { id: s.id, st: ps, age: ps === 'due' ? dueAge(s) : 0, sel: sel ? 1 : 0, ord: sel ? ord.get(s.id) || 0 : 0, rz: RZ.other(s.id) ? 1 : 0, dim: dim ? 1 : 0 } });
   }
   // selected on top
   feats.sort((a, b) => a.properties.sel - b.properties.sel);
