@@ -4282,10 +4282,11 @@ window.addEventListener('resize', () => { setTimeout(navTopVar, 200); if (S.navO
 /* progress along the whole route: stops reached + share of the distance already driven */
 function navProg(leg, remD) {
   const box = $('#navProg'); if (!box || !S.nav) return;
-  const tot = Math.max(S.navTot || 0, 1);
-  const pct = Math.max(0, Math.min(100, Math.round(100 * (1 - remD / tot))));
-  $('#npFill').style.setProperty('--p', pct + '%');
+  // 31.10.2026 (Ionuț: the percent looked unrealistic): it was the distance driven against the longest route ever computed, which
+  // jumped with every recalculation; now it is simply the share of the route's sites already done
   const z = navCount(), a = Math.min(z, S.route.stops.filter(id => S.route.done.includes(id)).length);   // stops ticked off / stops of the route
+  const pct = z ? Math.max(0, Math.min(100, Math.round(100 * a / z))) : 0;
+  $('#npFill').style.setProperty('--p', pct + '%');
   $('#npStops').textContent = a + '/' + z;
   $('#npPct').textContent = pct + '%';
   box.setAttribute('aria-label', 'Progres traseu: ' + a + ' din ' + z + ' șantiere, ' + pct + '%');
