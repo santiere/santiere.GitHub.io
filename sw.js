@@ -1,5 +1,5 @@
 /* Offline cache + serves photos taken in the app (stored in IndexedDB) at /_blob/<id>. */
-const VERSION = 'st19t';
+const VERSION = 'st19u';
 const SHELL = 'shell-' + VERSION, DATA = 'data-' + VERSION;
 // 31.10.2026 (audit): the map tiles and the road graph (≈60 MB) keep their own cache across app updates — they were downloaded again
 // after every update. Change MAPV only when tiles/ or route/ are regenerated.

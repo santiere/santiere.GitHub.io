@@ -3753,7 +3753,8 @@ function routeFeatures() {
     if (coords.length > 1) rf.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { straight: 1 } });
   }
   const st = S.me;
-  if (st) rf.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [st.lng, st.lat] }, properties: {} });
+  // 31.10.2026 (Ionuț): the black start dot only on the route overview — while driving it trailed behind the arrow
+  if (st && !S.navOn) rf.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [st.lng, st.lat] }, properties: {} });
   return rf;
 }
 function autoRoute(n) {
