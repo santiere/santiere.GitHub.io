@@ -2921,8 +2921,9 @@ $('#qc').addEventListener('click', async e => {
     } catch (err) { toast('Nu s-a salvat în aplicație: ' + (err.code || err.message)); f.saving = false; e.target.disabled = false; e.target.textContent = 'Salvează'; }
     if (!saved) return;
     if (QC.f === f) qcClose();
-    toast('✓ Salvat' + (site ? ' · ' + site.name : '') + (site && f.fin ? ' · marcat finalizat' : ''));
-    if (site && routeVisited(site.id) && S.navOn && !S.scout) { const nx = S.sites.get(S.nav.legs[navItem().leg].to); toast('✓ Salvat · ' + site.name + (navIsDest(navItem().leg) ? ' — urmează drumul spre ' + destName() : ' — urmează oprirea ' + navNo(navItem().leg) + (nx ? ': ' + nx.name : '')), 5000); }
+    // 31.10.2026 (Ionuț): an updated site closes without any message — the navigation simply goes on to the next stop
+    if (!site) toast('✓ Salvat');
+    if (site) routeVisited(site.id);
     // photos go up in the background, one after the other. A new site sends the light copy of its panel first (about 1 MB,
     // so colleagues see the panel within seconds), then the pair. The panel is no longer sent a second time at full size.
     if (!site) PN.put(sid, f.panouR.blob).catch(() => {}).then(() => OB.pump([k])); else OB.pump([k]);
