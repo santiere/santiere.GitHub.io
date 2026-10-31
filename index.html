@@ -2999,7 +2999,9 @@ const CLOUD = {
       const st = await CLOUD.req('/state');
       let changed = 0; const skipped = [];
       for (const [sid, v] of Object.entries(st)) {
-        if ((CLOUD.stateU[sid] || 0) >= v.u) continue;
+        // 31.10.2026 (Ionuț, sites gone from the phone): an entry already seen is skipped only if its site is really here; a site added
+        // on the server (by any phone) that is missing on this phone — storage cleared by iOS, a failed write, an old seed — comes back
+        if ((CLOUD.stateU[sid] || 0) >= v.u && (v.sters || !v.site || S.sites.has(sid) || rawSite(sid))) continue;
         CLOUD.stateU[sid] = v.u;
         const s = S.sites.get(sid);
         if (v.sters) {   // deleted on another phone: off the map, the list and the route here too

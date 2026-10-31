@@ -108,6 +108,8 @@
     keyResolve(key);
   })();
 
+  // 31.10.2026: ask iOS to keep the app's storage (sites, photos not yet sent) instead of clearing it when the phone is short of space
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) {}
   /* ---------- seed + local document store ---------- */
   const KEEP = ['inactiv', 'panouA', 'santierA', 'panouT', 'sters', 'deScanat', 'manual', 'creat'];
   let seeded = null;
@@ -124,7 +126,16 @@
     if (!seeded) seeded = (async () => {
       const seed = await encJSON('data/sites.enc');
       const cur = await kvGet('seedVersion');
-      if (cur === seed.v) return;
+      // 31.10.2026 (Ionuț, sites gone from the phone): same seed as last time — still check that every one of its sites is on the phone
+      // (deleted ones stay as marked, so they are present too); any site missing from its group is put back as it is in the seed
+      if (cur === seed.v) {
+        for (const [sh, doc] of Object.entries(seed.shards)) {
+          const d = await kvGet('doc:sites/' + sh); const have = (d && d.s) || {}; let add = 0;
+          for (const [id, x] of Object.entries(doc.s)) if (!have[id]) { have[id] = x; add++; }
+          if (add) { await kvPut('doc:sites/' + sh, { s: have }); try { console.log('[seed] ' + add + ' șantiere puse la loc în ' + sh); } catch (e) {} }
+        }
+        return;
+      }
       const byId = {};
       for (const k of await kvKeys()) if (String(k).startsWith('doc:sites/')) { const d = await kvGet(k); for (const [id, s] of Object.entries((d && d.s) || {})) if (s) byId[id] = s; }
       const seen = new Set();
