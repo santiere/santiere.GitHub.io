@@ -108,6 +108,9 @@
     keyResolve(key);
   })();
 
+  // 31.10.2026 (Ionuț): from the very start the app only mixes with other audio, so the camera never stops YouTube / music; iOS still
+  // pauses YouTube once, when the app opens (set later, at the first camera, it did not help) — accepted
+  try { if (navigator.audioSession) navigator.audioSession.type = 'ambient'; } catch (e) {}
   // 31.10.2026: ask iOS to keep the app's storage (sites, photos not yet sent) instead of clearing it when the phone is short of space
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) {}
   /* ---------- seed + local document store ---------- */
