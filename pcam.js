@@ -183,6 +183,7 @@
     hint('Apropie panoul cu zoom și ține telefonul nemișcat', 3500);
   }
   function stop() {
+    if (mot.on) { window.removeEventListener('devicemotion', onMotion); mot.on = false; mot.v = null; }
     if (st.stream) st.stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
     st.stream = st.track = null; st.pending = null; st.applying = false;
     const v = $('#pcam video'); if (v) { v.srcObject = null; v.style.transform = ''; }
@@ -193,6 +194,17 @@
     st.onPhoto = st.sys = null;
   }
 
+  // ---------- 31.10.2026 (Ionuț: „the stabiliser does not work”): the phone's gyroscope says how much the hand moves; the shot
+  // waits for a still moment and keeps the sharpest of the still frames ----------
+  const mot = { on: false, v: null, t: 0 };
+  function onMotion(e) { const r = e.rotationRate; if (!r) return; const m = Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0);   // degrees / second
+    mot.v = mot.v == null ? m : mot.v * 0.5 + m * 0.5; mot.t = performance.now(); }
+  function motionOn() { if (mot.on) return; mot.on = true; window.addEventListener('devicemotion', onMotion); }
+  // must run inside the tap itself (iOS asks once for „Mișcare și orientare”)
+  function askMotion() {
+    try { const D = window.DeviceMotionEvent; if (D && typeof D.requestPermission === 'function') { if (mot.ok) motionOn(); else if (!mot.asked) { mot.asked = true; D.requestPermission().then(r => { if (r === 'granted') { mot.ok = true; motionOn(); } }).catch(() => {}); } } else motionOn(); } catch (e) {}
+  }
+  const still = () => mot.on && mot.v != null && performance.now() - mot.t < 300 ? mot.v : null;
   // ---------- the shot: several frames, the sharpest one is kept ----------
   const nextFrame = v => new Promise(res => {
     let done = false; const fin = () => { if (!done) { done = true; res(); } };
@@ -221,13 +233,20 @@
       const n = Math.min(384, sw, sh); const pc = document.createElement('canvas'); pc.width = pc.height = n;
       const px = pc.getContext('2d', { willReadFrequently: true });
       const fl = $('.pcam-flash', el); fl.classList.add('on'); setTimeout(() => fl.classList.remove('on'), 60);
-      let best = -1, got = 0;
-      for (let i = 0; i < 7; i++) {
+      // the tap itself shakes the phone: wait a moment, then up to ~2 s of frames; each one is scored by its sharpness and, with the
+      // gyroscope, lowered when the hand was moving; it stops early once a frame was taken with the phone still
+      hint('Ține telefonul nemișcat…');
+      await new Promise(r => setTimeout(r, 150));
+      let best = -1, got = 0, calm = 0; const t0 = performance.now();
+      for (let i = 0; i < 26 && performance.now() - t0 < 2000; i++) {
         await nextFrame(v);
+        const m = still();
         px.drawImage(v, Math.round(W / 2 - n / 2), Math.round(H / 2 - n / 2), n, n, 0, 0, n, n);
-        const q = sharp(px, n);
-        if (q > best) { best = q; bx.drawImage(v, sx, sy, sw, sh, 0, 0, sw, sh); got++; }
+        const q = sharp(px, n) / (m == null ? 1 : 1 + (m / 4) * (m / 4));
+        if (q > best) { best = q; bx.drawImage(v, sx, sy, sw, sh, 0, 0, sw, sh); got++; if (m != null && m < 2) calm++; }
+        if (i >= 5 && calm >= 2 && m != null && m < 2) break;
       }
+      hint('');
       if (!got) throw new Error('camera');
       const blob = await new Promise(r => big.toBlob(r, 'image/jpeg', 0.95));
       big.width = big.height = 0;
@@ -252,7 +271,7 @@
     const a = b.dataset.pc;
     if (b.dataset.z) { setRel(+b.dataset.z); return; }
     if (a === 'close') close();
-    else if (a === 'shot') shoot();
+    else if (a === 'shot') { askMotion(); shoot(); }
     else if (a === 'again') { review(false); turned(); }   // turned while checking the photo: the camera follows now
     else if (a === 'full') {
       const box = $('#pcam .pcam-rv'); const on = box.classList.toggle('full');
@@ -271,6 +290,7 @@
 
   // open the camera; onPhoto(file) gets the photo the user chose to use; sysInput = the old camera field (fallback)
   async function open(onPhoto, sysInput) {
+    askMotion();
     const el = ui();
     st.onPhoto = onPhoto; st.sys = sysInput || null; st.blob = null;
     review(false); el.hidden = false;
