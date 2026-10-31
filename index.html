@@ -1343,6 +1343,8 @@ function siteColors() {
 function addSiteLayers() {
   if (!map.getSource('sites')) map.addSource('sites', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   if (!map.getSource('route')) map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  // 31.10.2026 (Ionuț): the first stretch of the road ahead, redrawn with the arrow as it glides — the line never trails the arrow
+  if (!map.getSource('route-ahead')) map.addSource('route-ahead', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   if (!map.getSource('focus')) map.addSource('focus', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   const C = siteColors();
   const add = l => { if (!map.getLayer(l.id)) map.addLayer(l); };
@@ -1355,6 +1357,8 @@ function addSiteLayers() {
   // 31.10.2026 (Ionuț): only the later legs (the stops after the current one) are fainter, and always drawn under the road to follow, so
   // where they overlap the real route is never mistaken; the road to follow and the driven part stay as they were
   add({ id: 'route-line', type: 'line', source: 'route', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['!', ['has', 'straight']], ['!', ['has', 'turn']]], layout: { 'line-join': 'round', 'line-cap': 'round', 'line-sort-key': ['case', ['==', ['get', 'pass'], 1], 0, ['==', ['get', 'dim'], 1], 1, 2] }, paint: { 'line-color': C.amber, 'line-opacity': ['case', ['==', ['get', 'pass'], 1], 0.25, ['==', ['get', 'dim'], 1], 0.16, 1], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 14, 6, 18, 13] } });
+  add({ id: 'route-ahead-case', type: 'line', source: 'route-ahead', layout: { 'line-join': 'round', 'line-cap': 'butt' }, paint: { 'line-color': '#5A3B00', 'line-opacity': 0.9, 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 9, 18, 18] } });
+  add({ id: 'route-ahead-line', type: 'line', source: 'route-ahead', layout: { 'line-join': 'round', 'line-cap': 'butt' }, paint: { 'line-color': C.amber, 'line-opacity': 1, 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 14, 6, 18, 13] } });
   add({ id: 'route-start', type: 'circle', source: 'route', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 7, 'circle-color': C.ink, 'circle-stroke-color': C.surface, 'circle-stroke-width': 2.5 } });
   add({ id: 'sites-hit', type: 'circle', source: 'sites', paint: { 'circle-radius': 17, 'circle-opacity': 0 } });
   add({ id: 'sites-selring', type: 'circle', source: 'sites', filter: ['==', ['get', 'sel'], 1], paint: {
@@ -3855,6 +3859,7 @@ function navStart() {
   else if (typeof locateNow === 'function' && S.geoErr != null) locateNow();
 }
 function navStop() {
+  S.navAheadSrc = null; try { const ra = map && map.getSource('route-ahead'); if (ra) ra.setData({ type: 'FeatureCollection', features: [] }); S.navAheadOn = false; } catch (e) {}
   const wasScout = !!S.scout; S.scout = false; $('#nav').classList.remove('scout');
   try { localStorage.removeItem('harta_nav'); localStorage.removeItem('harta_scout'); } catch (e) {}
   clearTimeout(S.navFreeT); S.navFree = false; { const rb = $('#navRecenter'); if (rb) rb.hidden = true; }
@@ -4014,13 +4019,22 @@ async function navReroute(next, firstId) {
     navShow(!!next); navGps({ latitude: S.me.lat, longitude: S.me.lng, heading: S.me.heading, speed: S.me.speed, accuracy: S.me.acc }, true);
   } catch (e) { } finally { tr.busy = false; }
 }
+// 31.10.2026 (Ionuț): the road ahead starts exactly at the arrow: [arrow, point of this fix on the road, the next ~1.5 km of the leg],
+// redrawn ~12 times a second while the arrow glides (only this short piece; the whole route is redrawn far less often)
+function navAhead(p, last) {
+  const src = map && map.getSource('route-ahead'); if (!src) return;
+  const A = S.navAheadSrc, now = performance.now();
+  if (!A || !S.navOn || S.scout) { if (S.navAheadOn) { S.navAheadOn = false; src.setData({ type: 'FeatureCollection', features: [] }); } return; }
+  if (!last && now - (S.navAheadT || 0) < 80) return; S.navAheadT = now; S.navAheadOn = true;
+  src.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [p, A.pt].concat(A.rest) }, properties: {} });
+}
 // one GPS fix → the arrow and the camera glide to it in the time until the next fix (no stop-and-go)
 function navGlide(to, dur) {
   if (!S.meMarker) return;
   cancelAnimationFrame(S.mkRaf);
   const from = S.meMarker.getLngLat(); const t0 = performance.now();
   if (Math.abs(from.lat - to[1]) + Math.abs(from.lng - to[0]) > 0.003) { S.meMarker.setLngLat(to); return; }   // big jump: no animation
-  const step = now => { const k = Math.min(1, (now - t0) / dur); S.meMarker.setLngLat([from.lng + (to[0] - from.lng) * k, from.lat + (to[1] - from.lat) * k]); if (k < 1) S.mkRaf = requestAnimationFrame(step); };
+  const step = now => { const k = Math.min(1, (now - t0) / dur), p = [from.lng + (to[0] - from.lng) * k, from.lat + (to[1] - from.lat) * k]; S.meMarker.setLngLat(p); navAhead(p, k >= 1); if (k < 1) S.mkRaf = requestAnimationFrame(step); };
   S.mkRaf = requestAnimationFrame(step);
 }
 // the direction I actually move in, from my own positions at least 8 m apart (null when I have not moved for 15 s)
@@ -4073,14 +4087,15 @@ function navGpsInner(c, quiet) {
     const gi = items.findIndex(x => x.leg === it.leg && x.j === j);
     if (gi >= 0 && gi !== S.navPos && gi > S.navPos - 1) { S.navPos = gi; S.navGpsFollow = true; navShow(false); }
   }
-  S.navSnap = null;
+  S.navSnap = null; S.navAheadSrc = null;
   if (pr.d <= limit && L.coords[pr.i + 1]) {
     const seg = L.cum[pr.i + 1] - L.cum[pr.i], t = seg ? Math.max(0, Math.min(1, (pr.pos - L.cum[pr.i]) / seg)) : 0;
     const a = L.coords[pr.i], b2 = L.coords[pr.i + 1];
     const np = { leg: it.leg, i: pr.i, pt: [a[0] + (b2[0] - a[0]) * t, a[1] + (b2[1] - a[1]) * t], pos: pr.pos };
-    // 31.10.2026 (Ionuț): the full-colour road starts where the arrow is now (the start of its glide to this fix), so the line stays
-    // glued to the arrow and the arrow drives over it; the faded part grows behind
-    const pv = S.navProjPrev; S.navProj = pv && pv.leg === np.leg && pv.pos <= np.pos ? pv : np; S.navProjPrev = np; S.navSnap = pr.d <= Math.min(limit, 30) ? np.pt : null;
+    // 31.10.2026 (Ionuț): the line is glued to the arrow by navAhead() (the short stretch ahead, redrawn as the arrow glides)
+    S.navProj = np; S.navProjPrev = np; S.navSnap = pr.d <= Math.min(limit, 30) ? np.pt : null;
+    // the next ~1.5 km of this leg, drawn by navAhead() from the arrow itself
+    { const rest = []; for (let q = pr.i + 1; q < L.coords.length && L.cum[q] - pr.pos < 1500; q++) rest.push(L.coords[q]); if (L.coords[pr.i + 1 + rest.length]) rest.push(L.coords[pr.i + 1 + rest.length]); S.navAheadSrc = S.navSnap ? { pt: np.pt, rest } : null; }
     const ls = S.navProjSent, nowT = Date.now();
     if (!ls || ls.leg !== it.leg || Math.abs(pr.pos - ls.pos) > 3 || nowT - ls.t > 5000) { S.navProjSent = { leg: it.leg, pos: pr.pos, t: nowT };
       try { const src = map && map.getSource('route'); if (src) src.setData({ type: 'FeatureCollection', features: routeFeatures() }); } catch (e) {} }
