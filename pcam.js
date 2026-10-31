@@ -150,6 +150,10 @@
     // orientation, and start again when the phone is turned (see turned() below)
     const P = portrait(); st.portrait = P;
     let s = null;
+    // 31.10.2026 (Ionuț): YouTube / music keep playing while the camera is open — the page asks iOS for an „ambient” audio session
+    // (mixes with other apps instead of interrupting them; Safari 17+), and the camera picture is a muted video
+    try { if (navigator.audioSession && navigator.audioSession.type !== 'ambient') { st.aType = navigator.audioSession.type; navigator.audioSession.type = 'ambient'; } } catch (e) {}
+    v.muted = true; v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
     try { s = await navigator.mediaDevices.getUserMedia({ audio: false, video: Object.assign(P ? { width: { ideal: 3024 }, height: { ideal: 4032 } } : { width: { ideal: 4032 }, height: { ideal: 3024 } }, base) }); }
     catch (e) {
       if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) throw e;
@@ -178,6 +182,7 @@
     hint('Apropie panoul cu zoom și ține telefonul nemișcat', 3500);
   }
   function stop() {
+    try { if (navigator.audioSession && st.aType != null) { navigator.audioSession.type = st.aType; st.aType = null; } } catch (e) {}
     if (st.stream) st.stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
     st.stream = st.track = null; st.pending = null; st.applying = false;
     const v = $('#pcam video'); if (v) { v.srcObject = null; v.style.transform = ''; }
