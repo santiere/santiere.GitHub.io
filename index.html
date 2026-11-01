@@ -227,6 +227,8 @@ h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
 .fab-scout{background:var(--surface);color:var(--ink)}
 #app.area-on #btnScout{display:none}   /* choosing a zone: the column must not reach the zone panel */
 .nav.scout #navSign,.nav.scout #navProg,.nav.scout #navArrive{display:none!important}
+.scout-f{font:inherit;font-size:13px;font-weight:600;color:var(--ink);background:var(--surface-2);border:1.5px solid var(--line);border-radius:999px;padding:4px 12px;margin-top:4px;cursor:pointer}
+#navSub .seg{white-space:normal}#navSub .seg button{font-size:12px;height:30px;padding:0 6px;white-space:nowrap}
 /* drawing a zone: nothing but the map, so the outline can be traced anywhere */
 #app.drawing .top,#app.drawing .fab-col,#app.drawing .tabs,#app.drawing .areabar,#app.drawing .sheet,#app.drawing .selfab,#app.drawing .selbar{display:none!important}
 .dup-box{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}.dup-box .btn{width:100%;white-space:normal;height:auto;min-height:44px;padding:8px 12px}
@@ -1442,8 +1444,10 @@ function siteFeatures() {
     const sel = ord.has(s.id) && !S.route.done.includes(s.id);
     // 18.10.2026 (Ionuț): while navigating or exploring, the updated sites (blue) and the unverified ones (orange) are shown too,
     // faded (45%, 18.10 at 11:13), so a site already photographed is not taken for a new one; finished sites stay hidden
-    const ps = pinSt(s), dim = S.navOn && !sel && (ps === 'wait' || ps === 'ac') && S.openId !== s.id;
-    if (!vis.has(s.id) && !sel && !(S.navOn && dim)) continue;
+    const ps = pinSt(s), sf = S.scout ? scoutF() : 'all';
+    if (sf !== 'all' && ps !== sf && S.openId !== s.id) continue;   // exploring only one kind: the rest is hidden, the chosen kind is in full colour
+    const dim = S.navOn && sf === 'all' && !sel && (ps === 'wait' || ps === 'ac') && S.openId !== s.id;
+    if (sf === 'all' && !vis.has(s.id) && !sel && !(S.navOn && dim)) continue;
     if (S.navOn && !S.scout && ps !== 'due' && !dim && S.openId !== s.id) continue;
     feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [s.lng, s.lat] }, properties: { id: s.id, st: ps, age: ps === 'due' ? dueAge(s) : 0, sel: sel ? 1 : 0, ord: sel ? ord.get(s.id) || 0 : 0, rz: RZ.other(s.id) ? 1 : 0, dim: dim ? 1 : 0 } });
   }
@@ -1761,7 +1765,8 @@ function viewRoute() {
   const build = `<div class="note" style="margin-top:10px"><b style="color:var(--ink)">Traseu pe zonă</b> · ia toate șantierele de actualizat din zona pe care o desenezi cu degetul, în ordine, zonă cu zonă
     <div class="btns" style="margin-top:8px"><button class="btn amber" data-act="areaDraw">✏️ Desenează zona</button></div></div>
   ${commuteBox()}
-  <button class="btn" style="width:100%;margin-top:10px" data-act="scout">🧭 Explorare · fără traseu</button>`;
+  <button class="btn" style="width:100%;margin-top:10px" data-act="scout">🧭 Explorare · fără traseu</button>
+  <div class="sub" style="margin-top:8px">Ce arăt pe hartă la explorare:</div>${scoutSeg()}`;
   const saved = `${trSentList()}
   ${S.routes.length ? `<h3>Trasee salvate</h3>${S.routes.map(r => `<div class="leg"><span><b>${esc(r.name || 'Fără nume')}</b> <span class="sub">· ${(r.stops || []).length} opriri</span></span><span class="row"><button class="btn sm" data-act="loadRoute" data-id="${r.id}">Încarcă</button><button class="btn sm ghost danger" data-act="delRoute" data-id="${r.id}">Șterge</button></span></div>`).join('')}` : ''}`;
   if (!stops.length) return `${head}
@@ -2370,6 +2375,8 @@ document.addEventListener('click', async (e) => {
     case 'navStart': navStart(); break;
     case 'rsEnd': RS.show(); break;
     case 'scout': scoutStart(); break;
+    case 'scoutF': scoutSetF(t.dataset.v); break;
+    case 'scoutOpen': S.scoutOpen = !S.scoutOpen; navShow(false); break;
     case 'cmGo': commuteGo(t.dataset.v); break;
     case 'cmN': { const P = PLACES.get(); P.n = Math.max(2, Math.min(30, PLACES.n() + (+t.dataset.v))); PLACES.save(); const el = $('#cmNv'); if (el) el.textContent = P.n; break; }
     case 'destClear': DEST.clear(); S.nav = null; refresh(); break;
@@ -3843,6 +3850,12 @@ function navSay(it, prevDist) {
   return pre + txt.charAt(0).toLowerCase() + txt.slice(1);
 }
 /* ---------- scouting: the map follows me as in navigation, with no route (to look around and find new sites) ---------- */
+// 01.11.2026 (Ionuț): exploring can show only one kind of site — the unverified ones (orange) or the ones to update (red), in full colour,
+// the rest hidden; the choice is kept on the phone and can be changed during the exploration from the bar at the bottom
+const SCF = { all: 'Toate', ac: 'Neverificate', due: 'De actualizat' };
+const scoutF = () => { try { const v = localStorage.getItem('harta_scoutF'); return SCF[v] ? v : 'all'; } catch (e) { return 'all'; } };
+function scoutSetF(v) { if (!SCF[v]) return; try { localStorage.setItem('harta_scoutF', v); } catch (e) {} S.scoutOpen = false; if (S.scout) navShow(false); else if (S.view === 'route') render(); }
+const scoutSeg = nav => `<div class="seg" role="group" aria-label="Ce arăt pe hartă la explorare" style="margin-top:6px">${Object.entries(SCF).map(([k, n]) => `<button type="button" data-act="scoutF" data-v="${k}" aria-pressed="${scoutF() === k}">${nav ? '' : k === 'ac' ? '🟠 ' : k === 'due' ? '🔴 ' : ''}${n}</button>`).join('')}</div>`;
 function scoutStart() {
   if (S.navOn) return;
   S.scout = true; S.navOn = true; S.voice = false;
@@ -3896,7 +3909,9 @@ function navSign(it, d) {
   $('#nsDist').textContent = it.s.type === 'depart' ? 'Start' : fmtDist(Math.max(0, d || 0));
 }
 function navShow(say) {
-  if (S.scout) { $('#navEta').textContent = 'Explorare'; $('#navSub').textContent = 'fără traseu · harta te urmărește'; navTopVar(); updateMap(); return; }
+  if (S.scout) { const f = scoutF(); $('#navEta').textContent = 'Explorare';
+    $('#navSub').innerHTML = S.scoutOpen ? scoutSeg(true) : `<button type="button" class="scout-f" data-act="scoutOpen" aria-label="Ce arăt pe hartă: ${SCF[f]}. Atinge ca să schimbi.">${f === 'ac' ? '🟠 Doar neverificate' : f === 'due' ? '🔴 Doar de actualizat' : 'Toate șantierele'} ▾</button>`;
+    navTopVar(); updateMap(); return; }
   const items = navItems(); const it = items[S.navPos]; if (!it) return;
   const prev = items[S.navPos - 1];
   const dist = prev && prev.leg === it.leg ? prev.s.dist : 0;
