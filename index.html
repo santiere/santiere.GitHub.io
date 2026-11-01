@@ -2662,14 +2662,14 @@ const gpsNow = () => { const g = gpsFresh(); return g ? { lat: g.lat, lng: g.lng
 // timestamp of the site's original panel photo (as in Photos), used by the Șantier shortcut to find the original
 // week folder in iCloud, e.g. "2026-10 Săptămâna 1": weeks run Monday–Sunday and take the month of their Sunday;
 // photos taken on Saturday or Sunday go into the following week
-// 01.11.2026 (Ionuț: the photos go to the clients every Thursday at 21:00): a week's folder holds the photos taken up to Thursday 20:59;
-// from Thursday 21:00 they go to the next folder, so nothing taken after the delivery stays in a folder already sent. The folder keeps
+// 01.11.2026 (Ionuț: the photos go to the clients every Thursday at 21:00): a week's folder holds the photos taken up to Thursday 17:59;
+// from Thursday 18:00 they go to the next folder (the evening download has 3 hours to bring the day's photos before 21:00), so nothing taken after the delivery stays in a folder already sent. The folder keeps
 // its usual name — the month and week of the Sunday after that Thursday — so the folders made so far go on unchanged.
 function saptName(dt) {
   const m = /^(\d{4}):(\d\d):(\d\d)(?: (\d\d):(\d\d))?/.exec(dt || ''), n = new Date();
   const x = m ? new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 12), +(m[5] || 0)) : n;
   const wd = (x.getDay() + 6) % 7;   // Monday 0 … Thursday 3 … Sunday 6
-  let d = (3 - wd + 7) % 7; if (d === 0 && x.getHours() >= 21) d = 7;   // the Thursday 21:00 delivery this photo goes with
+  let d = (3 - wd + 7) % 7; if (d === 0 && x.getHours() >= 18) d = 7;   // the Thursday delivery this photo goes with (cut at 18:00)
   const sun = new Date(x.getFullYear(), x.getMonth(), x.getDate() + d + 3);
   return sun.getFullYear() + '-' + pad(sun.getMonth() + 1) + ' Săptămâna ' + Math.ceil(sun.getDate() / 7);
 }
