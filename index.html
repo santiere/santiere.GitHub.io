@@ -60,7 +60,7 @@
 :root[data-theme="dark"] .nav-fab{background:var(--surface);color:var(--ink)}
 :root[data-theme="dark"] .geohelp-card{background:var(--surface)}
 #btnTheme[aria-pressed="true"]{background:var(--surface)!important;color:#F5B82E!important}
-html,body{height:100%}
+html,body{height:100%;overflow:hidden}
 body{background:var(--ground);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.4;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
 #app{position:fixed;inset:0;overflow:hidden}
 #map{position:absolute;inset:0;z-index:0;isolation:isolate;background:var(--ground)}
@@ -357,7 +357,9 @@ ol.steps .mi{flex:none;color:var(--ink)}
 .stage-off{opacity:1;background:color-mix(in srgb,var(--wait) 12%,var(--surface));color:var(--wait);border:1px solid color-mix(in srgb,var(--wait) 35%,transparent)}
 @media (orientation: landscape) and (max-height: 600px) {
   .top{right:auto;width:min(540px,52vw);padding-left:calc(var(--sal) + 10px);padding-top:calc(var(--sat) + 6px);gap:6px}
-  .fab-col{top:calc(var(--sat) + 10px);right:calc(var(--sar) + 10px);display:flex;flex-direction:column;gap:6px}
+  /* 01.11.2026 (Ionuț: with the phone on its side some buttons did not work): the column did not fit above the tabs — Șantier nou was
+     cut and Sesizare sat under the tabs; now it wraps into a second column to the left */
+  .fab-col{top:calc(var(--sat) + 10px);right:calc(var(--sar) + 10px);display:flex;flex-direction:column;flex-wrap:wrap-reverse;align-content:flex-start;align-items:flex-end;gap:6px;max-height:calc(100% - var(--sat) - 64px)}
   .fab{width:40px;height:40px;border-radius:11px}
   .fab-new{width:44px;padding:6px 0 5px;font-size:10px;margin-top:2px;border-radius:11px}.fab-new svg{width:17px;height:17px}
   .tabs{left:calc(var(--sal));right:calc(var(--sar));padding-bottom:10px}
@@ -4575,5 +4577,19 @@ else { const load = (src, next) => { const sc = document.createElement('script')
 
 </script>
 
+<script>
+// 01.11.2026 (Ionuț: on two phones, with the phone on its side, the buttons and the map taps sometimes did nothing): after the phone is
+// turned, iOS can leave the page scrolled a little and the map's canvas at its old size — the taps then land beside the buttons and the
+// map reads them at the wrong place. The page goes back to the top and the map is measured again, a few times while the turn settles.
+(function () {
+  const fix = () => { try { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); document.documentElement.scrollTop = document.body.scrollTop = 0; } catch (e) {}
+    try { if (typeof map !== 'undefined' && map && typeof map.resize === 'function') map.resize(); } catch (e) {} };
+  const settle = () => { fix(); [120, 400, 900].forEach(t => setTimeout(fix, t)); };
+  window.addEventListener('orientationchange', settle);
+  window.addEventListener('resize', settle);
+  if (window.visualViewport) visualViewport.addEventListener('resize', settle);
+  window.addEventListener('scroll', () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); }, { passive: true });
+})();
+</script>
 </body>
 </html>
