@@ -611,7 +611,7 @@ ol.steps .mi{flex:none;color:var(--ink)}
     <div class="nav-sign" id="navSign" hidden><div class="ns-ic" id="nsIc"></div><div class="ns-t"><b class="num" id="nsDist"></b><span id="nsTxt"></span></div></div>
     <div class="nav-bot" id="navBot">
       <div class="row sp" style="gap:10px"><div class="grow"><div class="nav-eta num" id="navEta"></div><div class="sub" id="navSub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div></div><button class="btn sm exit" id="navExit">✕ Ieși</button></div>
-      <div class="btns" id="navMove" style="margin-top:10px"><button class="btn" id="navPrev" aria-label="Indicația anterioară">◀</button><button class="btn primary" id="navNext">Următorul ▶</button></div>
+      <div class="btns" id="navMove" style="margin-top:10px"><button class="btn" id="navSkip">Sari peste acest șantier ⏭</button></div>
       <div class="btns" id="navArrive" hidden style="margin-top:10px"><button class="btn amber" id="navVisit">Adaugă stadiu</button><button class="btn primary" id="navNextLeg">Pornește spre următoarea</button></div>
     </div>
   </div>
@@ -3400,8 +3400,7 @@ $('#areaGo').addEventListener('click', () => {
 $('#areaCancel').addEventListener('click', () => areaMode(false));
 $('#areaAll').addEventListener('click', () => { S.areaAll = !S.areaAll; areaUpdate(); });
 
-$('#navNext').addEventListener('click', navNext);
-$('#navPrev').addEventListener('click', () => { if (S.navPos > 0) { S.navPos--; navShow(true); } });
+$('#navSkip').addEventListener('click', () => navSkip(false));
 $('#navNextLeg').addEventListener('click', navArrived);
 $('#navVisit').addEventListener('click', () => { const it = navItem(); const sid = S.nav.legs[it.leg].to; const vs = S.sites.get(sid); if (vs && status(vs) !== 'due') { toast('Șantierul e actualizat; revine după ' + CYCLE + ' de zile'); return; } qcOpen({ siteId: sid }); });
 /* optional: the phone's position, only if this view allows it */
@@ -3932,8 +3931,7 @@ function navShow(say) {
   $('#navEta').textContent = 'Sosire ' + pad(eta.getHours()) + ':' + pad(eta.getMinutes()) + ' · ' + fmtDist(remD) + ' · ' + fmtTime(remT);
   navProg(it.leg, remD);
   $('#navSub').textContent = isDest ? 'Destinație · ' + destName() : 'Oprirea ' + navNo(it.leg) + ' din ' + navCount() + (site ? ' · ' + site.name : '');
-  $('#navPrev').disabled = S.navPos === 0;
-  const arr = it.s.type === 'arrive';
+    const arr = it.s.type === 'arrive';
   $('#navArrive').hidden = !arr; $('#navMove').hidden = arr;
   $('#navVisit').hidden = isDest;
   if (arr) { const vs = site; const ok = vs && status(vs) === 'due'; const vb = $('#navVisit'); vb.disabled = !ok; vb.textContent = ok ? 'Actualizează șantier' : vs && status(vs) === 'wait' ? 'Actualizat · revine ' + roShort(addDays(lastUpd(vs), CYCLE)) : 'Finalizat'; }
@@ -3976,6 +3974,25 @@ function navAdvance() {
   // 2) the rest of the route is put again in the fastest order from where I am now (it matters when stops were done out of order, added, or taken by colleagues)
   const left = legs.filter(open).length;
   if (left >= 2 && left <= REOPT_MAX) navReopt(true); else navReroute(true);
+}
+// 07.11.2026 (Ionuț — colleagues were sent back to an old place, or lost the route): a stop I can't do (closed, no access) used to stay
+// the target, so every recalculation led back to it, so the guidance kept pointing back. Now the stop is skipped:
+// it goes to the end of the route (still open, not lost) and the guidance continues to the next one. By the button, or by itself
+// when I was at the stop and drove more than 350 m away without updating it.
+function navSkip(auto) {
+  if (!S.navOn || S.scout || !S.nav) return;
+  const legs = S.nav.legs, cur = navItem().leg, sid = legs[cur] && legs[cur].to;
+  if (!sid || sid === DEST_ID || S.route.done.includes(sid)) return;
+  const s = S.sites.get(sid);
+  const open = S.route.stops.filter(id => !S.route.done.includes(id) && id !== sid);
+  if (!open.length && !(typeof DEST !== 'undefined' && DEST.get())) { if (!auto) toast('E ultimul șantier din traseu'); return; }
+  const nx = legs.slice(cur + 1).map(l => l.to).find(id => id !== DEST_ID && open.includes(id)) || open[0];
+  S.route.stops = S.route.stops.filter(id => id !== sid).concat([sid]);
+  S.navPassed = null; if (S.nearSeen) S.nearSeen[sid] = Date.now() + 864e5;   // not pulled back to it by the "right next to me" rule
+  saveRouteSoon();
+  if (S.navTrack) S.navTrack.busy = false;
+  navReroute(true, nx);
+  toast((auto ? 'Ai trecut de „' : 'Am sărit peste „') + (s ? s.name : 'șantier') + '” fără actualizare — rămâne la sfârșitul traseului', 5000);
 }
 /* ---------- live GPS guidance: follow the route, advance the steps, reroute when off it ---------- */
 function legGeom(L) {
@@ -4101,11 +4118,19 @@ function navGpsInner(c, quiet) {
   const L = legGeom(S.nav.legs[it.leg]);
   const pr = projectOnLeg(L, c.latitude, c.longitude);
   const acc = c.accuracy || 20;
+  // 07.11.2026: a coarse fix (Precise Location off, weak signal) is not used to recalculate or to change the order
+  const coarse = acc > 120;
+  { const sid = S.nav.legs[it.leg].to, tgt = sid && sid !== DEST_ID ? S.sites.get(sid) : null;
+    if (tgt && !coarse && !S.route.done.includes(sid)) {
+      const dT = Router.hav([c.latitude, c.longitude], [tgt.lat, tgt.lng]);
+      if (dT < 60) S.navPassed = sid;
+      else if (S.navPassed === sid && dT > 350 && status(Object.assign({}, tgt, S.pend[sid] || {})) === 'due' && !S.view) { navSkip(true); return; }
+    } }
   // off the route? recalculate from where I am: 2 fixes beyond the limit, or 3 fixes in a row moving away from the line
   const limit = Math.max(35, Math.min(acc * 1.3, 90));
   if (pr.d > limit) tr.off++; else tr.off = 0;
   tr.away = pr.d > 20 && tr.lastD != null && pr.d > tr.lastD + 3 ? (tr.away || 0) + 1 : 0; tr.lastD = pr.d;
-  if ((tr.off >= 2 || tr.away >= 3) && Date.now() - tr.lastReroute > 6000) { tr.away = 0; navReroute(); }
+  if (!coarse && (tr.off >= 2 || tr.away >= 3) && Date.now() - tr.lastReroute > 6000) { tr.away = 0; navReroute(); }
   // which maneuver comes next on this leg
   let j = it.j;
   if (pr.d <= limit) {
@@ -4146,7 +4171,7 @@ function navGpsInner(c, quiet) {
   const eta = new Date(Date.now() + remT * 1000);
   $('#navEta').textContent = 'Sosire ' + pad(eta.getHours()) + ':' + pad(eta.getMinutes()) + ' · ' + fmtDist(remD) + ' · ' + fmtTime(remT);
   navProg(cur.leg, remD);
-  if (!quiet) navNearCheck(c, cur, legLeft);
+  if (!quiet && !coarse) navNearCheck(c, cur, legLeft);
   // camera: follow me, pointing the way I drive
   S.navGpsFollow = true;
   let brg = map ? map.getBearing() : 0;
@@ -4169,7 +4194,7 @@ function navGpsInner(c, quiet) {
   const at = onRoad ? S.navSnap : [c.longitude, c.latitude];
   if (!quiet || !S.mkRaf) navGlide(at, quiet ? 300 : dur);
   if (!quiet) tr.wrong = rb != null && way != null && diff(way, rb) > 120 ? (tr.wrong || 0) + 1 : 0;
-  if (!quiet && tr.wrong >= 2 && Date.now() - tr.lastReroute > 20000) { tr.wrong = 0; navReroute(); }
+  if (!quiet && !coarse && tr.wrong >= 2 && Date.now() - tr.lastReroute > 20000) { tr.wrong = 0; navReroute(); }
   // steady direction: ignore tiny wobbles, soften the rest; a real turn-around is shown at once
   if (S.navBrg != null) { const d = ((brg - S.navBrg + 540) % 360) - 180; brg = Math.abs(d) < 3 ? S.navBrg : Math.abs(d) > 100 ? brg : S.navBrg + d * 0.6; }
   brg = (brg + 360) % 360; S.navBrg = brg;
